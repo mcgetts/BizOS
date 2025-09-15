@@ -1,0 +1,148 @@
+I need you to build a comprehensive Business Operating System web application. This should be a professional-grade, modern business management platform that consolidates multiple business functions into one unified system.
+
+CORE REQUIREMENTS:
+
+Build a Next.js 14 + TypeScript + Tailwind CSS application with the following complete module structure:
+
+## MODULE 1: FOUNDATION & AUTHENTICATION
+- User registration, login, password recovery
+- Role-based access control (Admin, Manager, Employee, Client)
+- Responsive navigation with collapsible sidebar
+- Dark/light mode toggle with system detection
+- Professional glassmorphism design with modern animations
+
+## MODULE 2: EXECUTIVE DASHBOARD
+- Real-time KPI cards: Revenue, Active Clients, Active Projects, Team Members
+- Each metric should show current value, target, growth percentage, and status indicator
+- Executive alerts system with High/Medium/Low priority levels
+- Recent activity feed showing business activities
+- Quick actions panel for common tasks
+- Professional charts and data visualizations
+
+## MODULE 3: CLIENT MANAGEMENT (CRM)
+- Complete client database with profiles, contact info, interaction history
+- Lead pipeline with stages: Lead → Qualified → Proposal → Client
+- Client communication log with timestamps and notes
+- Contract and proposal tracking with status updates
+- Client satisfaction scoring and feedback system
+- Revenue tracking per client with growth indicators
+
+## MODULE 4: PROJECT MANAGEMENT & CLIENT PORTALS
+- Project portfolio with status tracking (Planning → Active → Review → Completed)
+- Task management with assignments, due dates, and progress tracking
+- Resource allocation and team member assignments
+- Time tracking integration with projects and tasks
+- **CLIENT PORTAL FEATURES:**
+  - Secure client login to view assigned projects
+  - Project status dashboard with progress indicators
+  - Document upload/download with version control
+  - Project communication thread and messaging
+  - Invoice and payment status visibility
+  - Project milestone tracking and approvals
+
+## MODULE 5: TEAM MANAGEMENT
+- Employee directory with profiles, roles, skills, and contact information
+- Time tracking with project allocation and utilization reports
+- Task assignment with workload distribution and capacity planning
+- Performance tracking with productivity metrics
+- Team calendar with availability and scheduling
+- Skills tracking and development planning
+
+## MODULE 6: FINANCIAL MANAGEMENT
+- Automated invoice generation from project data and time tracking
+- Payment tracking with overdue alerts and follow-up reminders
+- Expense management with categorization and receipt tracking
+- Financial reporting: Revenue, Profit/Loss, Cash Flow, Budget vs Actual
+- Budget planning for projects and departments
+- Integration points for payment processing (Stripe-ready)
+
+## MODULE 7: KNOWLEDGE HUB
+- Centralized company knowledge base with categories and tags
+- Standard Operating Procedures (SOPs) with step-by-step workflows
+- Document repository with version control and collaborative editing
+- AI-powered search across all documents and knowledge articles
+- Training materials and onboarding guides for new employees
+- Access controls with permission-based document visibility
+
+## MODULE 8: MARKETING MODULE
+- Marketing campaign planning with budgets and timelines
+- Content calendar for social media and marketing materials
+- Lead tracking from marketing channels with attribution
+- Campaign ROI analysis and performance metrics
+- Brand asset library with templates and marketing collateral
+- Email marketing integration and automation workflows
+
+## MODULE 9: SERVICE & SUPPORT
+- Customer support ticket system with priority levels and escalation
+- Customer-facing knowledge base with FAQs and help articles
+- SLA tracking and performance monitoring for support team
+- Internal IT support with asset management and user requests
+- Customer satisfaction surveys and feedback collection
+- Support team productivity metrics and reporting
+
+## MODULE 10: ADMIN PORTAL
+- User management with advanced permissions and role assignments
+- System configuration with custom fields and workflow automation
+- Integration management for external APIs and webhooks
+- Advanced analytics with custom reports and data export capabilities
+- System monitoring with performance metrics and audit trails
+- Company branding customization and white-label options
+
+TECHNICAL REQUIREMENTS:
+
+1. Use Next.js 14 with App Router and TypeScript for type safety
+2. Implement Tailwind CSS with custom design system and glassmorphism effects
+3. Create proper database schema with Prisma ORM (use SQLite for development)
+4. Build RESTful API routes for all CRUD operations
+5. Implement proper error handling and form validation
+6. Add loading states and professional UX patterns
+7. Ensure mobile-responsive design across all modules
+8. Include proper authentication and authorization
+9. Add real-time features where appropriate
+10. Create seed data for demonstration purposes
+
+DATABASE SCHEMA REQUIREMENTS:
+
+Include these main entities with proper relationships:
+- Users (authentication, roles, preferences)
+- Clients (CRM data, portal access, interaction history)
+- Projects (portfolio management, client relationships, budgets)
+- Tasks (work breakdown, assignments, time tracking)
+- Documents (knowledge base, client portals, version control)
+- Financial Records (invoices, expenses, payments, budgets)
+- Marketing Campaigns (planning, tracking, ROI analysis)
+- Support Tickets (customer service, internal IT support)
+- Knowledge Articles (company knowledge, SOPs, training)
+
+SAMPLE DATA:
+Create realistic sample data including:
+- 15+ sample clients across different industries
+- 25+ projects in various stages of completion
+- 60+ tasks distributed across projects
+- Team of 12 employees with different roles and skills
+- 6 months of financial records and transactions
+- Marketing campaigns with performance data
+- Knowledge base articles and SOPs
+- Support tickets and resolutions
+
+DESIGN REQUIREMENTS:
+- Modern, professional appearance suitable for C-suite presentations
+- Glassmorphism design with subtle transparency and blur effects
+- Consistent color scheme: Professional blues, success greens, warning yellows, danger reds
+- Smooth animations and micro-interactions throughout
+- Intuitive navigation with breadcrumbs and contextual menus
+- Professional typography with clear hierarchy
+- Status indicators and progress bars for visual feedback
+
+SUCCESS CRITERIA:
+The application should be:
+1. Fully functional with all modules working seamlessly together
+2. Visually professional and modern, rivaling expensive SaaS solutions
+3. Completely responsive across desktop, tablet, and mobile devices
+4. Fast and performant with smooth user interactions
+5. Intuitive for business users without technical training
+6. Scalable foundation for future enhancements and integrations
+
+Please build this as a complete, production-ready business operating system that could replace multiple SaaS subscriptions. Focus on professional appearance, seamless integration between modules, and exceptional user experience.
+
+Start building and let me know if you need any clarifications on specific features or requirements!
