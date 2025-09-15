@@ -196,6 +196,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete('/api/tasks/:id', isAuthenticated, async (req, res) => {
+    try {
+      await storage.deleteTask(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting task:", error);
+      res.status(500).json({ message: "Failed to delete task" });
+    }
+  });
+
   // Financial routes
   app.get('/api/invoices', isAuthenticated, async (req, res) => {
     try {

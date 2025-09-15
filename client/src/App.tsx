@@ -10,6 +10,7 @@ import Landing from "@/pages/Landing";
 import Dashboard from "@/pages/Dashboard";
 import Clients from "@/pages/Clients";
 import Projects from "@/pages/Projects";
+import Tasks from "@/pages/Tasks";
 import Team from "@/pages/Team";
 import Finance from "@/pages/Finance";
 import Knowledge from "@/pages/Knowledge";
@@ -30,6 +31,7 @@ function Router() {
           <Route path="/dashboard" component={Dashboard} />
           <Route path="/clients" component={Clients} />
           <Route path="/projects" component={Projects} />
+          <Route path="/tasks" component={Tasks} />
           <Route path="/team" component={Team} />
           <Route path="/finance" component={Finance} />
           <Route path="/knowledge" component={Knowledge} />
