@@ -328,6 +328,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get('/api/knowledge/:id', isAuthenticated, async (req, res) => {
+    try {
+      const article = await storage.getKnowledgeArticle(req.params.id);
+      if (!article) {
+        return res.status(404).json({ message: "Knowledge article not found" });
+      }
+      res.json(article);
+    } catch (error) {
+      console.error("Error fetching knowledge article:", error);
+      res.status(500).json({ message: "Failed to fetch knowledge article" });
+    }
+  });
+
   app.post('/api/knowledge', isAuthenticated, async (req, res) => {
     try {
       const validatedData = insertKnowledgeArticleSchema.parse(req.body);
@@ -336,6 +349,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error creating knowledge article:", error);
       res.status(400).json({ message: "Failed to create knowledge article" });
+    }
+  });
+
+  app.put('/api/knowledge/:id', isAuthenticated, async (req, res) => {
+    try {
+      const validatedData = insertKnowledgeArticleSchema.partial().parse(req.body);
+      const article = await storage.updateKnowledgeArticle(req.params.id, validatedData);
+      res.json(article);
+    } catch (error) {
+      console.error("Error updating knowledge article:", error);
+      res.status(400).json({ message: "Failed to update knowledge article" });
+    }
+  });
+
+  app.delete('/api/knowledge/:id', isAuthenticated, async (req, res) => {
+    try {
+      await storage.deleteKnowledgeArticle(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting knowledge article:", error);
+      res.status(500).json({ message: "Failed to delete knowledge article" });
     }
   });
 

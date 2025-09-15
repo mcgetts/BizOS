@@ -85,6 +85,7 @@ export interface IStorage {
   getKnowledgeArticle(id: string): Promise<KnowledgeArticle | undefined>;
   createKnowledgeArticle(article: InsertKnowledgeArticle): Promise<KnowledgeArticle>;
   updateKnowledgeArticle(id: string, article: Partial<InsertKnowledgeArticle>): Promise<KnowledgeArticle>;
+  deleteKnowledgeArticle(id: string): Promise<void>;
   
   // Marketing operations
   getMarketingCampaigns(): Promise<MarketingCampaign[]>;
@@ -306,6 +307,10 @@ export class DatabaseStorage implements IStorage {
       .where(eq(knowledgeArticles.id, id))
       .returning();
     return updatedArticle;
+  }
+
+  async deleteKnowledgeArticle(id: string): Promise<void> {
+    await db.delete(knowledgeArticles).where(eq(knowledgeArticles.id, id));
   }
 
   // Marketing operations
