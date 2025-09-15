@@ -155,3 +155,32 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
     return;
   }
 };
+
+// Role-based authorization middleware
+export const requireRole = (allowedRoles: string[]): RequestHandler => {
+  return async (req: any, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user || !user.role || !allowedRoles.includes(user.role)) {
+        return res.status(403).json({ 
+          message: "Forbidden: Insufficient privileges",
+          required_roles: allowedRoles,
+          user_role: user?.role || 'unknown'
+        });
+      }
+      
+      // Attach user data to request for further use
+      req.currentUser = user;
+      next();
+    } catch (error) {
+      console.error("Error checking user role:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  };
+};

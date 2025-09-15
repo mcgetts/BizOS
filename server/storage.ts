@@ -98,6 +98,7 @@ export interface IStorage {
   getSupportTicket(id: string): Promise<SupportTicket | undefined>;
   createSupportTicket(ticket: InsertSupportTicket): Promise<SupportTicket>;
   updateSupportTicket(id: string, ticket: Partial<InsertSupportTicket>): Promise<SupportTicket>;
+  deleteSupportTicket(id: string): Promise<void>;
   
   // Dashboard analytics
   getDashboardKPIs(): Promise<{
@@ -347,18 +348,98 @@ export class DatabaseStorage implements IStorage {
     return ticket;
   }
 
+  // Generate unique ticket number atomically with retry logic
+  private async generateUniqueTicketNumber(): Promise<string> {
+    const maxRetries = 10;
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const time = now.getTime().toString().slice(-6); // Last 6 digits of timestamp
+      const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+      
+      const ticketNumber = `ST-${year}${month}${day}-${time}${random}`;
+      
+      // Check if this ticket number already exists
+      const [existing] = await db
+        .select({ id: supportTickets.id })
+        .from(supportTickets)
+        .where(eq(supportTickets.ticketNumber, ticketNumber))
+        .limit(1);
+      
+      if (!existing) {
+        return ticketNumber;
+      }
+      
+      // Small delay before retry to avoid tight collision loops
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    
+    throw new Error('Failed to generate unique ticket number after maximum retries');
+  }
+
   async createSupportTicket(ticket: InsertSupportTicket): Promise<SupportTicket> {
-    const [newTicket] = await db.insert(supportTickets).values(ticket).returning();
+    // Server-side ticket number generation (never trust client)
+    const ticketNumber = await this.generateUniqueTicketNumber();
+    
+    const ticketData = {
+      ...ticket,
+      ticketNumber,
+      // Server always controls these timestamps
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    
+    const [newTicket] = await db.insert(supportTickets).values(ticketData).returning();
     return newTicket;
   }
 
   async updateSupportTicket(id: string, ticket: Partial<InsertSupportTicket>): Promise<SupportTicket> {
+    // Get current ticket to check status transitions
+    const [currentTicket] = await db.select().from(supportTickets).where(eq(supportTickets.id, id));
+    if (!currentTicket) {
+      throw new Error('Ticket not found');
+    }
+    
+    const updateData: any = {
+      ...ticket,
+      updatedAt: new Date(),
+    };
+    
+    // Server-side timestamp authority for status transitions
+    if (ticket.status && ticket.status !== currentTicket.status) {
+      switch (ticket.status) {
+        case 'resolved':
+          updateData.resolvedAt = new Date();
+          break;
+        case 'closed':
+          updateData.resolvedAt = updateData.resolvedAt || currentTicket.resolvedAt || new Date();
+          break;
+        case 'open':
+        case 'in_progress':
+          // Clear resolvedAt if reopening ticket
+          updateData.resolvedAt = null;
+          break;
+      }
+    }
+    
+    // Never allow client to override ticket number or system timestamps
+    delete updateData.ticketNumber;
+    delete updateData.createdAt;
+    
     const [updatedTicket] = await db
       .update(supportTickets)
-      .set({ ...ticket, updatedAt: new Date() })
+      .set(updateData)
       .where(eq(supportTickets.id, id))
       .returning();
+    
     return updatedTicket;
+  }
+
+  async deleteSupportTicket(id: string): Promise<void> {
+    await db.delete(supportTickets).where(eq(supportTickets.id, id));
   }
 
   // Dashboard analytics

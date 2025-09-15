@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupAuth, isAuthenticated } from "./replitAuth";
+import { setupAuth, isAuthenticated, requireRole } from "./replitAuth";
 import {
   insertClientSchema,
   insertProjectSchema,
@@ -11,6 +11,7 @@ import {
   insertKnowledgeArticleSchema,
   insertMarketingCampaignSchema,
   insertSupportTicketSchema,
+  updateSupportTicketSchema,
 } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -414,6 +415,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error creating support ticket:", error);
       res.status(400).json({ message: "Failed to create support ticket" });
+    }
+  });
+
+  app.get('/api/support/tickets/:id', isAuthenticated, async (req, res) => {
+    try {
+      const ticket = await storage.getSupportTicket(req.params.id);
+      if (!ticket) {
+        return res.status(404).json({ message: "Support ticket not found" });
+      }
+      res.json(ticket);
+    } catch (error) {
+      console.error("Error fetching support ticket:", error);
+      res.status(500).json({ message: "Failed to fetch support ticket" });
+    }
+  });
+
+  app.put('/api/support/tickets/:id', isAuthenticated, async (req, res) => {
+    try {
+      // Use secure validation schema that excludes system fields
+      const validatedData = updateSupportTicketSchema.parse(req.body);
+      const ticket = await storage.updateSupportTicket(req.params.id, validatedData);
+      res.json(ticket);
+    } catch (error) {
+      console.error("Error updating support ticket:", error);
+      if (error instanceof Error && error.message.includes('validation')) {
+        res.status(400).json({ message: "Invalid ticket data", details: error.message });
+      } else {
+        res.status(400).json({ message: "Failed to update support ticket" });
+      }
+    }
+  });
+
+  // DELETE operation requires admin or manager role
+  app.delete('/api/support/tickets/:id', requireRole(['admin', 'manager']), async (req, res) => {
+    try {
+      await storage.deleteSupportTicket(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting support ticket:", error);
+      res.status(500).json({ message: "Failed to delete support ticket" });
     }
   });
 

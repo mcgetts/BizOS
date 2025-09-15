@@ -362,9 +362,20 @@ export const insertMarketingCampaignSchema = createInsertSchema(marketingCampaig
 
 export const insertSupportTicketSchema = createInsertSchema(supportTickets).omit({
   id: true,
+  ticketNumber: true, // Server-generated, never accept from client
+  resolvedAt: true,   // Server-generated on status change
   createdAt: true,
   updatedAt: true,
 });
+
+// Secure schema for updates that prevents client from setting system timestamps
+export const updateSupportTicketSchema = createInsertSchema(supportTickets).omit({
+  id: true,
+  ticketNumber: true, // Never allow client to change ticket number
+  resolvedAt: true,   // Server manages this based on status
+  createdAt: true,
+  updatedAt: true,
+}).partial();
 
 // Types
 export type UpsertUser = z.infer<typeof upsertUserSchema>;
@@ -386,6 +397,7 @@ export type KnowledgeArticle = typeof knowledgeArticles.$inferSelect;
 export type InsertMarketingCampaign = z.infer<typeof insertMarketingCampaignSchema>;
 export type MarketingCampaign = typeof marketingCampaigns.$inferSelect;
 export type InsertSupportTicket = z.infer<typeof insertSupportTicketSchema>;
+export type UpdateSupportTicket = z.infer<typeof updateSupportTicketSchema>;
 export type SupportTicket = typeof supportTickets.$inferSelect;
 export type TimeEntry = typeof timeEntries.$inferSelect;
 export type ClientInteraction = typeof clientInteractions.$inferSelect;
