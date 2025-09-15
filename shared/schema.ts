@@ -328,11 +328,18 @@ export const insertInvoiceSchema = createInsertSchema(invoices).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  // Fix date validation to handle Date objects from frontend
+  dueDate: z.coerce.date().nullable().optional(),
+  paidAt: z.coerce.date().nullable().optional(),
 });
 
 export const insertExpenseSchema = createInsertSchema(expenses).omit({
   id: true,
   createdAt: true,
+}).extend({
+  // Fix date validation to handle Date objects from frontend
+  date: z.coerce.date(),
 });
 
 export const insertDocumentSchema = createInsertSchema(documents).omit({

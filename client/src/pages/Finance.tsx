@@ -7,8 +7,20 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useQuery } from "@tanstack/react-query";
-import type { Invoice, Expense } from "@shared/schema";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { insertInvoiceSchema, insertExpenseSchema } from "@shared/schema";
+import type { Invoice, Expense, InsertInvoice, InsertExpense, Client, Project, User } from "@shared/schema";
+import { z } from "zod";
 import { 
   Plus, 
   Search, 
@@ -20,8 +32,688 @@ import {
   AlertTriangle,
   Calendar,
   Download,
-  MoreHorizontal
+  MoreHorizontal,
+  Edit,
+  Trash2,
+  Send,
+  CheckCircle,
+  Clock,
+  XCircle,
+  Receipt,
+  Building2,
+  User as UserIcon
 } from "lucide-react";
+
+// Utility functions for precise decimal math (to avoid floating-point issues)
+function toCents(dollarAmount: string | number): number {
+  const amount = typeof dollarAmount === 'string' ? parseFloat(dollarAmount || '0') : (dollarAmount || 0);
+  return Math.round(amount * 100);
+}
+
+function toDollars(centsAmount: number): number {
+  return centsAmount / 100;
+}
+
+function addDecimal(amount1: string | number, amount2: string | number): string {
+  const cents1 = toCents(amount1 || 0);
+  const cents2 = toCents(amount2 || 0);
+  return (toDollars(cents1 + cents2)).toFixed(2);
+}
+
+function sumAmounts(amounts: (string | number)[]): number {
+  const totalCents = amounts.reduce((sum: number, amount) => sum + toCents(amount || 0), 0);
+  return toDollars(totalCents);
+}
+
+// Form validation schemas derived from shared schemas with UI extensions
+const invoiceFormSchema = insertInvoiceSchema.extend({
+  // Convert string inputs to appropriate types
+  amount: z.string().min(1, "Amount is required"),
+  tax: z.string().optional().default("0"),
+  total: z.string().min(1, "Total is required"),
+  // Convert date to string for HTML inputs
+  dueDate: z.string().optional(),
+  paidAt: z.string().optional(),
+}).omit({
+  // Remove server-handled date fields that conflict with string inputs
+  dueDate: true,
+  paidAt: true,
+}).extend({
+  // Add back as string inputs for forms
+  dueDate: z.string().optional(),
+  paidAt: z.string().optional(),
+});
+
+const expenseFormSchema = insertExpenseSchema.extend({
+  // Convert string inputs to appropriate types
+  amount: z.string().min(1, "Amount is required"),
+  // Convert date to string for HTML inputs
+  date: z.string().min(1, "Date is required"),
+}).omit({
+  // Remove server-handled date field
+  date: true,
+}).extend({
+  // Add back as string input for forms
+  date: z.string().min(1, "Date is required"),
+});
+
+type InvoiceFormData = z.infer<typeof invoiceFormSchema>;
+type ExpenseFormData = z.infer<typeof expenseFormSchema>;
+
+// Invoice Form Component
+function InvoiceForm({ invoice, onSuccess }: { invoice?: Invoice; onSuccess: () => void }) {
+  const { toast } = useToast();
+  const [isOpen, setIsOpen] = useState(false);
+  
+  const form = useForm<InvoiceFormData>({
+    resolver: zodResolver(invoiceFormSchema),
+    defaultValues: {
+      invoiceNumber: invoice?.invoiceNumber || `INV-${Date.now()}`,
+      clientId: invoice?.clientId || "",
+      projectId: invoice?.projectId || "",
+      amount: invoice?.amount || "0",
+      tax: invoice?.tax || "0",
+      total: invoice?.total || "0",
+      status: invoice?.status || "draft",
+      dueDate: invoice?.dueDate ? new Date(invoice.dueDate).toISOString().split('T')[0] : "",
+      notes: invoice?.notes || "",
+      terms: invoice?.terms || "",
+    },
+  });
+
+  // Fetch clients for dropdown
+  const { data: clients } = useQuery<Client[]>({
+    queryKey: ["/api/clients"],
+  });
+
+  // Fetch projects for dropdown
+  const { data: projects } = useQuery<Project[]>({
+    queryKey: ["/api/projects"],
+  });
+
+  // Calculate total when amount or tax changes
+  const watchedAmount = form.watch("amount");
+  const watchedTax = form.watch("tax");
+  
+  useEffect(() => {
+    const total = addDecimal(watchedAmount || "0", watchedTax || "0");
+    form.setValue("total", total);
+  }, [watchedAmount, watchedTax, form]);
+
+  const createMutation = useMutation({
+    mutationFn: async (data: InsertInvoice) => {
+      const response = await apiRequest("POST", "/api/invoices", data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      toast({ title: "Success", description: "Invoice created successfully" });
+      setIsOpen(false);
+      onSuccess();
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to create invoice", variant: "destructive" });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async (data: Partial<InsertInvoice>) => {
+      const response = await apiRequest("PUT", `/api/invoices/${invoice?.id}`, data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      toast({ title: "Success", description: "Invoice updated successfully" });
+      setIsOpen(false);
+      onSuccess();
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update invoice", variant: "destructive" });
+    },
+  });
+
+  const onSubmit = (data: InvoiceFormData) => {
+    const submitData: InsertInvoice = {
+      invoiceNumber: data.invoiceNumber,
+      clientId: data.clientId && data.clientId.trim() !== "" ? data.clientId : null,
+      projectId: data.projectId && data.projectId.trim() !== "" ? data.projectId : null,
+      amount: data.amount,
+      tax: data.tax || null,
+      total: data.total,
+      status: data.status || null,
+      dueDate: data.dueDate ? new Date(data.dueDate) : null,
+      paidAt: data.paidAt ? new Date(data.paidAt) : null,
+      notes: data.notes || null,
+      terms: data.terms || null,
+    };
+
+    if (invoice) {
+      updateMutation.mutate(submitData);
+    } else {
+      createMutation.mutate(submitData);
+    }
+  };
+
+  const isLoading = createMutation.isPending || updateMutation.isPending;
+
+  return (
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <DialogTrigger asChild>
+        <Button data-testid={invoice ? "button-edit-invoice" : "button-create-invoice"}>
+          <FileText className="w-4 h-4 mr-2" />
+          {invoice ? "Edit Invoice" : "Create Invoice"}
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{invoice ? "Edit Invoice" : "Create New Invoice"}</DialogTitle>
+        </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="invoiceNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Invoice Number *</FormLabel>
+                    <FormControl>
+                      <Input {...field} data-testid="input-invoice-number" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="status"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Status</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value || undefined}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-invoice-status">
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="draft">Draft</SelectItem>
+                        <SelectItem value="sent">Sent</SelectItem>
+                        <SelectItem value="paid">Paid</SelectItem>
+                        <SelectItem value="overdue">Overdue</SelectItem>
+                        <SelectItem value="cancelled">Cancelled</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="clientId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Client</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value || undefined}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-invoice-client">
+                          <SelectValue placeholder="Select client" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="">No client</SelectItem>
+                        {clients?.map((client) => (
+                          <SelectItem key={client.id} value={client.id!}>
+                            {client.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="projectId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Project</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value || undefined}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-invoice-project">
+                          <SelectValue placeholder="Select project" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="">No project</SelectItem>
+                        {projects?.map((project) => (
+                          <SelectItem key={project.id} value={project.id!}>
+                            {project.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="amount"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Amount *</FormLabel>
+                    <FormControl>
+                      <Input type="number" step="0.01" placeholder="0.00" {...field} data-testid="input-invoice-amount" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="tax"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tax</FormLabel>
+                    <FormControl>
+                      <Input type="number" step="0.01" placeholder="0.00" {...field} data-testid="input-invoice-tax" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="total"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Total *</FormLabel>
+                    <FormControl>
+                      <Input type="number" step="0.01" {...field} readOnly data-testid="input-invoice-total" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="dueDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Due Date</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} data-testid="input-invoice-due-date" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <FormField
+              control={form.control}
+              name="notes"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Notes</FormLabel>
+                  <FormControl>
+                    <Textarea placeholder="Additional notes..." {...field} value={field.value || ''} data-testid="textarea-invoice-notes" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="terms"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Terms & Conditions</FormLabel>
+                  <FormControl>
+                    <Textarea placeholder="Payment terms and conditions..." {...field} value={field.value || ''} data-testid="textarea-invoice-terms" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <div className="flex justify-end space-x-2 pt-4">
+              <Button type="button" variant="outline" onClick={() => setIsOpen(false)} data-testid="button-cancel-invoice">
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isLoading} data-testid="button-save-invoice">
+                {isLoading ? "Saving..." : invoice ? "Update Invoice" : "Create Invoice"}
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Expense Form Component
+function ExpenseForm({ expense, onSuccess }: { expense?: Expense; onSuccess: () => void }) {
+  const { toast } = useToast();
+  const [isOpen, setIsOpen] = useState(false);
+  
+  const form = useForm<ExpenseFormData>({
+    resolver: zodResolver(expenseFormSchema),
+    defaultValues: {
+      description: expense?.description || "",
+      amount: expense?.amount || "0",
+      category: expense?.category || "",
+      projectId: expense?.projectId || "",
+      userId: expense?.userId || "",
+      date: expense?.date ? new Date(expense.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      billable: expense?.billable ?? false,
+      reimbursed: expense?.reimbursed ?? false,
+      receiptUrl: expense?.receiptUrl || "",
+    },
+  });
+
+  // Fetch projects for dropdown
+  const { data: projects } = useQuery<Project[]>({
+    queryKey: ["/api/projects"],
+  });
+
+  // Fetch users for dropdown
+  const { data: users } = useQuery<User[]>({
+    queryKey: ["/api/users"],
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (data: InsertExpense) => {
+      const response = await apiRequest("POST", "/api/expenses", data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
+      toast({ title: "Success", description: "Expense created successfully" });
+      setIsOpen(false);
+      onSuccess();
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to create expense", variant: "destructive" });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async (data: Partial<InsertExpense>) => {
+      const response = await apiRequest("PUT", `/api/expenses/${expense?.id}`, data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
+      toast({ title: "Success", description: "Expense updated successfully" });
+      setIsOpen(false);
+      onSuccess();
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update expense", variant: "destructive" });
+    },
+  });
+
+  const onSubmit = (data: ExpenseFormData) => {
+    const submitData: InsertExpense = {
+      description: data.description,
+      amount: data.amount,
+      category: data.category || null,
+      projectId: data.projectId && data.projectId.trim() !== "" ? data.projectId : null,
+      userId: data.userId && data.userId.trim() !== "" ? data.userId : null,
+      date: new Date(data.date),
+      billable: data.billable ?? false,
+      reimbursed: data.reimbursed ?? false,
+      receiptUrl: data.receiptUrl || null,
+    };
+
+    if (expense) {
+      updateMutation.mutate(submitData);
+    } else {
+      createMutation.mutate(submitData);
+    }
+  };
+
+  const isLoading = createMutation.isPending || updateMutation.isPending;
+  const categories = ["travel", "meals", "supplies", "software", "equipment", "marketing", "training", "other"];
+
+  return (
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" data-testid={expense ? "button-edit-expense" : "button-add-expense"}>
+          <Plus className="w-4 h-4 mr-2" />
+          {expense ? "Edit Expense" : "Add Expense"}
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{expense ? "Edit Expense" : "Add New Expense"}</DialogTitle>
+        </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem className="md:col-span-2">
+                    <FormLabel>Description *</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Office supplies, travel expenses, etc." {...field} data-testid="input-expense-description" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="amount"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Amount *</FormLabel>
+                    <FormControl>
+                      <Input type="number" step="0.01" placeholder="0.00" {...field} data-testid="input-expense-amount" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="category"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Category</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value || undefined}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-expense-category">
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {categories.map((category) => (
+                          <SelectItem key={category} value={category}>
+                            {category.charAt(0).toUpperCase() + category.slice(1)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="projectId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Project</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value || undefined}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-expense-project">
+                          <SelectValue placeholder="Select project" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="">No project</SelectItem>
+                        {projects?.map((project) => (
+                          <SelectItem key={project.id} value={project.id!}>
+                            {project.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="userId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>User</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value || undefined}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-expense-user">
+                          <SelectValue placeholder="Select user" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="">No user</SelectItem>
+                        {users?.map((user) => (
+                          <SelectItem key={user.id} value={user.id!}>
+                            {user.firstName} {user.lastName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="date"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Date *</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} data-testid="input-expense-date" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="receiptUrl"
+                render={({ field }) => (
+                  <FormItem className="md:col-span-2">
+                    <FormLabel>Receipt URL</FormLabel>
+                    <FormControl>
+                      <Input placeholder="https://..." {...field} value={field.value || ''} data-testid="input-expense-receipt" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="billable"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                    <div className="space-y-0.5">
+                      <FormLabel>Billable to Client</FormLabel>
+                      <div className="text-sm text-muted-foreground">
+                        Can this expense be billed to client?
+                      </div>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value || false}
+                        onCheckedChange={field.onChange}
+                        data-testid="switch-expense-billable"
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="reimbursed"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                    <div className="space-y-0.5">
+                      <FormLabel>Reimbursed</FormLabel>
+                      <div className="text-sm text-muted-foreground">
+                        Has this expense been reimbursed?
+                      </div>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value || false}
+                        onCheckedChange={field.onChange}
+                        data-testid="switch-expense-reimbursed"
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+            </div>
+            <div className="flex justify-end space-x-2 pt-4">
+              <Button type="button" variant="outline" onClick={() => setIsOpen(false)} data-testid="button-cancel-expense">
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isLoading} data-testid="button-save-expense">
+                {isLoading ? "Saving..." : expense ? "Update Expense" : "Add Expense"}
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Status Badge Component
+function StatusBadge({ status, type }: { status: string, type: "invoice" | "expense" }) {
+  const getVariant = (status: string, type: string) => {
+    if (type === "invoice") {
+      switch (status) {
+        case "paid": return "default";
+        case "sent": return "outline";
+        case "overdue": return "destructive";
+        case "cancelled": return "secondary";
+        case "draft": return "secondary";
+        default: return "secondary";
+      }
+    } else {
+      return "outline";
+    }
+  };
+
+  const getIcon = (status: string, type: string) => {
+    if (type === "invoice") {
+      switch (status) {
+        case "paid": return <CheckCircle className="w-3 h-3" />;
+        case "sent": return <Send className="w-3 h-3" />;
+        case "overdue": return <AlertTriangle className="w-3 h-3" />;
+        case "cancelled": return <XCircle className="w-3 h-3" />;
+        case "draft": return <Clock className="w-3 h-3" />;
+        default: return null;
+      }
+    }
+    return null;
+  };
+
+  return (
+    <Badge variant={getVariant(status, type)} className="flex items-center space-x-1">
+      {getIcon(status, type)}
+      <span>{status?.charAt(0).toUpperCase() + status?.slice(1)}</span>
+    </Badge>
+  );
+}
 
 export default function Finance() {
   const { toast } = useToast();
@@ -53,6 +745,43 @@ export default function Finance() {
     enabled: isAuthenticated,
   });
 
+  const { data: clients } = useQuery<Client[]>({
+    queryKey: ["/api/clients"],
+    enabled: isAuthenticated,
+  });
+
+  const { data: projects } = useQuery<Project[]>({
+    queryKey: ["/api/projects"],
+    enabled: isAuthenticated,
+  });
+
+  // Delete mutations
+  const deleteInvoiceMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/invoices/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      toast({ title: "Success", description: "Invoice deleted successfully" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to delete invoice", variant: "destructive" });
+    },
+  });
+
+  const deleteExpenseMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/expenses/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
+      toast({ title: "Success", description: "Expense deleted successfully" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to delete expense", variant: "destructive" });
+    },
+  });
+
   if (isLoading || !isAuthenticated) {
     return (
       <div className="h-screen flex items-center justify-center">
@@ -61,32 +790,30 @@ export default function Finance() {
     );
   }
 
-  const getInvoiceStatusColor = (status: string) => {
-    switch (status) {
-      case "paid": return "default";
-      case "sent": return "outline";
-      case "overdue": return "destructive";
-      case "draft": return "secondary";
-      default: return "secondary";
-    }
-  };
+  // Financial calculations with precise decimal math
+  const paidInvoiceAmounts = invoices?.filter(inv => inv.status === 'paid').map(inv => inv.total || '0') || [];
+  const totalRevenue = sumAmounts(paidInvoiceAmounts);
 
-  const totalRevenue = invoices?.reduce((sum: number, invoice: Invoice) => 
-    sum + (invoice.status === 'paid' ? parseFloat(invoice.total || '0') : 0), 0) || 0;
-
-  const totalExpenses = expenses?.reduce((sum: number, expense: Expense) => 
-    sum + parseFloat(expense.amount || '0'), 0) || 0;
+  const expenseAmounts = expenses?.map(exp => exp.amount || '0') || [];
+  const totalExpenses = sumAmounts(expenseAmounts);
 
   const overdueInvoices = invoices?.filter((invoice: Invoice) => 
     invoice.status === 'overdue').length || 0;
 
+  const sentInvoiceAmounts = invoices?.filter(inv => inv.status === 'sent').map(inv => inv.total || '0') || [];
+  const pendingRevenue = sumAmounts(sentInvoiceAmounts);
+
+  // Filtered data
   const filteredInvoices = invoices?.filter((invoice: Invoice) =>
-    invoice.invoiceNumber?.toLowerCase().includes(searchTerm.toLowerCase())
+    invoice.invoiceNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    clients?.find(c => c.id === invoice.clientId)?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    projects?.find(p => p.id === invoice.projectId)?.name?.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
 
   const filteredExpenses = expenses?.filter((expense: Expense) =>
     expense.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    expense.category?.toLowerCase().includes(searchTerm.toLowerCase())
+    expense.category?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    projects?.find(p => p.id === expense.projectId)?.name?.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
 
   return (
@@ -98,7 +825,7 @@ export default function Finance() {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Search transactions..."
+                placeholder="Search invoices and expenses..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10 w-80"
@@ -107,14 +834,8 @@ export default function Finance() {
             </div>
           </div>
           <div className="flex space-x-2">
-            <Button variant="outline" data-testid="button-add-expense">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Expense
-            </Button>
-            <Button data-testid="button-create-invoice">
-              <FileText className="w-4 h-4 mr-2" />
-              Create Invoice
-            </Button>
+            <ExpenseForm onSuccess={() => {}} />
+            <InvoiceForm onSuccess={() => {}} />
           </div>
         </div>
 
@@ -135,7 +856,26 @@ export default function Finance() {
               </div>
               <div className="flex items-center space-x-1 text-sm text-success mt-2">
                 <TrendingUp className="w-3 h-3" />
-                <span>+12.5%</span>
+                <span>Paid invoices</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="glassmorphism">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Pending Revenue</p>
+                  <p className="text-2xl font-bold text-warning" data-testid="text-pending-revenue">
+                    ${pendingRevenue.toLocaleString()}
+                  </p>
+                </div>
+                <div className="p-2 bg-warning/10 rounded-lg">
+                  <Clock className="w-6 h-6 text-warning" />
+                </div>
+              </div>
+              <div className="text-sm text-muted-foreground mt-2">
+                Awaiting payment
               </div>
             </CardContent>
           </Card>
@@ -153,9 +893,8 @@ export default function Finance() {
                   <CreditCard className="w-6 h-6 text-destructive" />
                 </div>
               </div>
-              <div className="flex items-center space-x-1 text-sm text-destructive mt-2">
-                <TrendingDown className="w-3 h-3" />
-                <span>+5.2%</span>
+              <div className="text-sm text-muted-foreground mt-2">
+                All recorded expenses
               </div>
             </CardContent>
           </Card>
@@ -175,37 +914,31 @@ export default function Finance() {
               </div>
               <div className="flex items-center space-x-1 text-sm text-success mt-2">
                 <TrendingUp className="w-3 h-3" />
-                <span>+8.1%</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="glassmorphism">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Overdue Invoices</p>
-                  <p className="text-2xl font-bold text-warning" data-testid="text-overdue-invoices">
-                    {overdueInvoices}
-                  </p>
-                </div>
-                <div className="p-2 bg-warning/10 rounded-lg">
-                  <AlertTriangle className="w-6 h-6 text-warning" />
-                </div>
-              </div>
-              <div className="text-sm text-muted-foreground mt-2">
-                Requires attention
+                <span>Revenue - Expenses</span>
               </div>
             </CardContent>
           </Card>
         </div>
 
+        {/* Overdue Invoices Alert */}
+        {overdueInvoices > 0 && (
+          <Card className="border-destructive bg-destructive/5">
+            <CardContent className="p-4">
+              <div className="flex items-center space-x-2 text-destructive">
+                <AlertTriangle className="w-5 h-5" />
+                <span className="font-medium">
+                  {overdueInvoices} overdue invoice{overdueInvoices !== 1 ? 's' : ''} requiring attention
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Financial Data Tabs */}
         <Tabs defaultValue="invoices" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="invoices" data-testid="tab-invoices">Invoices</TabsTrigger>
-            <TabsTrigger value="expenses" data-testid="tab-expenses">Expenses</TabsTrigger>
-            <TabsTrigger value="reports" data-testid="tab-reports">Reports</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="invoices" data-testid="tab-invoices">Invoices ({invoices?.length || 0})</TabsTrigger>
+            <TabsTrigger value="expenses" data-testid="tab-expenses">Expenses ({expenses?.length || 0})</TabsTrigger>
           </TabsList>
 
           <TabsContent value="invoices" className="space-y-4">
@@ -231,10 +964,9 @@ export default function Finance() {
                       {searchTerm ? "No invoices found matching your search" : "No invoices found. Create your first invoice to get started."}
                     </p>
                     {!searchTerm && (
-                      <Button className="mt-4" data-testid="button-create-first-invoice">
-                        <Plus className="w-4 h-4 mr-2" />
-                        Create First Invoice
-                      </Button>
+                      <div className="mt-4">
+                        <InvoiceForm onSuccess={() => {}} />
+                      </div>
                     )}
                   </div>
                 ) : (
@@ -244,47 +976,99 @@ export default function Finance() {
                         <tr className="border-b border-border">
                           <th className="text-left text-sm font-medium text-muted-foreground py-3">Invoice #</th>
                           <th className="text-left text-sm font-medium text-muted-foreground py-3">Client</th>
-                          <th className="text-left text-sm font-medium text-muted-foreground py-3">Amount</th>
+                          <th className="text-left text-sm font-medium text-muted-foreground py-3">Project</th>
+                          <th className="text-left text-sm font-medium text-muted-foreground py-3">Total</th>
                           <th className="text-left text-sm font-medium text-muted-foreground py-3">Status</th>
                           <th className="text-left text-sm font-medium text-muted-foreground py-3">Due Date</th>
                           <th className="text-left text-sm font-medium text-muted-foreground py-3">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
-                        {filteredInvoices.map((invoice: any, index: number) => (
-                          <tr key={invoice.id} data-testid={`row-invoice-${index}`}>
-                            <td className="py-4">
-                              <div className="font-medium text-foreground">{invoice.invoiceNumber}</div>
-                            </td>
-                            <td className="py-4">
-                              <div className="text-sm text-foreground">Client {index + 1}</div>
-                            </td>
-                            <td className="py-4">
-                              <div className="font-medium text-foreground">
-                                ${parseFloat(invoice.total || 0).toLocaleString()}
-                              </div>
-                            </td>
-                            <td className="py-4">
-                              <Badge variant={getInvoiceStatusColor(invoice.status)} data-testid={`badge-status-${index}`}>
-                                {invoice.status?.charAt(0).toUpperCase() + invoice.status?.slice(1)}
-                              </Badge>
-                            </td>
-                            <td className="py-4">
-                              <div className="flex items-center space-x-1 text-sm text-muted-foreground">
-                                <Calendar className="w-3 h-3" />
-                                {invoice.dueDate 
-                                  ? new Date(invoice.dueDate).toLocaleDateString()
-                                  : 'Not set'
-                                }
-                              </div>
-                            </td>
-                            <td className="py-4">
-                              <Button variant="ghost" size="sm" data-testid={`button-invoice-actions-${index}`}>
-                                <MoreHorizontal className="w-4 h-4" />
-                              </Button>
-                            </td>
-                          </tr>
-                        ))}
+                        {filteredInvoices.map((invoice: Invoice, index: number) => {
+                          const client = clients?.find(c => c.id === invoice.clientId);
+                          const project = projects?.find(p => p.id === invoice.projectId);
+                          
+                          return (
+                            <tr key={invoice.id} data-testid={`row-invoice-${index}`}>
+                              <td className="py-4">
+                                <div className="font-medium text-foreground">{invoice.invoiceNumber}</div>
+                              </td>
+                              <td className="py-4">
+                                <div className="flex items-center space-x-2">
+                                  <Building2 className="w-4 h-4 text-muted-foreground" />
+                                  <span className="text-sm text-foreground">
+                                    {client?.name || 'No client'}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="py-4">
+                                <span className="text-sm text-muted-foreground">
+                                  {project?.name || 'No project'}
+                                </span>
+                              </td>
+                              <td className="py-4">
+                                <div className="font-medium text-foreground">
+                                  ${parseFloat(invoice.total || '0').toLocaleString()}
+                                </div>
+                              </td>
+                              <td className="py-4">
+                                <StatusBadge status={invoice.status || 'draft'} type="invoice" />
+                              </td>
+                              <td className="py-4">
+                                <div className="flex items-center space-x-1 text-sm text-muted-foreground">
+                                  <Calendar className="w-3 h-3" />
+                                  {invoice.dueDate 
+                                    ? new Date(invoice.dueDate).toLocaleDateString()
+                                    : 'Not set'
+                                  }
+                                </div>
+                              </td>
+                              <td className="py-4">
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="sm" data-testid={`button-invoice-actions-${index}`}>
+                                      <MoreHorizontal className="w-4 h-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem asChild>
+                                      <div className="w-full">
+                                        <InvoiceForm invoice={invoice} onSuccess={() => {}} />
+                                      </div>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem asChild>
+                                      <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                          <div className="flex items-center space-x-2 px-2 py-1.5 text-sm cursor-pointer hover:bg-accent w-full">
+                                            <Trash2 className="w-4 h-4" />
+                                            <span>Delete</span>
+                                          </div>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                          <AlertDialogHeader>
+                                            <AlertDialogTitle>Delete Invoice</AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                              Are you sure you want to delete invoice {invoice.invoiceNumber}? This action cannot be undone.
+                                            </AlertDialogDescription>
+                                          </AlertDialogHeader>
+                                          <AlertDialogFooter>
+                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                            <AlertDialogAction
+                                              onClick={() => deleteInvoiceMutation.mutate(invoice.id!)}
+                                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                            >
+                                              Delete
+                                            </AlertDialogAction>
+                                          </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                      </AlertDialog>
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -316,10 +1100,9 @@ export default function Finance() {
                       {searchTerm ? "No expenses found matching your search" : "No expenses recorded yet."}
                     </p>
                     {!searchTerm && (
-                      <Button className="mt-4" data-testid="button-add-first-expense">
-                        <Plus className="w-4 h-4 mr-2" />
-                        Add First Expense
-                      </Button>
+                      <div className="mt-4">
+                        <ExpenseForm onSuccess={() => {}} />
+                      </div>
                     )}
                   </div>
                 ) : (
@@ -329,102 +1112,110 @@ export default function Finance() {
                         <tr className="border-b border-border">
                           <th className="text-left text-sm font-medium text-muted-foreground py-3">Description</th>
                           <th className="text-left text-sm font-medium text-muted-foreground py-3">Category</th>
+                          <th className="text-left text-sm font-medium text-muted-foreground py-3">Project</th>
                           <th className="text-left text-sm font-medium text-muted-foreground py-3">Amount</th>
                           <th className="text-left text-sm font-medium text-muted-foreground py-3">Date</th>
-                          <th className="text-left text-sm font-medium text-muted-foreground py-3">Billable</th>
+                          <th className="text-left text-sm font-medium text-muted-foreground py-3">Status</th>
                           <th className="text-left text-sm font-medium text-muted-foreground py-3">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
-                        {filteredExpenses.map((expense: any, index: number) => (
-                          <tr key={expense.id} data-testid={`row-expense-${index}`}>
-                            <td className="py-4">
-                              <div className="font-medium text-foreground">{expense.description}</div>
-                            </td>
-                            <td className="py-4">
-                              <Badge variant="outline">{expense.category || 'Uncategorized'}</Badge>
-                            </td>
-                            <td className="py-4">
-                              <div className="font-medium text-destructive">
-                                ${parseFloat(expense.amount || 0).toLocaleString()}
-                              </div>
-                            </td>
-                            <td className="py-4">
-                              <div className="text-sm text-muted-foreground">
-                                {new Date(expense.date).toLocaleDateString()}
-                              </div>
-                            </td>
-                            <td className="py-4">
-                              <Badge variant={expense.billable ? "default" : "secondary"}>
-                                {expense.billable ? "Yes" : "No"}
-                              </Badge>
-                            </td>
-                            <td className="py-4">
-                              <Button variant="ghost" size="sm" data-testid={`button-expense-actions-${index}`}>
-                                <MoreHorizontal className="w-4 h-4" />
-                              </Button>
-                            </td>
-                          </tr>
-                        ))}
+                        {filteredExpenses.map((expense: Expense, index: number) => {
+                          const project = projects?.find(p => p.id === expense.projectId);
+                          
+                          return (
+                            <tr key={expense.id} data-testid={`row-expense-${index}`}>
+                              <td className="py-4">
+                                <div className="font-medium text-foreground">{expense.description}</div>
+                                {expense.receiptUrl && (
+                                  <div className="flex items-center space-x-1 text-xs text-muted-foreground mt-1">
+                                    <Receipt className="w-3 h-3" />
+                                    <span>Receipt available</span>
+                                  </div>
+                                )}
+                              </td>
+                              <td className="py-4">
+                                <Badge variant="outline">{expense.category || 'Uncategorized'}</Badge>
+                              </td>
+                              <td className="py-4">
+                                <span className="text-sm text-muted-foreground">
+                                  {project?.name || 'No project'}
+                                </span>
+                              </td>
+                              <td className="py-4">
+                                <div className="font-medium text-destructive">
+                                  ${parseFloat(expense.amount || '0').toLocaleString()}
+                                </div>
+                              </td>
+                              <td className="py-4">
+                                <div className="text-sm text-muted-foreground">
+                                  {new Date(expense.date).toLocaleDateString()}
+                                </div>
+                              </td>
+                              <td className="py-4">
+                                <div className="flex items-center space-x-2">
+                                  <Badge variant={expense.billable ? "default" : "secondary"}>
+                                    {expense.billable ? "Billable" : "Internal"}
+                                  </Badge>
+                                  {expense.reimbursed && (
+                                    <Badge variant="outline" className="text-xs">
+                                      Reimbursed
+                                    </Badge>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="py-4">
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="sm" data-testid={`button-expense-actions-${index}`}>
+                                      <MoreHorizontal className="w-4 h-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem asChild>
+                                      <div className="w-full">
+                                        <ExpenseForm expense={expense} onSuccess={() => {}} />
+                                      </div>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem asChild>
+                                      <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                          <div className="flex items-center space-x-2 px-2 py-1.5 text-sm cursor-pointer hover:bg-accent w-full">
+                                            <Trash2 className="w-4 h-4" />
+                                            <span>Delete</span>
+                                          </div>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                          <AlertDialogHeader>
+                                            <AlertDialogTitle>Delete Expense</AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                              Are you sure you want to delete this expense? This action cannot be undone.
+                                            </AlertDialogDescription>
+                                          </AlertDialogHeader>
+                                          <AlertDialogFooter>
+                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                            <AlertDialogAction
+                                              onClick={() => deleteExpenseMutation.mutate(expense.id!)}
+                                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                            >
+                                              Delete
+                                            </AlertDialogAction>
+                                          </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                      </AlertDialog>
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
                 )}
               </CardContent>
             </Card>
-          </TabsContent>
-
-          <TabsContent value="reports" className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Card className="glassmorphism">
-                <CardHeader>
-                  <CardTitle>Financial Summary</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="chart-container rounded-lg p-4 h-48 flex items-end justify-center">
-                    <p className="text-muted-foreground">Revenue vs Expenses Chart</p>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Total Revenue</span>
-                      <span className="font-medium text-success">${totalRevenue.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Total Expenses</span>
-                      <span className="font-medium text-destructive">${totalExpenses.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between text-sm font-medium">
-                      <span>Net Profit</span>
-                      <span className="text-primary">${(totalRevenue - totalExpenses).toLocaleString()}</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="glassmorphism">
-                <CardHeader>
-                  <CardTitle>Quick Reports</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <Button variant="outline" className="w-full justify-start">
-                    <FileText className="w-4 h-4 mr-2" />
-                    Profit & Loss Statement
-                  </Button>
-                  <Button variant="outline" className="w-full justify-start">
-                    <TrendingUp className="w-4 h-4 mr-2" />
-                    Cash Flow Report
-                  </Button>
-                  <Button variant="outline" className="w-full justify-start">
-                    <CreditCard className="w-4 h-4 mr-2" />
-                    Expense Report
-                  </Button>
-                  <Button variant="outline" className="w-full justify-start">
-                    <DollarSign className="w-4 h-4 mr-2" />
-                    Revenue Report
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
           </TabsContent>
         </Tabs>
       </div>
