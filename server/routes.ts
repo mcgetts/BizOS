@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { db } from "./db";
 import { setupAuth, isAuthenticated, requireRole } from "./replitAuth";
 import {
   insertClientSchema,
@@ -12,11 +13,135 @@ import {
   insertMarketingCampaignSchema,
   insertSupportTicketSchema,
   updateSupportTicketSchema,
+  clients,
+  projects,
+  tasks,
+  invoices,
+  expenses,
+  knowledgeArticles,
+  marketingCampaigns,
+  supportTickets,
+  timeEntries,
+  clientInteractions,
+  documents,
 } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Test reset endpoint - must be BEFORE auth setup to bypass authentication
+  app.get('/api/test/reset', async (req, res) => {
+    if (process.env.NODE_ENV !== 'development') {
+      return res.status(403).json({ message: 'Test reset endpoint only available in development' });
+    }
+
+    try {
+      // Clear all database tables in reverse dependency order to avoid foreign key constraints
+      await db.delete(timeEntries);
+      await db.delete(clientInteractions);
+      await db.delete(supportTickets);
+      await db.delete(marketingCampaigns);
+      await db.delete(knowledgeArticles);
+      await db.delete(documents);
+      await db.delete(expenses);
+      await db.delete(invoices);
+      await db.delete(tasks);
+      await db.delete(projects);
+      await db.delete(clients);
+      // Note: Not clearing users table to keep authentication working
+      
+      res.json({ 
+        message: 'Test data reset successfully', 
+        cleared: [
+          'timeEntries', 'clientInteractions', 'supportTickets', 
+          'marketingCampaigns', 'knowledgeArticles', 'documents', 
+          'expenses', 'invoices', 'tasks', 'projects', 'clients'
+        ]
+      });
+    } catch (error) {
+      console.error("Error resetting test data:", error);
+      res.status(500).json({ message: "Failed to reset test data" });
+    }
+  });
+
   // Auth middleware
   await setupAuth(app);
+
+  // Development-only authentication endpoint for testing - AFTER auth setup
+  app.post('/api/auth/dev-login', async (req: any, res) => {
+    console.log('Dev login endpoint hit, NODE_ENV:', process.env.NODE_ENV);
+    
+    if (process.env.NODE_ENV !== 'development') {
+      return res.status(403).json({ message: 'Dev login endpoint only available in development' });
+    }
+
+    try {
+      const testUserId = 'test-user-123';
+      const testUser = {
+        id: testUserId,
+        email: 'test@example.com',
+        firstName: 'Test',
+        lastName: 'User',
+        profileImageUrl: null,
+        role: 'admin'
+      };
+
+      console.log('Creating test user:', testUser);
+      
+      // Ensure test user exists in database
+      await storage.upsertUser(testUser);
+      console.log('Test user upserted successfully');
+
+      // Create mock claims and session data similar to OIDC flow
+      const mockClaims = {
+        sub: testUserId,
+        email: 'test@example.com',
+        first_name: 'Test',
+        last_name: 'User',
+        profile_image_url: null,
+        exp: Math.floor(Date.now() / 1000) + 3600 // 1 hour from now
+      };
+
+      // Set up session data to mimic successful authentication
+      const user = {
+        claims: mockClaims,
+        access_token: 'mock-access-token',
+        refresh_token: 'mock-refresh-token',
+        expires_at: mockClaims.exp
+      };
+
+      console.log('Setting up authentication session');
+
+      // Manually set user data on request to mimic authentication
+      req.user = user;
+      
+      // Manually set session as authenticated  
+      if (req.session) {
+        req.session.passport = { user: user };
+        
+        // Force session to be saved to ensure persistence
+        req.session.save((err: any) => {
+          if (err) {
+            console.error('Session save failed:', err);
+            return res.status(500).json({ message: 'Failed to save session' });
+          }
+          
+          console.log('Session established and saved successfully');
+          res.json({ 
+            message: 'Development authentication successful',
+            user: testUser,
+            authenticated: true,
+            debug: 'Session set up and saved'
+          });
+        });
+      } else {
+        console.log('No session available');
+        res.status(500).json({ message: 'Session not available' });
+      }
+
+    } catch (error) {
+      console.error('Dev login failed:', error);
+      res.status(500).json({ message: 'Dev authentication failed', error: error.message });
+    }
+  });
 
   // Auth routes
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
