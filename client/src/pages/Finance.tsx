@@ -175,8 +175,8 @@ function InvoiceForm({ invoice, onSuccess }: { invoice?: Invoice; onSuccess: () 
   const onSubmit = (data: InvoiceFormData) => {
     const submitData: InsertInvoice = {
       invoiceNumber: data.invoiceNumber,
-      clientId: data.clientId && data.clientId.trim() !== "" ? data.clientId : null,
-      projectId: data.projectId && data.projectId.trim() !== "" ? data.projectId : null,
+      clientId: data.clientId && data.clientId.trim() !== "" && data.clientId !== "none" ? data.clientId : null,
+      projectId: data.projectId && data.projectId.trim() !== "" && data.projectId !== "none" ? data.projectId : null,
       amount: data.amount,
       tax: data.tax || null,
       total: data.total,
@@ -459,8 +459,8 @@ function ExpenseForm({ expense, onSuccess }: { expense?: Expense; onSuccess: () 
       description: data.description,
       amount: data.amount,
       category: data.category || null,
-      projectId: data.projectId && data.projectId.trim() !== "" ? data.projectId : null,
-      userId: data.userId && data.userId.trim() !== "" ? data.userId : null,
+      projectId: data.projectId && data.projectId.trim() !== "" && data.projectId !== "none" ? data.projectId : null,
+      userId: data.userId && data.userId.trim() !== "" && data.userId !== "none" ? data.userId : null,
       date: new Date(data.date),
       billable: data.billable ?? false,
       reimbursed: data.reimbursed ?? false,
