@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Layout } from "@/components/Layout";
@@ -20,7 +20,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertProjectSchema } from "@shared/schema";
-import type { Project, InsertProject, Client, User } from "@shared/schema";
+import type { Project, InsertProject, Client, User, Task } from "@shared/schema";
 import { z } from "zod";
 import { 
   Plus, 
@@ -378,6 +378,7 @@ export default function Projects() {
   const [selectedPriority, setSelectedPriority] = useState<string>("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [expandedProject, setExpandedProject] = useState<string | null>(null);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -402,6 +403,12 @@ export default function Projects() {
   // Fetch clients for display
   const { data: clients } = useQuery<Client[]>({
     queryKey: ["/api/clients"],
+    enabled: isAuthenticated,
+  });
+
+  // Fetch tasks for project display
+  const { data: tasks } = useQuery<Task[]>({
+    queryKey: ["/api/tasks"],
     enabled: isAuthenticated,
   });
 
@@ -461,6 +468,19 @@ export default function Projects() {
   const getClientName = (clientId: string) => {
     const client = clients?.find(c => c.id === clientId);
     return client ? `${client.name}${client.company ? ` (${client.company})` : ''}` : 'No client';
+  };
+
+  const getProjectTasks = (projectId: string) => {
+    return tasks?.filter(task => task.projectId === projectId) || [];
+  };
+
+  const getTaskStatusColor = (status: string) => {
+    switch (status) {
+      case "completed": return "text-green-600 dark:text-green-400";
+      case "in_progress": return "text-blue-600 dark:text-blue-400";
+      case "review": return "text-yellow-600 dark:text-yellow-400";
+      default: return "text-gray-600 dark:text-gray-400";
+    }
   };
 
   const filteredProjects = projects?.filter((project: Project) => {
@@ -647,12 +667,34 @@ export default function Projects() {
                   <tbody className="divide-y divide-border">
                     {filteredProjects.map((project: any, index: number) => {
                       const StatusIcon = getStatusIcon(project.status);
+                      const projectTasks = getProjectTasks(project.id);
+                      const isExpanded = expandedProject === project.id;
+                      
                       return (
-                        <tr key={project.id} data-testid={`row-project-${index}`}>
-                          <td className="py-4">
-                            <div className="font-medium text-foreground">{project.name}</div>
-                            <div className="text-sm text-muted-foreground">{project.description}</div>
-                          </td>
+                        <Fragment key={project.id}>
+                          <tr data-testid={`row-project-${index}`}>
+                            <td className="py-4">
+                              <div className="flex items-center space-x-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setExpandedProject(isExpanded ? null : project.id)}
+                                  className="p-1 h-6 w-6"
+                                  data-testid={`button-expand-${index}`}
+                                >
+                                  {isExpanded ? "−" : "+"}
+                                </Button>
+                                <div>
+                                  <div className="font-medium text-foreground">{project.name}</div>
+                                  <div className="text-sm text-muted-foreground">{project.description}</div>
+                                  {projectTasks.length > 0 && (
+                                    <div className="text-xs text-muted-foreground mt-1">
+                                      {projectTasks.length} task{projectTasks.length !== 1 ? 's' : ''}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
                           <td className="py-4">
                             <div className="text-sm text-foreground">{getClientName(project.clientId)}</div>
                           </td>
@@ -740,6 +782,63 @@ export default function Projects() {
                             </DropdownMenu>
                           </td>
                         </tr>
+                        
+                        {/* Expanded Tasks Row */}
+                        {isExpanded && (
+                          <tr key={`${project.id}-tasks`}>
+                            <td colSpan={8} className="py-4 px-6 bg-muted/50">
+                              <div className="space-y-3">
+                                <h4 className="font-medium text-sm text-muted-foreground mb-3">
+                                  Project Tasks ({projectTasks.length})
+                                </h4>
+                                {projectTasks.length === 0 ? (
+                                  <p className="text-sm text-muted-foreground italic">No tasks assigned to this project</p>
+                                ) : (
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    {projectTasks.map((task, taskIndex) => (
+                                      <div 
+                                        key={task.id} 
+                                        className="p-3 bg-background rounded-md border border-border"
+                                        data-testid={`task-${taskIndex}`}
+                                      >
+                                        <div className="flex items-center justify-between mb-2">
+                                          <div className="font-medium text-sm">{task.title}</div>
+                                          <Badge 
+                                            variant="outline" 
+                                            className={getTaskStatusColor(task.status || "todo")}
+                                          >
+                                            {task.status || "todo"}
+                                          </Badge>
+                                        </div>
+                                        {task.description && (
+                                          <p className="text-xs text-muted-foreground mb-2 line-clamp-2">
+                                            {task.description}
+                                          </p>
+                                        )}
+                                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                                          <span>
+                                            {task.priority && (
+                                              <Badge variant="outline" className="text-xs mr-2">
+                                                {task.priority}
+                                              </Badge>
+                                            )}
+                                            {task.assignedTo && (
+                                              <span>Assigned</span>
+                                            )}
+                                          </span>
+                                          {task.dueDate && (
+                                            <span>{new Date(task.dueDate).toLocaleDateString()}</span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        </Fragment>
                       );
                     })}
                   </tbody>

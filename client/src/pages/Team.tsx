@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useQuery } from "@tanstack/react-query";
-import type { Task } from "@shared/schema";
+import type { Task, User, Project } from "@shared/schema";
 import { 
   Plus, 
   Search, 
@@ -125,6 +125,19 @@ export default function Team() {
     }
   };
 
+  const getMemberTasks = (memberId: string) => {
+    return tasks?.filter(task => task.assignedTo === memberId) || [];
+  };
+
+  const getTaskStatusColor = (status: string) => {
+    switch (status) {
+      case "completed": return "text-green-600 dark:text-green-400";
+      case "in_progress": return "text-blue-600 dark:text-blue-400";
+      case "review": return "text-yellow-600 dark:text-yellow-400";
+      default: return "text-gray-600 dark:text-gray-400";
+    }
+  };
+
   const filteredMembers = teamMembers.filter((member) =>
     member.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     member.role?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -215,8 +228,12 @@ export default function Team() {
 
         {/* Team Members Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredMembers.map((member, index) => (
-            <Card key={member.id} className="glassmorphism" data-testid={`card-member-${index}`}>
+          {filteredMembers.map((member, index) => {
+            const memberTasks = getMemberTasks(member.id);
+            const activeTasks = memberTasks.filter(task => task.status !== 'completed');
+            
+            return (
+              <Card key={member.id} className="glassmorphism" data-testid={`card-member-${index}`}>
               <CardHeader className="pb-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
@@ -260,14 +277,52 @@ export default function Team() {
                     <span className="font-medium">{member.department}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Tasks Completed</span>
-                    <span className="font-medium">{member.tasksCompleted}</span>
+                    <span className="text-muted-foreground">Active Tasks</span>
+                    <span className="font-medium">{activeTasks.length}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Productivity</span>
-                    <span className="font-medium text-success">{member.productivity}%</span>
+                    <span className="text-muted-foreground">Completed Tasks</span>
+                    <span className="font-medium text-success">{memberTasks.filter(t => t.status === 'completed').length}</span>
                   </div>
                 </div>
+
+                {/* Assigned Tasks Section */}
+                {memberTasks.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-muted-foreground">Current Tasks</p>
+                    <div className="space-y-2 max-h-32 overflow-y-auto">
+                      {activeTasks.slice(0, 3).map((task, taskIndex) => (
+                        <div 
+                          key={task.id} 
+                          className="p-2 bg-muted/30 rounded-sm border border-border/50"
+                          data-testid={`member-task-${taskIndex}`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="font-medium text-xs truncate" title={task.title}>
+                              {task.title}
+                            </div>
+                            <Badge 
+                              variant="outline" 
+                              className={`text-xs ${getTaskStatusColor(task.status || "todo")}`}
+                            >
+                              {task.status || "todo"}
+                            </Badge>
+                          </div>
+                          {task.priority && (
+                            <Badge variant="outline" className="text-xs">
+                              {task.priority}
+                            </Badge>
+                          )}
+                        </div>
+                      ))}
+                      {activeTasks.length > 3 && (
+                        <p className="text-xs text-muted-foreground text-center">
+                          +{activeTasks.length - 3} more tasks
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <p className="text-sm font-medium text-muted-foreground">Skills</p>
@@ -285,8 +340,9 @@ export default function Team() {
                   View Details
                 </Button>
               </CardContent>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </div>
 
         {filteredMembers.length === 0 && (
