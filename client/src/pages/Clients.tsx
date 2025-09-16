@@ -276,6 +276,7 @@ export default function Clients() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [deletingClient, setDeletingClient] = useState<Client | null>(null);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -314,6 +315,7 @@ export default function Clients() {
 
   const handleDeleteClient = (client: Client) => {
     deleteMutation.mutate(client.id);
+    setDeletingClient(null);
   };
 
   if (isLoading || !isAuthenticated) {
@@ -539,31 +541,14 @@ export default function Clients() {
                                 <Edit className="w-4 h-4 mr-2" />
                                 Edit
                               </DropdownMenuItem>
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <DropdownMenuItem data-testid={`button-delete-${index}`} className="text-destructive">
-                                    <Trash2 className="w-4 h-4 mr-2" />
-                                    Delete
-                                  </DropdownMenuItem>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Delete Client</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      Are you sure you want to delete {client.name}? This action cannot be undone.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction
-                                      onClick={() => handleDeleteClient(client)}
-                                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                    >
-                                      Delete
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
+                              <DropdownMenuItem 
+                                onClick={() => setDeletingClient(client)} 
+                                data-testid={`button-delete-${index}`} 
+                                className="text-destructive"
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </td>
@@ -589,6 +574,29 @@ export default function Clients() {
               />
             </DialogContent>
           </Dialog>
+        )}
+
+        {/* Delete Client Confirmation */}
+        {deletingClient && (
+          <AlertDialog open={!!deletingClient} onOpenChange={() => setDeletingClient(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Client</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete {deletingClient.name}? This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setDeletingClient(null)}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => handleDeleteClient(deletingClient)}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         )}
       </div>
     </Layout>
