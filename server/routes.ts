@@ -139,7 +139,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     } catch (error) {
       console.error('Dev login failed:', error);
-      res.status(500).json({ message: 'Dev authentication failed', error: error.message });
+      res.status(500).json({ message: 'Dev authentication failed', error: error instanceof Error ? error.message : 'Unknown error' });
     }
   });
 
@@ -297,6 +297,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching tasks:", error);
       res.status(500).json({ message: "Failed to fetch tasks" });
+    }
+  });
+
+  app.get('/api/tasks/:id', isAuthenticated, async (req, res) => {
+    try {
+      const task = await storage.getTask(req.params.id);
+      if (!task) {
+        return res.status(404).json({ message: "Task not found" });
+      }
+      res.json(task);
+    } catch (error) {
+      console.error("Error fetching task:", error);
+      res.status(500).json({ message: "Failed to fetch task" });
     }
   });
 
@@ -581,6 +594,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error deleting support ticket:", error);
       res.status(500).json({ message: "Failed to delete support ticket" });
     }
+  });
+
+  // API 404 handler - catch any unmatched /api routes before SPA fallback
+  app.use('/api/*', (req, res) => {
+    res.status(404).json({ message: 'API endpoint not found' });
   });
 
   const httpServer = createServer(app);

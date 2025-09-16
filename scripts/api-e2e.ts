@@ -535,8 +535,8 @@ class APITester {
         throw new Error('Support ticket creation or relationship validation failed');
       }
 
-      // Validate ticket number format (ST-YYYY-XXXXXX)
-      if (ticket.ticketNumber && !ticket.ticketNumber.match(/^ST-\d{4}-\d{6}$/)) {
+      // Validate ticket number format (ST-YYYYMMDD-XXXXXXXXX)
+      if (ticket.ticketNumber && !ticket.ticketNumber.match(/^ST-\d{8}-\d{9}$/)) {
         throw new Error('Invalid ticket number format');
       }
     });
@@ -597,7 +597,7 @@ class APITester {
     await this.test('Reject Invalid Client ID in Project', async () => {
       const projectData = {
         name: 'Invalid Project',
-        clientId: 'invalid-client-id',
+        clientId: '00000000-0000-0000-0000-000000000000',
         status: 'planning'
       };
 
@@ -617,7 +617,7 @@ class APITester {
     await this.test('Reject Invalid Project ID in Task', async () => {
       const taskData = {
         title: 'Invalid Task',
-        projectId: 'invalid-project-id',
+        projectId: '00000000-0000-0000-0000-000000000000',
         status: 'todo'
       };
 

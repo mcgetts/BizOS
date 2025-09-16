@@ -316,12 +316,19 @@ export const insertProjectSchema = createInsertSchema(projects).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  startDate: z.coerce.date().nullable().optional(),
+  endDate: z.coerce.date().nullable().optional(),
+  completedAt: z.coerce.date().nullable().optional(),
 });
 
 export const insertTaskSchema = createInsertSchema(tasks).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  dueDate: z.coerce.date().nullable().optional(),
+  completedAt: z.coerce.date().nullable().optional(),
 });
 
 export const insertInvoiceSchema = createInsertSchema(invoices).omit({
