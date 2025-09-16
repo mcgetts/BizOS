@@ -261,7 +261,7 @@ function InvoiceForm({ invoice, onSuccess }: { invoice?: Invoice; onSuccess: () 
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">No client</SelectItem>
+                        <SelectItem value="none">No client</SelectItem>
                         {clients?.map((client) => (
                           <SelectItem key={client.id} value={client.id!}>
                             {client.name}
@@ -286,7 +286,7 @@ function InvoiceForm({ invoice, onSuccess }: { invoice?: Invoice; onSuccess: () 
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">No project</SelectItem>
+                        <SelectItem value="none">No project</SelectItem>
                         {projects?.map((project) => (
                           <SelectItem key={project.id} value={project.id!}>
                             {project.name}
@@ -555,7 +555,7 @@ function ExpenseForm({ expense, onSuccess }: { expense?: Expense; onSuccess: () 
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">No project</SelectItem>
+                        <SelectItem value="none">No project</SelectItem>
                         {projects?.map((project) => (
                           <SelectItem key={project.id} value={project.id!}>
                             {project.name}
@@ -580,7 +580,7 @@ function ExpenseForm({ expense, onSuccess }: { expense?: Expense; onSuccess: () 
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">No user</SelectItem>
+                        <SelectItem value="none">No user</SelectItem>
                         {users?.map((user) => (
                           <SelectItem key={user.id} value={user.id!}>
                             {user.firstName} {user.lastName}
