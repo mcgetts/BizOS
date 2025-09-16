@@ -27,7 +27,12 @@
       "Bash(fuser:*)",
       "Bash(PORT=3001 npm run dev)",
       "Bash(npm run dev:*)",
-      "Bash(ss:*)"
+      "Bash(ss:*)",
+      "Bash(npm start)",
+      "Bash(npm test:*)",
+      "Bash(node:*)",
+      "Bash(npx vitest run:*)",
+      "Bash(kill:*)"
     ],
     "deny": [],
     "ask": []
