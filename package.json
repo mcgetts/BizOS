@@ -13,7 +13,10 @@
     "test:coverage": "vitest --coverage",
     "test:ui": "vitest --ui",
     "test:frontend": "vitest --config vitest.config.frontend.ts",
-    "test:frontend:coverage": "vitest --config vitest.config.frontend.ts --coverage"
+    "test:frontend:coverage": "vitest --config vitest.config.frontend.ts --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:debug": "playwright test --debug"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

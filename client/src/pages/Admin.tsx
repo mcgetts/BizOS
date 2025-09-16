@@ -33,6 +33,57 @@ export default function Admin() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading, user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
+  const [systemUsers, setSystemUsers] = useState([]);
+  const [systemStats, setSystemStats] = useState({
+    totalUsers: 0,
+    activeUsers: 0,
+    totalProjects: 0,
+    systemUptime: "99.9%",
+    storageUsed: "2.4 GB",
+    apiCalls: 15420
+  });
+  const [isLoadingData, setIsLoadingData] = useState(true);
+
+  // Fetch real data from API
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoadingData(true);
+
+        // Fetch users
+        const usersResponse = await fetch('/api/users');
+        if (usersResponse.ok) {
+          const users = await usersResponse.json();
+          setSystemUsers(users);
+        }
+
+        // Fetch KPI data
+        const kpiResponse = await fetch('/api/dashboard/kpis');
+        if (kpiResponse.ok) {
+          const kpis = await kpiResponse.json();
+          setSystemStats(prev => ({
+            ...prev,
+            totalUsers: kpis.team.current + 2, // Add admins
+            activeUsers: kpis.team.current,
+            totalProjects: kpis.projects.current
+          }));
+        }
+      } catch (error) {
+        console.error('Failed to fetch admin data:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load admin data",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoadingData(false);
+      }
+    };
+
+    if (isAuthenticated && user?.role === 'admin') {
+      fetchData();
+    }
+  }, [isAuthenticated, user, toast]);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -73,15 +124,18 @@ export default function Admin() {
     );
   }
 
-  // Sample admin data
-  const systemStats = {
-    totalUsers: 42,
-    activeUsers: 38,
-    totalProjects: 25,
-    systemUptime: "99.9%",
-    storageUsed: "2.4 GB",
-    apiCalls: 15420
-  };
+  if (isLoadingData) {
+    return (
+      <Layout title="Admin Portal" breadcrumbs={["Admin"]}>
+        <div className="h-64 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">Loading admin data...</p>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
 
   const recentActivities = [
     {
@@ -92,7 +146,7 @@ export default function Admin() {
       type: "create"
     },
     {
-      user: "Mike Chen", 
+      user: "Mike Chen",
       action: "Updated user permissions",
       target: "Emily Rodriguez",
       timestamp: "4 hours ago",
@@ -104,36 +158,6 @@ export default function Admin() {
       target: "Database",
       timestamp: "6 hours ago",
       type: "system"
-    }
-  ];
-
-  const systemUsers = [
-    {
-      id: "1",
-      name: "Sarah Johnson",
-      email: "sarah.johnson@company.com",
-      role: "manager",
-      status: "active",
-      lastLogin: "2024-01-15T10:30:00Z",
-      avatar: "https://images.unsplash.com/photo-1494790108755-2616b612b786?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&h=100"
-    },
-    {
-      id: "2", 
-      name: "Mike Chen",
-      email: "mike.chen@company.com",
-      role: "employee",
-      status: "active", 
-      lastLogin: "2024-01-15T09:15:00Z",
-      avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&h=100"
-    },
-    {
-      id: "3",
-      name: "Emily Rodriguez", 
-      email: "emily.rodriguez@company.com",
-      role: "employee",
-      status: "inactive",
-      lastLogin: "2024-01-12T16:45:00Z",
-      avatar: "https://images.unsplash.com/photo-1517841905240-472988babdf9?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&h=100"
     }
   ];
 
@@ -156,11 +180,12 @@ export default function Admin() {
     }
   };
 
-  const filteredUsers = systemUsers.filter((user) =>
-    user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.role?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredUsers = systemUsers.filter((user) => {
+    const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
+    return fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+           user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+           user.role?.toLowerCase().includes(searchTerm.toLowerCase());
+  });
 
   return (
     <Layout title="Admin Portal" breadcrumbs={["Admin"]}>
@@ -320,13 +345,15 @@ export default function Admin() {
                         <tr key={user.id} data-testid={`row-user-${index}`}>
                           <td className="py-4">
                             <div className="flex items-center space-x-3">
-                              <img
-                                src={user.avatar}
-                                alt={user.name}
-                                className="w-8 h-8 rounded-full object-cover"
-                              />
+                              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                                <span className="text-sm font-medium text-primary">
+                                  {user.firstName?.[0]}{user.lastName?.[0]}
+                                </span>
+                              </div>
                               <div>
-                                <div className="font-medium text-foreground">{user.name}</div>
+                                <div className="font-medium text-foreground">
+                                  {user.firstName} {user.lastName}
+                                </div>
                                 <div className="text-sm text-muted-foreground">{user.email}</div>
                               </div>
                             </div>
@@ -337,13 +364,13 @@ export default function Admin() {
                             </Badge>
                           </td>
                           <td className="py-4">
-                            <Badge variant={getStatusColor(user.status)} data-testid={`badge-status-${index}`}>
-                              {user.status.charAt(0).toUpperCase() + user.status.slice(1)}
+                            <Badge variant={getStatusColor(user.isActive ? "active" : "inactive")} data-testid={`badge-status-${index}`}>
+                              {user.isActive ? "Active" : "Inactive"}
                             </Badge>
                           </td>
                           <td className="py-4">
                             <div className="text-sm text-muted-foreground">
-                              {new Date(user.lastLogin).toLocaleDateString()}
+                              {user.updatedAt ? new Date(user.updatedAt).toLocaleDateString() : "Never"}
                             </div>
                           </td>
                           <td className="py-4">

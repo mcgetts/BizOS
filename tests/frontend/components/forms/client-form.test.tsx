@@ -1,7 +1,8 @@
 import React from 'react';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '../../utils/test-utils';
-import { ComponentTestHelpers, FormTestUtils, MockAPIResponses, mockApiResponse } from '../../utils/test-utils';
+import { ComponentTestHelpers, FormTestUtils, MockAPIResponses } from '../../utils/test-utils';
+import { mockApiResponse } from '../../../frontend-setup';
 
 // Mock the form component by creating a simplified version
 const ClientForm = ({ client, onSuccess }: { client?: any; onSuccess: () => void }) => {

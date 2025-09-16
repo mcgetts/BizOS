@@ -1,8 +1,9 @@
+import React from 'react';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
-import { mockApiResponse, mockApiError, TestUtils } from '../frontend-setup';
+import { mockApiResponse, mockApiError, TestUtils } from '../../frontend-setup';
 
 // Create a wrapper component for React Query
 const createWrapper = () => {

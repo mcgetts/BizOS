@@ -467,7 +467,7 @@ export class DatabaseStorage implements IStorage {
     const [projectsResult] = await db
       .select({ count: count() })
       .from(projects)
-      .where(or(eq(projects.status, 'active'), eq(projects.status, 'planning')));
+      .where(or(eq(projects.status, 'in_progress'), eq(projects.status, 'planning')));
 
     // Get team members count
     const [teamResult] = await db

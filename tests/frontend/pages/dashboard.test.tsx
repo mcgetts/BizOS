@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, waitFor } from '../utils/test-utils';
-import { ComponentTestHelpers, MockAPIResponses, mockApiResponse } from '../utils/test-utils';
+import { ComponentTestHelpers, MockAPIResponses } from '../utils/test-utils';
+import { mockApiResponse } from '../../frontend-setup';
 import Dashboard from '@/pages/Dashboard';
+import { useAuth } from '@/hooks/useAuth';
 
 // Mock the hooks and components
 vi.mock('@/hooks/useAuth', () => ({
@@ -25,7 +27,7 @@ vi.mock('@/lib/authUtils', () => ({
 }));
 
 describe('Dashboard Page', () => {
-  const mockUseAuth = vi.mocked(require('@/hooks/useAuth').useAuth);
+  const mockUseAuth = vi.mocked(useAuth);
   const mockToast = vi.fn();
 
   beforeEach(() => {

@@ -7,6 +7,7 @@ import type { Express, RequestHandler } from "express";
 import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
 import { storage } from "./storage";
+import { BUSINESS_LIMITS } from "./config/constants";
 
 if (!process.env.REPLIT_DOMAINS) {
   throw new Error("Environment variable REPLIT_DOMAINS not provided");
@@ -57,6 +58,28 @@ function updateUserSession(
 async function upsertUser(
   claims: any,
 ) {
+  const TEAM_SIZE_LIMIT = BUSINESS_LIMITS.MAX_TEAM_MEMBERS;
+
+  // Check if user already exists (this is an update, not new user)
+  const existingUser = await storage.getUser(claims["sub"]);
+  if (existingUser) {
+    // User exists, proceed with update
+    await storage.upsertUser({
+      id: claims["sub"],
+      email: claims["email"],
+      firstName: claims["first_name"],
+      lastName: claims["last_name"],
+      profileImageUrl: claims["profile_image_url"],
+    });
+    return;
+  }
+
+  // New user - check team size limit
+  const currentUsers = await storage.getUsers();
+  if (currentUsers.length >= TEAM_SIZE_LIMIT) {
+    throw new Error(`Team size limit reached. Maximum ${TEAM_SIZE_LIMIT} team members allowed.`);
+  }
+
   await storage.upsertUser({
     id: claims["sub"],
     email: claims["email"],
