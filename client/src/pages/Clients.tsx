@@ -35,8 +35,8 @@ import {
 
 // Form validation schema for client creation/editing
 const clientFormSchema = insertClientSchema.extend({
-  totalValue: z.string().optional(),
-}).omit({ id: true, createdAt: true, updatedAt: true });
+  totalValue: z.string().transform((val) => val ? parseFloat(val) : 0).optional(),
+});
 
 type ClientFormData = z.infer<typeof clientFormSchema>;
 

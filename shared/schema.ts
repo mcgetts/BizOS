@@ -310,6 +310,8 @@ export const insertClientSchema = createInsertSchema(clients).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  totalValue: z.coerce.number().optional(),
 });
 
 export const insertProjectSchema = createInsertSchema(projects).omit({
