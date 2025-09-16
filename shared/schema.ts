@@ -311,7 +311,15 @@ export const insertClientSchema = createInsertSchema(clients).omit({
   createdAt: true,
   updatedAt: true,
 }).extend({
-  totalValue: z.coerce.number().optional(),
+  totalValue: z.string().optional(),
+  email: z.string().optional(),
+  phone: z.string().optional(),
+  company: z.string().optional(),
+  industry: z.string().optional(),
+  website: z.string().optional(),
+  address: z.string().optional(),
+  source: z.string().optional(),
+  notes: z.string().optional(),
 });
 
 export const insertProjectSchema = createInsertSchema(projects).omit({

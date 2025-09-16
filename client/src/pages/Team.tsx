@@ -41,6 +41,13 @@ const insertUserSchema = createInsertSchema(users).omit({
   updatedAt: true,
 }).extend({
   skills: z.string().optional().transform(str => str ? str.split(',').map(s => s.trim()) : []),
+  email: z.string().optional(),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  department: z.string().optional(),
+  position: z.string().optional(),
+  phone: z.string().optional(),
+  address: z.string().optional(),
 });
 
 type InsertUser = z.infer<typeof insertUserSchema>;
@@ -225,7 +232,7 @@ export default function Team() {
                       <FormItem>
                         <FormLabel>First Name</FormLabel>
                         <FormControl>
-                          <Input placeholder="Enter first name" {...field} data-testid="input-first-name" />
+                          <Input placeholder="Enter first name" {...field} value={field.value ?? ""} data-testid="input-first-name" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -238,7 +245,7 @@ export default function Team() {
                       <FormItem>
                         <FormLabel>Last Name</FormLabel>
                         <FormControl>
-                          <Input placeholder="Enter last name" {...field} data-testid="input-last-name" />
+                          <Input placeholder="Enter last name" {...field} value={field.value ?? ""} data-testid="input-last-name" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -251,7 +258,7 @@ export default function Team() {
                       <FormItem>
                         <FormLabel>Email</FormLabel>
                         <FormControl>
-                          <Input type="email" placeholder="Enter email" {...field} data-testid="input-email" />
+                          <Input type="email" placeholder="Enter email" {...field} value={field.value ?? ""} data-testid="input-email" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -263,7 +270,7 @@ export default function Team() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Role</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select onValueChange={field.onChange} defaultValue={field.value ?? undefined}>
                           <FormControl>
                             <SelectTrigger data-testid="select-role">
                               <SelectValue placeholder="Select role" />
@@ -287,7 +294,7 @@ export default function Team() {
                       <FormItem>
                         <FormLabel>Department</FormLabel>
                         <FormControl>
-                          <Input placeholder="Enter department" {...field} data-testid="input-department" />
+                          <Input placeholder="Enter department" {...field} value={field.value ?? ""} data-testid="input-department" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -300,7 +307,7 @@ export default function Team() {
                       <FormItem>
                         <FormLabel>Position</FormLabel>
                         <FormControl>
-                          <Input placeholder="Enter position" {...field} data-testid="input-position" />
+                          <Input placeholder="Enter position" {...field} value={field.value ?? ""} data-testid="input-position" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>

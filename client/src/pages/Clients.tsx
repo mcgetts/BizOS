@@ -34,9 +34,7 @@ import {
 } from "lucide-react";
 
 // Form validation schema for client creation/editing
-const clientFormSchema = insertClientSchema.extend({
-  totalValue: z.string().transform((val) => val ? parseFloat(val) : 0).optional(),
-});
+const clientFormSchema = insertClientSchema;
 
 type ClientFormData = z.infer<typeof clientFormSchema>;
 
@@ -48,16 +46,16 @@ function ClientForm({ client, onSuccess }: { client?: Client; onSuccess: () => v
     resolver: zodResolver(clientFormSchema),
     defaultValues: {
       name: client?.name || "",
-      email: client?.email || "",
-      phone: client?.phone || "",
-      company: client?.company || "",
-      industry: client?.industry || "",
-      website: client?.website || "",
-      address: client?.address || "",
+      email: client?.email ?? "",
+      phone: client?.phone ?? "",
+      company: client?.company ?? "",
+      industry: client?.industry ?? "",
+      website: client?.website ?? "",
+      address: client?.address ?? "",
       status: client?.status || "lead",
-      source: client?.source || "",
-      totalValue: client?.totalValue?.toString() || "0",
-      notes: client?.notes || "",
+      source: client?.source ?? "",
+      totalValue: client?.totalValue || "0",
+      notes: client?.notes ?? "",
     },
   });
 
@@ -189,7 +187,7 @@ function ClientForm({ client, onSuccess }: { client?: Client; onSuccess: () => v
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Status</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select onValueChange={field.onChange} defaultValue={field.value ?? undefined}>
                   <FormControl>
                     <SelectTrigger data-testid="select-client-status">
                       <SelectValue placeholder="Select status" />
