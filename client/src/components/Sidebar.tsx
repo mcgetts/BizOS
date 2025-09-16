@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   Users,
   FolderOpen,
+  CheckSquare,
   UserCog,
   DollarSign,
   BookOpen,
@@ -30,6 +31,11 @@ const navigationItems = [
     title: "Projects",
     href: "/projects",
     icon: FolderOpen,
+  },
+  {
+    title: "Tasks",
+    href: "/tasks",
+    icon: CheckSquare,
   },
   {
     title: "Team",
