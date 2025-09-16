@@ -7,7 +7,16 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useQuery } from "@tanstack/react-query";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { createInsertSchema } from "drizzle-zod";
+import { users } from "@shared/schema";
 import type { Task, User, Project } from "@shared/schema";
 import { 
   Plus, 
@@ -20,13 +29,29 @@ import {
   MapPin,
   MoreHorizontal,
   Calendar,
-  Award
+  Award,
+  Eye
 } from "lucide-react";
+import { z } from "zod";
+
+// Form schema for adding team members
+const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  skills: z.string().optional().transform(str => str ? str.split(',').map(s => s.trim()) : []),
+});
+
+type InsertUser = z.infer<typeof insertUserSchema>;
 
 export default function Team() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading, user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [selectedMember, setSelectedMember] = useState<User | null>(null);
+  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -48,7 +73,67 @@ export default function Team() {
     enabled: isAuthenticated,
   });
 
-  if (isLoading || !isAuthenticated) {
+  const { data: teamMembers, isLoading: isLoadingTeam } = useQuery<User[]>({
+    queryKey: ["/api/users"],
+    enabled: isAuthenticated,
+  });
+
+  // Form for adding new team members
+  const form = useForm<InsertUser>({
+    resolver: zodResolver(insertUserSchema),
+    defaultValues: {
+      email: "",
+      firstName: "",
+      lastName: "",
+      role: "employee",
+      department: "",
+      position: "",
+      phone: "",
+      address: "",
+      skills: [],
+      isActive: true,
+    },
+  });
+
+  // Mutation for adding team members
+  const addMemberMutation = useMutation({
+    mutationFn: async (data: InsertUser) => {
+      const response = await fetch("/api/users", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to add team member');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      toast({
+        title: "Success",
+        description: "Team member added successfully!",
+      });
+      setIsAddDialogOpen(false);
+      form.reset();
+    },
+    onError: (error) => {
+      toast({
+        title: "Error", 
+        description: "Failed to add team member. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const onSubmit = (data: InsertUser) => {
+    addMemberMutation.mutate(data);
+  };
+
+
+  if (isLoading || !isAuthenticated || isLoadingTeam) {
     return (
       <div className="h-screen flex items-center justify-center">
         <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
@@ -56,73 +141,20 @@ export default function Team() {
     );
   }
 
-  // Sample team data since we don't have a dedicated team endpoint yet
-  const teamMembers = [
-    {
-      id: "1",
-      name: "Sarah Johnson",
-      email: "sarah.johnson@company.com",
-      phone: "+1 (555) 123-4567",
-      role: "Project Manager",
-      department: "Operations",
-      skills: ["Project Management", "Agile", "Leadership"],
-      status: "active",
-      avatar: "https://images.unsplash.com/photo-1494790108755-2616b612b786?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&h=100",
-      joinDate: "2023-01-15",
-      tasksCompleted: 45,
-      productivity: 92
-    },
-    {
-      id: "2",
-      name: "Mike Chen",
-      email: "mike.chen@company.com",
-      phone: "+1 (555) 234-5678",
-      role: "Senior Developer",
-      department: "Engineering",
-      skills: ["React", "Node.js", "TypeScript", "PostgreSQL"],
-      status: "active",
-      avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&h=100",
-      joinDate: "2022-06-20",
-      tasksCompleted: 78,
-      productivity: 88
-    },
-    {
-      id: "3",
-      name: "Emily Rodriguez",
-      email: "emily.rodriguez@company.com",
-      phone: "+1 (555) 345-6789",
-      role: "Designer",
-      department: "Design",
-      skills: ["UI/UX Design", "Figma", "Branding"],
-      status: "active",
-      avatar: "https://images.unsplash.com/photo-1517841905240-472988babdf9?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&h=100",
-      joinDate: "2023-03-10",
-      tasksCompleted: 32,
-      productivity: 95
-    },
-    {
-      id: "4",
-      name: "David Wilson",
-      email: "david.wilson@company.com",
-      phone: "+1 (555) 456-7890",
-      role: "Marketing Specialist",
-      department: "Marketing",
-      skills: ["Digital Marketing", "SEO", "Content Strategy"],
-      status: "active",
-      avatar: "https://images.unsplash.com/photo-1519244703995-f4e0f30006d5?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&h=100",
-      joinDate: "2022-11-05",
-      tasksCompleted: 28,
-      productivity: 85
-    }
-  ];
+  const actualTeamMembers = teamMembers || [];
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "active": return "default";
-      case "away": return "secondary";
-      case "busy": return "destructive";
-      default: return "secondary";
-    }
+  const getStatusColor = (isActive: boolean) => {
+    return isActive ? "default" : "secondary";
+  };
+
+  const getUserDisplayName = (user: User) => {
+    return `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email || 'Unknown User';
+  };
+
+  const getUserInitials = (user: User) => {
+    const firstName = user.firstName || '';
+    const lastName = user.lastName || '';
+    return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || user.email?.charAt(0).toUpperCase() || 'U';
   };
 
   const getMemberTasks = (memberId: string) => {
@@ -138,11 +170,23 @@ export default function Team() {
     }
   };
 
-  const filteredMembers = teamMembers.filter((member) =>
-    member.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    member.role?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    member.department?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredMembers = actualTeamMembers.filter((member) => {
+    const displayName = getUserDisplayName(member).toLowerCase();
+    const role = (member.role || '').toLowerCase();
+    const department = (member.department || '').toLowerCase();
+    const email = (member.email || '').toLowerCase();
+    const searchLower = searchTerm.toLowerCase();
+    
+    return displayName.includes(searchLower) ||
+           role.includes(searchLower) ||
+           department.includes(searchLower) ||
+           email.includes(searchLower);
+  });
+
+  const openDetailsDialog = (member: User) => {
+    setSelectedMember(member);
+    setIsDetailsDialogOpen(true);
+  };
 
   return (
     <Layout title="Team Management" breadcrumbs={["Team"]}>
@@ -161,10 +205,130 @@ export default function Team() {
               />
             </div>
           </div>
-          <Button data-testid="button-add-member">
-            <Plus className="w-4 h-4 mr-2" />
-            Add Team Member
-          </Button>
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button data-testid="button-add-member">
+                <Plus className="w-4 h-4 mr-2" />
+                Add Team Member
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Add Team Member</DialogTitle>
+              </DialogHeader>
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="firstName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>First Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Enter first name" {...field} data-testid="input-first-name" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="lastName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Last Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Enter last name" {...field} data-testid="input-last-name" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input type="email" placeholder="Enter email" {...field} data-testid="input-email" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="role"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Role</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-role">
+                              <SelectValue placeholder="Select role" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="admin">Admin</SelectItem>
+                            <SelectItem value="manager">Manager</SelectItem>
+                            <SelectItem value="employee">Employee</SelectItem>
+                            <SelectItem value="client">Client</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="department"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Department</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Enter department" {...field} data-testid="input-department" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="position"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Position</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Enter position" {...field} data-testid="input-position" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <div className="flex gap-2 pt-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setIsAddDialogOpen(false)}
+                      className="flex-1"
+                      data-testid="button-cancel"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={addMemberMutation.isPending}
+                      className="flex-1"
+                      data-testid="button-save"
+                    >
+                      {addMemberMutation.isPending ? "Adding..." : "Add Member"}
+                    </Button>
+                  </div>
+                </form>
+              </Form>
+            </DialogContent>
+          </Dialog>
         </div>
 
         {/* Stats Cards */}
@@ -175,7 +339,7 @@ export default function Team() {
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Total Members</p>
                   <p className="text-2xl font-bold" data-testid="text-total-members">
-                    {teamMembers.length}
+                    {actualTeamMembers.length}
                   </p>
                 </div>
                 <Users className="w-8 h-8 text-primary" />
@@ -189,7 +353,7 @@ export default function Team() {
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Active Now</p>
                   <p className="text-2xl font-bold" data-testid="text-active-members">
-                    {teamMembers.filter(m => m.status === 'active').length}
+                    {actualTeamMembers.filter(m => m.isActive).length}
                   </p>
                 </div>
                 <UserCheck className="w-8 h-8 text-success" />
@@ -203,7 +367,7 @@ export default function Team() {
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Avg Productivity</p>
                   <p className="text-2xl font-bold" data-testid="text-avg-productivity">
-                    {Math.round(teamMembers.reduce((sum, member) => sum + member.productivity, 0) / teamMembers.length)}%
+                    N/A
                   </p>
                 </div>
                 <Award className="w-8 h-8 text-warning" />
@@ -238,20 +402,20 @@ export default function Team() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
                     <Avatar className="w-12 h-12">
-                      <AvatarImage src={member.avatar} alt={member.name} />
+                      <AvatarImage src={member.profileImageUrl || ''} alt={getUserDisplayName(member)} />
                       <AvatarFallback>
-                        {member.name.split(' ').map(n => n[0]).join('')}
+                        {getUserInitials(member)}
                       </AvatarFallback>
                     </Avatar>
                     <div>
                       <h3 className="font-semibold text-foreground" data-testid={`text-name-${index}`}>
-                        {member.name}
+                        {getUserDisplayName(member)}
                       </h3>
-                      <p className="text-sm text-muted-foreground">{member.role}</p>
+                      <p className="text-sm text-muted-foreground">{member.role || 'No role assigned'}</p>
                     </div>
                   </div>
-                  <Badge variant={getStatusColor(member.status)} data-testid={`badge-status-${index}`}>
-                    {member.status}
+                  <Badge variant={getStatusColor(member.isActive || false)} data-testid={`badge-status-${index}`}>
+                    {member.isActive ? 'Active' : 'Inactive'}
                   </Badge>
                 </div>
               </CardHeader>
@@ -267,7 +431,7 @@ export default function Team() {
                   </div>
                   <div className="flex items-center text-sm text-muted-foreground">
                     <Calendar className="w-4 h-4 mr-2" />
-                    Joined {new Date(member.joinDate).toLocaleDateString()}
+                    Joined {new Date(member.createdAt || '').toLocaleDateString()}
                   </div>
                 </div>
 
@@ -324,19 +488,27 @@ export default function Team() {
                   </div>
                 )}
 
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-muted-foreground">Skills</p>
-                  <div className="flex flex-wrap gap-1">
-                    {member.skills.map((skill, skillIndex) => (
-                      <Badge key={skillIndex} variant="outline" className="text-xs">
-                        {skill}
-                      </Badge>
-                    ))}
+                {member.skills && member.skills.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-muted-foreground">Skills</p>
+                    <div className="flex flex-wrap gap-1">
+                      {member.skills.map((skill, skillIndex) => (
+                        <Badge key={skillIndex} variant="outline" className="text-xs">
+                          {skill}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
-                <Button variant="ghost" size="sm" className="w-full" data-testid={`button-view-${index}`}>
-                  <MoreHorizontal className="w-4 h-4 mr-2" />
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="w-full" 
+                  onClick={() => openDetailsDialog(member)}
+                  data-testid={`button-view-${index}`}
+                >
+                  <Eye className="w-4 h-4 mr-2" />
                   View Details
                 </Button>
               </CardContent>
@@ -355,6 +527,131 @@ export default function Team() {
             </CardContent>
           </Card>
         )}
+
+        {/* View Details Dialog */}
+        <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Team Member Details</DialogTitle>
+            </DialogHeader>
+            {selectedMember && (
+              <div className="space-y-6">
+                <div className="flex items-center space-x-4">
+                  <Avatar className="w-16 h-16">
+                    <AvatarImage src={selectedMember.profileImageUrl || ''} alt={getUserDisplayName(selectedMember)} />
+                    <AvatarFallback>
+                      {getUserInitials(selectedMember)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <h3 className="text-xl font-semibold">{getUserDisplayName(selectedMember)}</h3>
+                    <p className="text-muted-foreground">{selectedMember.role || 'No role assigned'}</p>
+                    <Badge variant={getStatusColor(selectedMember.isActive || false)} className="mt-1">
+                      {selectedMember.isActive ? 'Active' : 'Inactive'}
+                    </Badge>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <h4 className="font-medium text-sm text-muted-foreground mb-2">Contact</h4>
+                    <div className="space-y-2">
+                      <div className="flex items-center text-sm">
+                        <Mail className="w-4 h-4 mr-2 text-muted-foreground" />
+                        {selectedMember.email || 'N/A'}
+                      </div>
+                      <div className="flex items-center text-sm">
+                        <Phone className="w-4 h-4 mr-2 text-muted-foreground" />
+                        {selectedMember.phone || 'N/A'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="font-medium text-sm text-muted-foreground mb-2">Work Info</h4>
+                    <div className="space-y-2">
+                      <div className="text-sm">
+                        <span className="text-muted-foreground">Department: </span>
+                        {selectedMember.department || 'N/A'}
+                      </div>
+                      <div className="text-sm">
+                        <span className="text-muted-foreground">Position: </span>
+                        {selectedMember.position || 'N/A'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {selectedMember.skills && selectedMember.skills.length > 0 && (
+                  <div>
+                    <h4 className="font-medium text-sm text-muted-foreground mb-2">Skills</h4>
+                    <div className="flex flex-wrap gap-1">
+                      {selectedMember.skills.map((skill, index) => (
+                        <Badge key={index} variant="outline" className="text-xs">
+                          {skill}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <h4 className="font-medium text-sm text-muted-foreground mb-2">Task Summary</h4>
+                  <div className="grid grid-cols-3 gap-4">
+                    {(() => {
+                      const memberTasks = getMemberTasks(selectedMember.id);
+                      const activeTasks = memberTasks.filter(task => task.status !== 'completed');
+                      const completedTasks = memberTasks.filter(task => task.status === 'completed');
+                      
+                      return (
+                        <>
+                          <div className="text-center">
+                            <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                              {activeTasks.length}
+                            </div>
+                            <div className="text-xs text-muted-foreground">Active</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                              {completedTasks.length}
+                            </div>
+                            <div className="text-xs text-muted-foreground">Completed</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-2xl font-bold">
+                              {memberTasks.length}
+                            </div>
+                            <div className="text-xs text-muted-foreground">Total</div>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                {selectedMember.address && (
+                  <div>
+                    <h4 className="font-medium text-sm text-muted-foreground mb-2">Address</h4>
+                    <div className="flex items-start text-sm">
+                      <MapPin className="w-4 h-4 mr-2 text-muted-foreground mt-0.5" />
+                      {selectedMember.address}
+                    </div>
+                  </div>
+                )}
+
+                <div className="pt-4">
+                  <Button
+                    onClick={() => setIsDetailsDialogOpen(false)}
+                    className="w-full"
+                    data-testid="button-close-details"
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   );
