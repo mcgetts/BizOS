@@ -36,15 +36,14 @@ export function Header({ title, breadcrumbs = [], user }: HeaderProps) {
             <nav className="flex space-x-1 text-sm text-muted-foreground" data-testid="nav-breadcrumbs">
               <span>BizOS</span>
               {breadcrumbs.map((crumb, index) => (
-                <>
-                  <span key={`sep-${index}`}>/</span>
+                <span key={`breadcrumb-${index}`} className="flex space-x-1">
+                  <span>/</span>
                   <span 
-                    key={crumb} 
                     className={index === breadcrumbs.length - 1 ? "text-foreground" : ""}
                   >
                     {crumb}
                   </span>
-                </>
+                </span>
               ))}
             </nav>
           )}

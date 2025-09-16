@@ -115,37 +115,36 @@ export function Sidebar({ user }: SidebarProps) {
           const Icon = item.icon;
           
           return (
-            <Link key={item.href} href={item.href}>
-              <a
-                className={cn(
-                  "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors",
-                  isActive
-                    ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                )}
-                data-testid={`link-${item.title.toLowerCase()}`}
-              >
-                <Icon className="w-5 h-5" />
-                {!collapsed && <span>{item.title}</span>}
-              </a>
+            <Link 
+              key={item.href} 
+              href={item.href}
+              className={cn(
+                "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors",
+                isActive
+                  ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              )}
+              data-testid={`link-${item.title.toLowerCase()}`}
+            >
+              <Icon className="w-5 h-5" />
+              {!collapsed && <span>{item.title}</span>}
             </Link>
           );
         })}
 
         <div className="border-t border-sidebar-border pt-2 mt-4">
-          <Link href="/admin">
-            <a
-              className={cn(
-                "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors",
-                location === "/admin"
-                  ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              )}
-              data-testid="link-admin"
-            >
-              <Settings className="w-5 h-5" />
-              {!collapsed && <span>Admin</span>}
-            </a>
+          <Link 
+            href="/admin"
+            className={cn(
+              "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors",
+              location === "/admin"
+                ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            )}
+            data-testid="link-admin"
+          >
+            <Settings className="w-5 h-5" />
+            {!collapsed && <span>Admin</span>}
           </Link>
         </div>
       </nav>
