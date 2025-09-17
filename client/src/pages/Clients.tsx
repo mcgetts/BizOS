@@ -2,16 +2,18 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Layout } from "@/components/Layout";
+import { SalesPipeline } from "@/components/SalesPipeline";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -20,23 +22,74 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { insertClientSchema } from "@shared/schema";
 import type { Client, InsertClient } from "@shared/schema";
 import { z } from "zod";
-import { 
-  Plus, 
-  Search, 
-  Users, 
-  Building, 
-  Mail, 
+import {
+  Plus,
+  Search,
+  Users,
+  Building,
+  Mail,
   Phone,
   MoreHorizontal,
   TrendingUp,
   Edit,
-  Trash2
+  Trash2,
+  Building2,
+  Globe,
+  MapPin
 } from "lucide-react";
 
 // Form validation schema for client creation/editing
 const clientFormSchema = insertClientSchema;
 
 type ClientFormData = z.infer<typeof clientFormSchema>;
+
+// Company types
+type Company = {
+  id: string;
+  name: string;
+  industry: string | null;
+  website: string | null;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  description: string | null;
+  size: string | null;
+  revenue: string | null;
+  foundedYear: number | null;
+  tags: string[];
+  assignedTo: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type CompanyFormData = {
+  name: string;
+  industry: string;
+  website: string;
+  address: string;
+  phone: string;
+  email: string;
+  description: string;
+  size: string;
+  revenue: string;
+  foundedYear: string;
+  tags: string[];
+};
+
+const initialCompanyFormData: CompanyFormData = {
+  name: "",
+  industry: "",
+  website: "",
+  address: "",
+  phone: "",
+  email: "",
+  description: "",
+  size: "",
+  revenue: "",
+  foundedYear: "",
+  tags: [],
+};
 
 // Client Form Component
 function ClientForm({ client, onSuccess }: { client?: Client; onSuccess: () => void }) {
@@ -48,14 +101,14 @@ function ClientForm({ client, onSuccess }: { client?: Client; onSuccess: () => v
       name: client?.name || "",
       email: client?.email ?? "",
       phone: client?.phone ?? "",
-      company: client?.company ?? "",
-      industry: client?.industry ?? "",
-      website: client?.website ?? "",
-      address: client?.address ?? "",
-      status: client?.status || "lead",
+      companyId: client?.companyId ?? "",
+      position: client?.position ?? "",
+      department: client?.department ?? "",
       source: client?.source ?? "",
-      totalValue: client?.totalValue || "0",
       notes: client?.notes ?? "",
+      tags: client?.tags ?? [],
+      isPrimaryContact: client?.isPrimaryContact ?? false,
+      isActive: client?.isActive ?? true,
     },
   });
 
@@ -144,12 +197,12 @@ function ClientForm({ client, onSuccess }: { client?: Client; onSuccess: () => v
           />
           <FormField
             control={form.control}
-            name="company"
+            name="position"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Company</FormLabel>
+                <FormLabel>Position</FormLabel>
                 <FormControl>
-                  <Input placeholder="Acme Corp" {...field} data-testid="input-client-company" />
+                  <Input placeholder="CEO, Manager, etc." {...field} data-testid="input-client-position" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -157,50 +210,13 @@ function ClientForm({ client, onSuccess }: { client?: Client; onSuccess: () => v
           />
           <FormField
             control={form.control}
-            name="industry"
+            name="department"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Industry</FormLabel>
+                <FormLabel>Department</FormLabel>
                 <FormControl>
-                  <Input placeholder="Technology" {...field} data-testid="input-client-industry" />
+                  <Input placeholder="Sales, Marketing, etc." {...field} data-testid="input-client-department" />
                 </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="website"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Website</FormLabel>
-                <FormControl>
-                  <Input placeholder="https://company.com" {...field} data-testid="input-client-website" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="status"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Status</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value ?? undefined}>
-                  <FormControl>
-                    <SelectTrigger data-testid="select-client-status">
-                      <SelectValue placeholder="Select status" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="lead">Lead</SelectItem>
-                    <SelectItem value="qualified">Qualified</SelectItem>
-                    <SelectItem value="proposal">Proposal</SelectItem>
-                    <SelectItem value="client">Client</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
-                  </SelectContent>
-                </Select>
                 <FormMessage />
               </FormItem>
             )}
@@ -218,33 +234,7 @@ function ClientForm({ client, onSuccess }: { client?: Client; onSuccess: () => v
               </FormItem>
             )}
           />
-          <FormField
-            control={form.control}
-            name="totalValue"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Total Value ($)</FormLabel>
-                <FormControl>
-                  <Input type="number" placeholder="0" {...field} data-testid="input-client-value" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
         </div>
-        <FormField
-          control={form.control}
-          name="address"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Address</FormLabel>
-              <FormControl>
-                <Textarea placeholder="123 Main St, City, State 12345" {...field} data-testid="input-client-address" />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
         <FormField
           control={form.control}
           name="notes"
@@ -268,6 +258,240 @@ function ClientForm({ client, onSuccess }: { client?: Client; onSuccess: () => v
   );
 }
 
+// Company Form Component
+function CompanyForm({ company, onSuccess }: { company?: Company; onSuccess: () => void }) {
+  const { toast } = useToast();
+  const [formData, setFormData] = useState<CompanyFormData>(
+    company ? {
+      name: company.name,
+      industry: company.industry || "",
+      website: company.website || "",
+      address: company.address || "",
+      phone: company.phone || "",
+      email: company.email || "",
+      description: company.description || "",
+      size: company.size || "",
+      revenue: company.revenue || "",
+      foundedYear: company.foundedYear?.toString() || "",
+      tags: company.tags || [],
+    } : initialCompanyFormData
+  );
+  const [tagInput, setTagInput] = useState("");
+
+  const createMutation = useMutation({
+    mutationFn: async (data: CompanyFormData) => {
+      const response = await fetch("/api/companies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...data,
+          foundedYear: data.foundedYear ? parseInt(data.foundedYear) : null,
+          revenue: data.revenue || null,
+        }),
+      });
+      if (!response.ok) throw new Error("Failed to create company");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
+      toast({ title: "Company created successfully" });
+      onSuccess();
+    },
+    onError: () => {
+      toast({ title: "Failed to create company", variant: "destructive" });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async (data: CompanyFormData) => {
+      const response = await fetch(`/api/companies/${company!.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...data,
+          foundedYear: data.foundedYear ? parseInt(data.foundedYear) : null,
+          revenue: data.revenue || null,
+        }),
+      });
+      if (!response.ok) throw new Error("Failed to update company");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
+      toast({ title: "Company updated successfully" });
+      onSuccess();
+    },
+    onError: () => {
+      toast({ title: "Failed to update company", variant: "destructive" });
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (company) {
+      updateMutation.mutate(formData);
+    } else {
+      createMutation.mutate(formData);
+    }
+  };
+
+  const addTag = () => {
+    if (tagInput.trim() && !formData.tags.includes(tagInput.trim())) {
+      setFormData({ ...formData, tags: [...formData.tags, tagInput.trim()] });
+      setTagInput("");
+    }
+  };
+
+  const removeTag = (tagToRemove: string) => {
+    setFormData({
+      ...formData,
+      tags: formData.tags.filter(tag => tag !== tagToRemove),
+    });
+  };
+
+  const isLoading = createMutation.isPending || updateMutation.isPending;
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="col-span-2">
+          <label className="text-sm font-medium">Company Name *</label>
+          <Input
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            placeholder="Enter company name"
+            required
+          />
+        </div>
+
+        <div>
+          <label className="text-sm font-medium">Industry</label>
+          <Input
+            value={formData.industry}
+            onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
+            placeholder="e.g., Technology, Healthcare"
+          />
+        </div>
+
+        <div>
+          <label className="text-sm font-medium">Company Size</label>
+          <select
+            value={formData.size}
+            onChange={(e) => setFormData({ ...formData, size: e.target.value })}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md"
+          >
+            <option value="">Select size</option>
+            <option value="startup">Startup (1-10)</option>
+            <option value="small">Small (11-50)</option>
+            <option value="medium">Medium (51-200)</option>
+            <option value="large">Large (201-1000)</option>
+            <option value="enterprise">Enterprise (1000+)</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="text-sm font-medium">Website</label>
+          <Input
+            value={formData.website}
+            onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+            placeholder="https://company.com"
+            type="url"
+          />
+        </div>
+
+        <div>
+          <label className="text-sm font-medium">Phone</label>
+          <Input
+            value={formData.phone}
+            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+            placeholder="+1 (555) 123-4567"
+          />
+        </div>
+
+        <div className="col-span-2">
+          <label className="text-sm font-medium">Email</label>
+          <Input
+            value={formData.email}
+            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+            placeholder="contact@company.com"
+            type="email"
+          />
+        </div>
+
+        <div className="col-span-2">
+          <label className="text-sm font-medium">Address</label>
+          <Textarea
+            value={formData.address}
+            onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+            placeholder="Company address"
+            rows={2}
+          />
+        </div>
+
+        <div>
+          <label className="text-sm font-medium">Annual Revenue</label>
+          <Input
+            value={formData.revenue}
+            onChange={(e) => setFormData({ ...formData, revenue: e.target.value })}
+            placeholder="1000000"
+            type="number"
+          />
+        </div>
+
+        <div>
+          <label className="text-sm font-medium">Founded Year</label>
+          <Input
+            value={formData.foundedYear}
+            onChange={(e) => setFormData({ ...formData, foundedYear: e.target.value })}
+            placeholder="2020"
+            type="number"
+            min="1800"
+            max={new Date().getFullYear()}
+          />
+        </div>
+
+        <div className="col-span-2">
+          <label className="text-sm font-medium">Description</label>
+          <Textarea
+            value={formData.description}
+            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+            placeholder="Brief description of the company"
+            rows={3}
+          />
+        </div>
+
+        <div className="col-span-2">
+          <label className="text-sm font-medium">Tags</label>
+          <div className="flex space-x-2 mb-2">
+            <Input
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              placeholder="Add a tag"
+              onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
+            />
+            <Button type="button" onClick={addTag} variant="outline">
+              Add
+            </Button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {formData.tags.map((tag) => (
+              <Badge key={tag} variant="secondary" className="cursor-pointer" onClick={() => removeTag(tag)}>
+                {tag} ×
+              </Badge>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <DialogFooter>
+        <Button type="submit" disabled={isLoading}>
+          {isLoading ? "Saving..." : company ? "Update Company" : "Create Company"}
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
 export default function Clients() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading } = useAuth();
@@ -275,6 +499,11 @@ export default function Clients() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [deletingClient, setDeletingClient] = useState<Client | null>(null);
+
+  // Company state
+  const [isAddCompanyDialogOpen, setIsAddCompanyDialogOpen] = useState(false);
+  const [editingCompany, setEditingCompany] = useState<Company | null>(null);
+  const [deletingCompany, setDeletingCompany] = useState<Company | null>(null);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -296,7 +525,13 @@ export default function Clients() {
     enabled: isAuthenticated,
   });
 
-  // Delete mutation
+  // Companies query
+  const { data: companies, isLoading: companiesLoading } = useQuery<Company[]>({
+    queryKey: ["/api/companies"],
+    enabled: isAuthenticated,
+  });
+
+  // Client delete mutation
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const response = await apiRequest("DELETE", `/api/clients/${id}`);
@@ -314,6 +549,28 @@ export default function Clients() {
   const handleDeleteClient = (client: Client) => {
     deleteMutation.mutate(client.id);
     setDeletingClient(null);
+  };
+
+  // Company delete mutation
+  const deleteCompanyMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await fetch(`/api/companies/${id}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) throw new Error("Failed to delete company");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
+      toast({ title: "Company deleted successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete company", variant: "destructive" });
+    },
+  });
+
+  const handleDeleteCompany = (company: Company) => {
+    deleteCompanyMutation.mutate(company.id);
+    setDeletingCompany(null);
   };
 
   if (isLoading || !isAuthenticated) {
@@ -336,41 +593,50 @@ export default function Clients() {
 
   const filteredClients = clients?.filter((client: Client) =>
     client.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    client.company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    client.email?.toLowerCase().includes(searchTerm.toLowerCase())
+    client.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    client.position?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    client.department?.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
 
   return (
-    <Layout title="Client Management" breadcrumbs={["Clients"]}>
+    <Layout title="CRM - Customer Relationship Management" breadcrumbs={["CRM"]}>
       <div className="space-y-6">
-        {/* Header Actions */}
+        {/* Header Section */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search clients..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 w-80"
-                data-testid="input-search-clients"
-              />
-            </div>
+          <div>
+            <h1 className="text-3xl font-bold">CRM Dashboard</h1>
+            <p className="text-muted-foreground">
+              Manage customer contacts and relationships
+            </p>
           </div>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
               <Button data-testid="button-add-client">
                 <Plus className="w-4 h-4 mr-2" />
-                Add Client
+                Add Contact
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Add New Client</DialogTitle>
+                <DialogTitle>Add New Contact</DialogTitle>
               </DialogHeader>
               <ClientForm onSuccess={() => setIsAddDialogOpen(false)} />
             </DialogContent>
           </Dialog>
+        </div>
+
+        {/* Search */}
+        <div className="flex items-center space-x-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search contacts..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 w-80"
+              data-testid="input-search-clients"
+            />
+          </div>
         </div>
 
         {/* Stats Cards */}
@@ -379,9 +645,9 @@ export default function Clients() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Total Clients</p>
+                  <p className="text-sm font-medium text-muted-foreground">Total Contacts</p>
                   <p className="text-2xl font-bold" data-testid="text-total-clients">
-                    {clients?.filter((c: any) => c.status === 'client').length || 0}
+                    {clients?.length || 0}
                   </p>
                 </div>
                 <Users className="w-8 h-8 text-primary" />
@@ -393,9 +659,23 @@ export default function Clients() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Active Leads</p>
-                  <p className="text-2xl font-bold" data-testid="text-active-leads">
-                    {clients?.filter((c: any) => c.status === 'lead').length || 0}
+                  <p className="text-sm font-medium text-muted-foreground">Total Companies</p>
+                  <p className="text-2xl font-bold" data-testid="text-total-companies">
+                    {companies?.length || 0}
+                  </p>
+                </div>
+                <Building2 className="w-8 h-8 text-blue-600" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="glassmorphism">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Active Contacts</p>
+                  <p className="text-2xl font-bold" data-testid="text-active-contacts">
+                    {clients?.filter((c: any) => c.isActive).length || 0}
                   </p>
                 </div>
                 <TrendingUp className="w-8 h-8 text-success" />
@@ -407,35 +687,167 @@ export default function Clients() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">In Pipeline</p>
-                  <p className="text-2xl font-bold" data-testid="text-pipeline">
-                    {clients?.filter((c: any) => ['qualified', 'proposal'].includes(c.status)).length || 0}
+                  <p className="text-sm font-medium text-muted-foreground">Primary Contacts</p>
+                  <p className="text-2xl font-bold" data-testid="text-primary-contacts">
+                    {clients?.filter((c: any) => c.isPrimaryContact).length || 0}
                   </p>
                 </div>
-                <Building className="w-8 h-8 text-warning" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="glassmorphism">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Total Revenue</p>
-                  <p className="text-2xl font-bold" data-testid="text-revenue">
-                    ${clients?.reduce((sum: number, client: any) => sum + (parseFloat(client.totalValue) || 0), 0).toLocaleString() || '0'}
-                  </p>
-                </div>
-                <TrendingUp className="w-8 h-8 text-success" />
+                <Users className="w-8 h-8 text-warning" />
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Clients Table */}
+        {/* Sales Pipeline */}
+        <SalesPipeline />
+
+        {/* Companies Section */}
+        <Card className="glassmorphism">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+            <CardTitle className="flex items-center gap-2">
+              <Building2 className="w-5 h-5" />
+              Companies
+            </CardTitle>
+            <Dialog open={isAddCompanyDialogOpen} onOpenChange={setIsAddCompanyDialogOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Company
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Add New Company</DialogTitle>
+                  <DialogDescription>
+                    Add a new company to your CRM system.
+                  </DialogDescription>
+                </DialogHeader>
+                <CompanyForm onSuccess={() => setIsAddCompanyDialogOpen(false)} />
+              </DialogContent>
+            </Dialog>
+          </CardHeader>
+          <CardContent>
+            {companiesLoading ? (
+              <div className="text-center py-8">
+                <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto" />
+              </div>
+            ) : companies && companies.length > 0 ? (
+              <div className="max-h-96 overflow-y-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Company</TableHead>
+                      <TableHead>Industry</TableHead>
+                      <TableHead>Contact</TableHead>
+                      <TableHead>Size</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {companies.slice(0, 10).map((company) => (
+                      <TableRow key={company.id}>
+                        <TableCell>
+                          <div className="flex items-center space-x-3">
+                            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                              <Building2 className="w-4 h-4 text-blue-600" />
+                            </div>
+                            <div>
+                              <div className="font-medium">{company.name}</div>
+                              {company.website && (
+                                <a
+                                  href={company.website}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-blue-600 hover:underline flex items-center"
+                                >
+                                  <Globe className="w-3 h-3 mr-1" />
+                                  Website
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm">{company.industry || "—"}</span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            {company.email && (
+                              <div className="flex items-center text-xs text-muted-foreground">
+                                <Mail className="w-3 h-3 mr-1" />
+                                {company.email}
+                              </div>
+                            )}
+                            {company.phone && (
+                              <div className="flex items-center text-xs text-muted-foreground">
+                                <Phone className="w-3 h-3 mr-1" />
+                                {company.phone}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm capitalize">{company.size || "—"}</span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm">
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => setEditingCompany(company)}>
+                                <Edit className="w-4 h-4 mr-2" />
+                                Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => setDeletingCompany(company)}
+                                className="text-destructive"
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                {companies.length > 10 && (
+                  <div className="text-center text-sm text-muted-foreground mt-2">
+                    Showing 10 of {companies.length} companies. Scroll to see more.
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <Building2 className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">No companies found. Add your first company to get started.</p>
+                <Dialog open={isAddCompanyDialogOpen} onOpenChange={setIsAddCompanyDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button className="mt-4">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add First Company
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle>Add Your First Company</DialogTitle>
+                    </DialogHeader>
+                    <CompanyForm onSuccess={() => setIsAddCompanyDialogOpen(false)} />
+                  </DialogContent>
+                </Dialog>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Contacts Table */}
         <Card className="glassmorphism">
           <CardHeader>
-            <CardTitle>All Clients</CardTitle>
+            <CardTitle>Clients</CardTitle>
           </CardHeader>
           <CardContent>
             {clientsLoading ? (
@@ -450,19 +862,19 @@ export default function Clients() {
               <div className="text-center py-8">
                 <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                 <p className="text-muted-foreground">
-                  {searchTerm ? "No clients found matching your search" : "No clients found. Add your first client to get started."}
+                  {searchTerm ? "No contacts found matching your search" : "No contacts found. Add your first contact to get started."}
                 </p>
                 {!searchTerm && (
                   <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
                     <DialogTrigger asChild>
                       <Button className="mt-4" data-testid="button-add-first-client">
                         <Plus className="w-4 h-4 mr-2" />
-                        Add First Client
+                        Add First Contact
                       </Button>
                     </DialogTrigger>
                     <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                       <DialogHeader>
-                        <DialogTitle>Add Your First Client</DialogTitle>
+                        <DialogTitle>Add Your First Contact</DialogTitle>
                       </DialogHeader>
                       <ClientForm onSuccess={() => setIsAddDialogOpen(false)} />
                     </DialogContent>
@@ -470,28 +882,28 @@ export default function Clients() {
                 )}
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full" data-testid="table-clients">
-                  <thead>
-                    <tr className="border-b border-border">
-                      <th className="text-left text-sm font-medium text-muted-foreground py-3">Client</th>
-                      <th className="text-left text-sm font-medium text-muted-foreground py-3">Company</th>
-                      <th className="text-left text-sm font-medium text-muted-foreground py-3">Contact</th>
-                      <th className="text-left text-sm font-medium text-muted-foreground py-3">Status</th>
-                      <th className="text-left text-sm font-medium text-muted-foreground py-3">Value</th>
-                      <th className="text-left text-sm font-medium text-muted-foreground py-3">Last Contact</th>
-                      <th className="text-left text-sm font-medium text-muted-foreground py-3">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {filteredClients.map((client: any, index: number) => (
+              <div className="max-h-96 overflow-y-auto">
+                <div className="overflow-x-auto">
+                  <table className="w-full" data-testid="table-clients">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left text-sm font-medium text-muted-foreground py-3">Contact</th>
+                        <th className="text-left text-sm font-medium text-muted-foreground py-3">Position</th>
+                        <th className="text-left text-sm font-medium text-muted-foreground py-3">Contact Info</th>
+                        <th className="text-left text-sm font-medium text-muted-foreground py-3">Department</th>
+                        <th className="text-left text-sm font-medium text-muted-foreground py-3">Last Contact</th>
+                        <th className="text-left text-sm font-medium text-muted-foreground py-3">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {filteredClients.slice(0, 10).map((client: any, index: number) => (
                       <tr key={client.id} data-testid={`row-client-${index}`}>
                         <td className="py-4">
                           <div className="font-medium text-foreground">{client.name}</div>
-                          <div className="text-sm text-muted-foreground">{client.industry}</div>
+                          <div className="text-sm text-muted-foreground">{client.source || 'Unknown source'}</div>
                         </td>
                         <td className="py-4">
-                          <div className="text-sm text-foreground">{client.company}</div>
+                          <div className="text-sm text-foreground font-medium">{client.position || 'Contact'}</div>
                         </td>
                         <td className="py-4">
                           <div className="space-y-1">
@@ -510,18 +922,13 @@ export default function Clients() {
                           </div>
                         </td>
                         <td className="py-4">
-                          <Badge variant={getStatusColor(client.status)} data-testid={`badge-status-${index}`}>
-                            {client.status?.charAt(0).toUpperCase() + client.status?.slice(1)}
-                          </Badge>
-                        </td>
-                        <td className="py-4">
                           <div className="text-sm text-foreground">
-                            ${parseFloat(client.totalValue || 0).toLocaleString()}
+                            {client.department || 'No department'}
                           </div>
                         </td>
                         <td className="py-4">
                           <div className="text-sm text-muted-foreground">
-                            {client.lastContactDate 
+                            {client.lastContactDate
                               ? new Date(client.lastContactDate).toLocaleDateString()
                               : 'Never'
                             }
@@ -552,8 +959,14 @@ export default function Clients() {
                         </td>
                       </tr>
                     ))}
-                  </tbody>
-                </table>
+                    </tbody>
+                  </table>
+                </div>
+                {filteredClients.length > 10 && (
+                  <div className="text-center text-sm text-muted-foreground mt-2">
+                    Showing 10 of {filteredClients.length} clients. Scroll to see more.
+                  </div>
+                )}
               </div>
             )}
           </CardContent>
@@ -564,7 +977,7 @@ export default function Clients() {
           <Dialog open={!!editingClient} onOpenChange={() => setEditingClient(null)}>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Edit Client: {editingClient.name}</DialogTitle>
+                <DialogTitle>Edit Contact: {editingClient.name}</DialogTitle>
               </DialogHeader>
               <ClientForm 
                 client={editingClient} 
@@ -579,7 +992,7 @@ export default function Clients() {
           <AlertDialog open={!!deletingClient} onOpenChange={() => setDeletingClient(null)}>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Delete Client</AlertDialogTitle>
+                <AlertDialogTitle>Delete Contact</AlertDialogTitle>
                 <AlertDialogDescription>
                   Are you sure you want to delete {deletingClient.name}? This action cannot be undone.
                 </AlertDialogDescription>
@@ -588,6 +1001,47 @@ export default function Clients() {
                 <AlertDialogCancel onClick={() => setDeletingClient(null)}>Cancel</AlertDialogCancel>
                 <AlertDialogAction
                   onClick={() => handleDeleteClient(deletingClient)}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
+
+        {/* Edit Company Dialog */}
+        {editingCompany && (
+          <Dialog open={!!editingCompany} onOpenChange={() => setEditingCompany(null)}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Edit Company: {editingCompany.name}</DialogTitle>
+                <DialogDescription>
+                  Update the company information below.
+                </DialogDescription>
+              </DialogHeader>
+              <CompanyForm
+                company={editingCompany}
+                onSuccess={() => setEditingCompany(null)}
+              />
+            </DialogContent>
+          </Dialog>
+        )}
+
+        {/* Delete Company Confirmation */}
+        {deletingCompany && (
+          <AlertDialog open={!!deletingCompany} onOpenChange={() => setDeletingCompany(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Company</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete {deletingCompany.name}? This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setDeletingCompany(null)}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => handleDeleteCompany(deletingCompany)}
                   className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 >
                   Delete

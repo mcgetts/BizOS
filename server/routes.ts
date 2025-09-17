@@ -6,6 +6,8 @@ import { setupAuth, isAuthenticated, requireRole } from "./replitAuth";
 import {
   insertUserSchema,
   insertClientSchema,
+  insertCompanySchema,
+  insertSalesOpportunitySchema,
   insertProjectSchema,
   insertTaskSchema,
   insertInvoiceSchema,
@@ -15,6 +17,8 @@ import {
   insertSupportTicketSchema,
   updateSupportTicketSchema,
   clients,
+  companies,
+  salesOpportunities,
   projects,
   tasks,
   invoices,
@@ -46,7 +50,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await db.delete(invoices);
       await db.delete(tasks);
       await db.delete(projects);
+      await db.delete(salesOpportunities);
       await db.delete(clients);
+      await db.delete(companies);
       // Note: Not clearing users table to keep authentication working
       
       res.json({ 
@@ -237,47 +243,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Company goals routes (admin only)
-  app.get('/api/company-goals', isAuthenticated, requireRole(['admin']), async (req, res) => {
+  // System variables routes (admin only)
+  app.get('/api/system-variables', isAuthenticated, requireRole(['admin']), async (req, res) => {
     try {
-      const goals = await storage.getCompanyGoals();
-      res.json(goals);
+      const variables = await storage.getSystemVariables();
+      res.json(variables);
     } catch (error) {
-      console.error("Error fetching company goals:", error);
-      res.status(500).json({ message: "Failed to fetch company goals" });
+      console.error("Error fetching system variables:", error);
+      res.status(500).json({ message: "Failed to fetch system variables" });
     }
   });
 
-  app.post('/api/company-goals', isAuthenticated, requireRole(['admin']), async (req, res) => {
+  app.get('/api/system-variables/:key', isAuthenticated, requireRole(['admin']), async (req, res) => {
     try {
-      const goal = await storage.createCompanyGoal({
+      const variable = await storage.getSystemVariable(req.params.key);
+      if (!variable) {
+        return res.status(404).json({ message: "System variable not found" });
+      }
+      res.json(variable);
+    } catch (error) {
+      console.error("Error fetching system variable:", error);
+      res.status(500).json({ message: "Failed to fetch system variable" });
+    }
+  });
+
+  app.post('/api/system-variables', isAuthenticated, requireRole(['admin']), async (req, res) => {
+    try {
+      const variable = await storage.createSystemVariable({
         ...req.body,
-        createdBy: req.user.id,
+        updatedBy: req.user.id,
       });
-      res.status(201).json(goal);
+      res.status(201).json(variable);
     } catch (error) {
-      console.error("Error creating company goal:", error);
-      res.status(400).json({ message: "Failed to create company goal" });
+      console.error("Error creating system variable:", error);
+      res.status(400).json({ message: "Failed to create system variable" });
     }
   });
 
-  app.put('/api/company-goals/:id', isAuthenticated, requireRole(['admin']), async (req, res) => {
+  app.put('/api/system-variables/:key', isAuthenticated, requireRole(['admin']), async (req, res) => {
     try {
-      const goal = await storage.updateCompanyGoal(req.params.id, req.body);
-      res.json(goal);
+      const variable = await storage.updateSystemVariable(req.params.key, {
+        ...req.body,
+        updatedBy: req.user.id,
+      });
+      res.json(variable);
     } catch (error) {
-      console.error("Error updating company goal:", error);
-      res.status(400).json({ message: "Failed to update company goal" });
+      console.error("Error updating system variable:", error);
+      res.status(400).json({ message: "Failed to update system variable" });
     }
   });
 
-  app.delete('/api/company-goals/:id', isAuthenticated, requireRole(['admin']), async (req, res) => {
+  app.delete('/api/system-variables/:key', isAuthenticated, requireRole(['admin']), async (req, res) => {
     try {
-      await storage.deleteCompanyGoal(req.params.id);
+      await storage.deleteSystemVariable(req.params.key);
       res.status(204).send();
     } catch (error) {
-      console.error("Error deleting company goal:", error);
-      res.status(400).json({ message: "Failed to delete company goal" });
+      console.error("Error deleting system variable:", error);
+      res.status(400).json({ message: "Failed to delete system variable" });
     }
   });
 
@@ -334,6 +356,128 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting client:", error);
       res.status(500).json({ message: "Failed to delete client" });
+    }
+  });
+
+  // Company routes
+  app.get('/api/companies', isAuthenticated, async (req, res) => {
+    try {
+      const companies = await storage.getCompanies();
+      res.json(companies);
+    } catch (error) {
+      console.error("Error fetching companies:", error);
+      res.status(500).json({ message: "Failed to fetch companies" });
+    }
+  });
+
+  app.get('/api/companies/:id', isAuthenticated, async (req, res) => {
+    try {
+      const company = await storage.getCompany(req.params.id);
+      if (!company) {
+        return res.status(404).json({ message: "Company not found" });
+      }
+      res.json(company);
+    } catch (error) {
+      console.error("Error fetching company:", error);
+      res.status(500).json({ message: "Failed to fetch company" });
+    }
+  });
+
+  app.post('/api/companies', isAuthenticated, async (req, res) => {
+    try {
+      const validatedData = insertCompanySchema.parse(req.body);
+      const company = await storage.createCompany(validatedData);
+      res.status(201).json(company);
+    } catch (error) {
+      console.error("Error creating company:", error);
+      res.status(400).json({ message: "Failed to create company" });
+    }
+  });
+
+  app.put('/api/companies/:id', isAuthenticated, async (req, res) => {
+    try {
+      const validatedData = insertCompanySchema.partial().parse(req.body);
+      const company = await storage.updateCompany(req.params.id, validatedData);
+      res.json(company);
+    } catch (error) {
+      console.error("Error updating company:", error);
+      res.status(400).json({ message: "Failed to update company" });
+    }
+  });
+
+  app.delete('/api/companies/:id', isAuthenticated, async (req, res) => {
+    try {
+      await storage.deleteCompany(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting company:", error);
+      res.status(500).json({ message: "Failed to delete company" });
+    }
+  });
+
+  // Sales Opportunity routes
+  app.get('/api/opportunities', isAuthenticated, async (req, res) => {
+    try {
+      const opportunities = await storage.getSalesOpportunities();
+      res.json(opportunities);
+    } catch (error) {
+      console.error("Error fetching opportunities:", error);
+      res.status(500).json({ message: "Failed to fetch opportunities" });
+    }
+  });
+
+  app.get('/api/opportunities/by-stage/:stage', isAuthenticated, async (req, res) => {
+    try {
+      const opportunities = await storage.getSalesOpportunitiesByStage(req.params.stage);
+      res.json(opportunities);
+    } catch (error) {
+      console.error("Error fetching opportunities by stage:", error);
+      res.status(500).json({ message: "Failed to fetch opportunities by stage" });
+    }
+  });
+
+  app.get('/api/opportunities/:id', isAuthenticated, async (req, res) => {
+    try {
+      const opportunity = await storage.getSalesOpportunity(req.params.id);
+      if (!opportunity) {
+        return res.status(404).json({ message: "Opportunity not found" });
+      }
+      res.json(opportunity);
+    } catch (error) {
+      console.error("Error fetching opportunity:", error);
+      res.status(500).json({ message: "Failed to fetch opportunity" });
+    }
+  });
+
+  app.post('/api/opportunities', isAuthenticated, async (req, res) => {
+    try {
+      const validatedData = insertSalesOpportunitySchema.parse(req.body);
+      const opportunity = await storage.createSalesOpportunity(validatedData);
+      res.status(201).json(opportunity);
+    } catch (error) {
+      console.error("Error creating opportunity:", error);
+      res.status(400).json({ message: "Failed to create opportunity" });
+    }
+  });
+
+  app.put('/api/opportunities/:id', isAuthenticated, async (req, res) => {
+    try {
+      const validatedData = insertSalesOpportunitySchema.partial().parse(req.body);
+      const opportunity = await storage.updateSalesOpportunity(req.params.id, validatedData);
+      res.json(opportunity);
+    } catch (error) {
+      console.error("Error updating opportunity:", error);
+      res.status(400).json({ message: "Failed to update opportunity" });
+    }
+  });
+
+  app.delete('/api/opportunities/:id', isAuthenticated, async (req, res) => {
+    try {
+      await storage.deleteSalesOpportunity(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting opportunity:", error);
+      res.status(500).json({ message: "Failed to delete opportunity" });
     }
   });
 

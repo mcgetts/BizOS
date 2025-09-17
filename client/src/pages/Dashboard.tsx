@@ -6,12 +6,11 @@ import { DashboardKPIs } from "@/components/DashboardKPIs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { isUnauthorizedError } from "@/lib/authUtils";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import type { Project, Task, User, CompanyGoal } from "@shared/schema";
+import { useQuery } from "@tanstack/react-query";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { format, isToday, isSameDay, addDays, subDays, subMonths } from "date-fns";
+import type { Project, Task, User, Client } from "@shared/schema";
 
 interface DashboardKPIs {
   revenue: { current: number; target: number; growth: number };
@@ -19,24 +18,46 @@ interface DashboardKPIs {
   projects: { current: number; target: number; growth: number };
   team: { current: number; target: number; growth: number };
 }
+
+interface CompanyEvent {
+  id: string;
+  title: string;
+  description?: string;
+  date: Date;
+  type: "meeting" | "deadline" | "milestone" | "announcement" | "holiday";
+  priority: "low" | "medium" | "high" | "urgent";
+  attendees?: string[];
+  location?: string;
+}
+
+interface ClientEvent {
+  id: string;
+  clientId: string;
+  clientName: string;
+  title: string;
+  description?: string;
+  date: Date;
+  type: "sale" | "project_start" | "project_end" | "review" | "contract";
+  value?: number;
+  status: "upcoming" | "completed" | "cancelled";
+}
 import {
   AlertTriangle,
   Clock,
   CheckCircle,
-  TrendingUp
+  TrendingUp,
+  CalendarIcon,
+  Building2,
+  Users,
+  MapPin,
+  Star,
+  DollarSign
 } from "lucide-react";
 
 export default function Dashboard() {
   const { toast } = useToast();
   const { user, isAuthenticated, isLoading } = useAuth();
   const [selectedPeriod, setSelectedPeriod] = useState<number>(6);
-  const [newGoal, setNewGoal] = useState({
-    metric: '',
-    target: '',
-    year: new Date().getFullYear(),
-    quarter: null as number | null,
-  });
-  const queryClient = useQueryClient();
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -68,6 +89,11 @@ export default function Dashboard() {
     enabled: isAuthenticated,
   });
 
+  const { data: clients } = useQuery<Client[]>({
+    queryKey: ["/api/clients"],
+    enabled: isAuthenticated,
+  });
+
   const { data: kpis } = useQuery<DashboardKPIs>({
     queryKey: ["/api/dashboard/kpis"],
     enabled: isAuthenticated,
@@ -83,51 +109,73 @@ export default function Dashboard() {
     enabled: isAuthenticated,
   });
 
-  // Company goals queries and mutations (admin only)
-  const { data: companyGoals } = useQuery<CompanyGoal[]>({
-    queryKey: ["/api/company-goals"],
-    enabled: isAuthenticated && user?.role === 'admin',
-  });
+  // Mock company events data - in a real app, this would come from an API
+  const companyEvents: CompanyEvent[] = [
+    {
+      id: "1",
+      title: "Quarterly Board Meeting",
+      description: "Q4 financial review and strategic planning",
+      date: addDays(new Date(), 5),
+      type: "meeting",
+      priority: "high",
+      attendees: ["John Doe", "Jane Smith", "Mike Johnson"],
+      location: "Conference Room A"
+    },
+    {
+      id: "2",
+      title: "Product Launch Deadline",
+      description: "Final deadline for new product release",
+      date: addDays(new Date(), 10),
+      type: "deadline",
+      priority: "urgent"
+    },
+    {
+      id: "3",
+      title: "Team Building Event",
+      description: "Annual team building and celebration",
+      date: addDays(new Date(), 15),
+      type: "announcement",
+      priority: "medium",
+      location: "City Center Hotel"
+    }
+  ];
 
-  const createGoalMutation = useMutation({
-    mutationFn: async (goalData: any) => {
-      const response = await fetch('/api/company-goals', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(goalData),
-      });
-      if (!response.ok) throw new Error('Failed to create goal');
-      return response.json();
+  // Mock client events data - in a real app, this would come from an API
+  const clientEvents: ClientEvent[] = [
+    {
+      id: "1",
+      clientId: "client-1",
+      clientName: "TechCorp Solutions",
+      title: "Contract Renewal",
+      description: "Annual contract renewal discussion",
+      date: addDays(new Date(), 3),
+      type: "contract",
+      value: 150000,
+      status: "upcoming"
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/company-goals"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/kpis"] });
-      setNewGoal({ metric: '', target: '', year: new Date().getFullYear(), quarter: null });
-      toast({ title: "Success", description: "Company goal created successfully" });
+    {
+      id: "2",
+      clientId: "client-2",
+      clientName: "StartupX",
+      title: "Project Kickoff",
+      description: "New mobile app development project",
+      date: addDays(new Date(), 8),
+      type: "project_start",
+      value: 75000,
+      status: "upcoming"
     },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to create company goal", variant: "destructive" });
-    },
-  });
+    {
+      id: "3",
+      clientId: "client-3",
+      clientName: "Enterprise Ltd",
+      title: "Monthly Review",
+      description: "Progress review and next steps",
+      date: addDays(new Date(), 12),
+      type: "review",
+      status: "upcoming"
+    }
+  ];
 
-  const deleteGoalMutation = useMutation({
-    mutationFn: async (goalId: string) => {
-      const response = await fetch(`/api/company-goals/${goalId}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
-      if (!response.ok) throw new Error('Failed to delete goal');
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/company-goals"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/kpis"] });
-      toast({ title: "Success", description: "Company goal deleted successfully" });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to delete company goal", variant: "destructive" });
-    },
-  });
 
   if (isLoading || !isAuthenticated) {
     return (
@@ -224,6 +272,7 @@ export default function Dashboard() {
   const getInitialsAvatar = (firstName: string, lastName: string) =>
     `https://ui-avatars.com/api/?name=${firstName}+${lastName}&background=6366f1&color=fff&size=32`;
 
+  // Enhanced recent activity with more real data sources
   const recentActivity = [
     // Recent completed tasks
     ...(tasks?.filter(t => t.status === 'completed')
@@ -237,39 +286,120 @@ export default function Dashboard() {
           target: task.title,
           time: task.updatedAt ? getTimeAgo(new Date(task.updatedAt)) : 'Recently',
           status: 'Completed',
-          avatar: (user && user.firstName && user.lastName) ? getInitialsAvatar(user.firstName, user.lastName) : ''
+          avatar: (user && user.firstName && user.lastName) ? getInitialsAvatar(user.firstName, user.lastName) : '',
+          type: 'task'
         };
       }) || []),
-    // Recent in-progress projects
+    // Recent project updates
     ...(projects?.filter(p => p.status === 'in_progress')
       .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())
       .slice(0, 1)
       .map(project => {
-        const user = users?.find(u => u.role === 'manager') || users?.[1];
+        const user = users?.find(u => u.id === project.managerId) || users?.find(u => u.role === 'manager') || users?.[1];
         return {
           user: user ? `${user.firstName} ${user.lastName}` : 'Project Manager',
-          action: 'is working on',
+          action: 'updated project',
           target: project.name,
           time: project.updatedAt ? getTimeAgo(new Date(project.updatedAt)) : 'Recently',
           status: 'In Progress',
-          avatar: (user && user.firstName && user.lastName) ? getInitialsAvatar(user.firstName, user.lastName) : ''
+          avatar: (user && user.firstName && user.lastName) ? getInitialsAvatar(user.firstName, user.lastName) : '',
+          type: 'project'
+        };
+      }) || []),
+    // Recent client interactions
+    ...(clients?.filter(c => c.lastContactDate)
+      .sort((a, b) => new Date(b.lastContactDate || 0).getTime() - new Date(a.lastContactDate || 0).getTime())
+      .slice(0, 1)
+      .map(client => {
+        const user = users?.find(u => u.id === client.assignedTo) || users?.find(u => u.role === 'manager') || users?.[0];
+        return {
+          user: user ? `${user.firstName} ${user.lastName}` : 'Sales Team',
+          action: 'contacted client',
+          target: client.name,
+          time: client.lastContactDate ? getTimeAgo(new Date(client.lastContactDate)) : 'Recently',
+          status: client.status === 'client' ? 'Active Client' : 'Lead',
+          avatar: (user && user.firstName && user.lastName) ? getInitialsAvatar(user.firstName, user.lastName) : '',
+          type: 'client'
+        };
+      }) || []),
+    // Recent new users
+    ...(users?.filter(u => u.createdAt)
+      .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+      .slice(0, 1)
+      .map(user => {
+        const admin = users?.find(u => u.role === 'admin') || users?.[0];
+        return {
+          user: admin ? `${admin.firstName} ${admin.lastName}` : 'Admin',
+          action: 'added new team member',
+          target: `${user.firstName} ${user.lastName}`,
+          time: user.createdAt ? getTimeAgo(new Date(user.createdAt)) : 'Recently',
+          status: user.role === 'admin' ? 'Admin' : user.role === 'manager' ? 'Manager' : 'Employee',
+          avatar: admin && admin.firstName && admin.lastName ? getInitialsAvatar(admin.firstName, admin.lastName) : '',
+          type: 'user'
         };
       }) || [])
-  ].slice(0, 3);
+  ].slice(0, 4);
 
   // Fallback to sample data if no real activity
   const fallbackActivity = [
     {
-      user: "Team Member",
-      action: "working on",
-      target: "System Updates",
+      user: "System",
+      action: "initialized",
+      target: "Dashboard",
       time: "Recently",
       status: "Active",
-      avatar: "https://ui-avatars.com/api/?name=Team+Member&background=6366f1&color=fff&size=32"
+      avatar: "https://ui-avatars.com/api/?name=System&background=6366f1&color=fff&size=32",
+      type: "system"
     }
   ];
 
   const displayActivity = recentActivity.length > 0 ? recentActivity : fallbackActivity;
+
+  // Get upcoming events for the calendar section
+  const getUpcomingEvents = () => {
+    const today = new Date();
+    const nextWeek = addDays(today, 7);
+
+    const upcomingCompanyEvents = companyEvents
+      .filter(event => event.date >= today && event.date <= addDays(today, 30))
+      .sort((a, b) => a.date.getTime() - b.date.getTime())
+      .slice(0, 3);
+
+    const upcomingClientEvents = clientEvents
+      .filter(event => event.date >= today && event.date <= addDays(today, 30) && event.status === "upcoming")
+      .sort((a, b) => a.date.getTime() - b.date.getTime())
+      .slice(0, 2);
+
+    return { companyEvents: upcomingCompanyEvents, clientEvents: upcomingClientEvents };
+  };
+
+  const upcomingEvents = getUpcomingEvents();
+
+  const getEventTypeColor = (type: string) => {
+    switch (type) {
+      case "meeting": return "blue";
+      case "deadline": return "red";
+      case "milestone": return "green";
+      case "announcement": return "purple";
+      case "holiday": return "gray";
+      case "sale": return "emerald";
+      case "project_start": return "blue";
+      case "project_end": return "indigo";
+      case "review": return "yellow";
+      case "contract": return "orange";
+      default: return "gray";
+    }
+  };
+
+  const getPriorityIcon = (priority: string) => {
+    switch (priority) {
+      case "urgent": return AlertTriangle;
+      case "high": return TrendingUp;
+      case "medium": return Clock;
+      case "low": return CheckCircle;
+      default: return Clock;
+    }
+  };
 
   const displayProjects = projects?.slice(0, 3) || [];
 
@@ -278,6 +408,7 @@ export default function Dashboard() {
       <div className="space-y-6">
         {/* KPI Cards */}
         <DashboardKPIs />
+
 
         {/* Charts and Executive Alerts */}
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -312,49 +443,59 @@ export default function Dashboard() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="chart-container rounded-lg p-4 h-64">
+              <div className="h-80">
                 {revenueTrends && revenueTrends.length > 0 ? (
-                  <>
-                    <div className="flex items-end justify-between space-x-2 h-48">
-                      {(() => {
-                        const maxRevenue = Math.max(...revenueTrends.map(d => d.revenue), 1);
-                        return revenueTrends.map((data, index) => {
-                          const height = maxRevenue > 0 ? Math.max(10, (data.revenue / maxRevenue) * 85) : 10;
-                          return (
-                            <div
-                              key={`${data.year}-${data.month}`}
-                              className="flex-1 relative group"
-                            >
-                              <div
-                                className="bg-gradient-to-t from-primary/60 to-primary/80 rounded-t-lg hover:from-primary/70 hover:to-primary/90 transition-all duration-200 cursor-pointer"
-                                style={{ height: `${height}%` }}
-                                data-testid={`chart-bar-${index}`}
-                              >
-                                {/* Tooltip on hover */}
-                                <div className="absolute -top-16 left-1/2 transform -translate-x-1/2 bg-popover border rounded-md px-2 py-1 text-xs opacity-0 group-hover:opacity-100 transition-opacity z-10 whitespace-nowrap">
-                                  <div className="font-medium">${data.revenue.toLocaleString()}</div>
-                                  <div className="text-muted-foreground">{data.invoiceCount} invoices</div>
-                                </div>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={revenueTrends}
+                      margin={{
+                        top: 20,
+                        right: 30,
+                        left: 20,
+                        bottom: 5,
+                      }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                      <XAxis
+                        dataKey="month"
+                        className="text-xs"
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                      <YAxis
+                        className="text-xs"
+                        tickLine={false}
+                        axisLine={false}
+                        tickFormatter={(value) => `£${(value / 1000).toFixed(0)}K`}
+                      />
+                      <Tooltip
+                        content={({ active, payload, label }) => {
+                          if (active && payload && payload.length) {
+                            return (
+                              <div className="bg-popover border rounded-lg p-3 shadow-lg">
+                                <p className="font-medium">{label}</p>
+                                <p className="text-sm text-primary">
+                                  Revenue: £{payload[0].value?.toLocaleString()}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {payload[0].payload.invoiceCount} invoices
+                                </p>
                               </div>
-                              {/* Value label */}
-                              <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 text-xs text-muted-foreground font-medium">
-                                {data.revenue > 0 ? `$${(data.revenue / 1000).toFixed(0)}K` : '$0'}
-                              </div>
-                            </div>
-                          );
-                        });
-                      })()}
-                    </div>
-                    <div className="flex justify-between text-xs text-muted-foreground mt-6">
-                      {revenueTrends.map((data) => (
-                        <span key={`${data.year}-${data.month}`} className="flex-1 text-center">
-                          {data.month}
-                        </span>
-                      ))}
-                    </div>
-                  </>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                      <Bar
+                        dataKey="revenue"
+                        fill="hsl(var(--primary))"
+                        radius={[4, 4, 0, 0]}
+                        className="drop-shadow-sm"
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
                 ) : (
-                  <div className="flex items-center justify-center h-48 text-muted-foreground">
+                  <div className="flex items-center justify-center h-full text-muted-foreground">
                     <div className="text-center">
                       <TrendingUp className="w-12 h-12 mx-auto mb-2 opacity-50" />
                       <div className="text-sm">No revenue data available</div>
@@ -430,35 +571,126 @@ export default function Dashboard() {
           </Card>
         </div>
 
-        {/* Recent Activity */}
-        <Card className="glassmorphism" data-testid="card-activity">
-          <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {displayActivity.map((activity, index) => (
-                <div key={index} className="flex items-start space-x-4" data-testid={`activity-${index}`}>
-                  <img
-                    src={activity.avatar}
-                    alt={activity.user}
-                    className="w-8 h-8 rounded-full object-cover"
-                  />
-                  <div className="flex-1">
-                    <div className="text-sm text-foreground">
-                      <span className="font-medium">{activity.user}</span> {activity.action}{" "}
-                      <span className="font-medium text-primary">{activity.target}</span>
+        {/* Recent Activity and Events */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Recent Activity */}
+          <Card className="glassmorphism" data-testid="card-activity">
+            <CardHeader>
+              <CardTitle>Recent Activity</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {displayActivity.map((activity, index) => (
+                  <div key={index} className="flex items-start space-x-4" data-testid={`activity-${index}`}>
+                    <img
+                      src={activity.avatar}
+                      alt={activity.user}
+                      className="w-8 h-8 rounded-full object-cover"
+                    />
+                    <div className="flex-1">
+                      <div className="text-sm text-foreground">
+                        <span className="font-medium">{activity.user}</span> {activity.action}{" "}
+                        <span className="font-medium text-primary">{activity.target}</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground">{activity.time}</div>
                     </div>
-                    <div className="text-xs text-muted-foreground">{activity.time}</div>
+                    <div className="flex items-center space-x-2">
+                      <Badge variant={activity.status === "Completed" ? "default" : "secondary"}>
+                        {activity.status}
+                      </Badge>
+                    </div>
                   </div>
-                  <Badge variant={activity.status === "Completed" ? "default" : "secondary"}>
-                    {activity.status}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Upcoming Events */}
+          <Card className="glassmorphism" data-testid="card-events">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center">
+                  <CalendarIcon className="w-5 h-5 mr-2" />
+                  Upcoming Events
+                </CardTitle>
+                <Button variant="ghost" size="sm" onClick={() => window.location.href = "/company"}>
+                  View Calendar
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {/* Company Events */}
+                {upcomingEvents.companyEvents.map((event) => {
+                  const PriorityIcon = getPriorityIcon(event.priority);
+                  return (
+                    <div key={event.id} className="flex items-start space-x-3 p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border-l-4 border-l-blue-500">
+                      <div className="p-1 bg-blue-100 dark:bg-blue-900 rounded-full">
+                        <CalendarIcon className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="text-sm font-medium text-foreground">{event.title}</div>
+                        <div className="text-xs text-muted-foreground mt-1">{event.description}</div>
+                        <div className="flex items-center space-x-2 mt-2">
+                          <span className="text-xs text-muted-foreground">
+                            {format(event.date, "MMM d, yyyy")}
+                          </span>
+                          {event.location && (
+                            <span className="flex items-center text-xs text-muted-foreground">
+                              <MapPin className="w-3 h-3 mr-1" />
+                              {event.location}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-1">
+                        <Badge variant="secondary" className="text-xs">{event.type}</Badge>
+                        <PriorityIcon className="w-4 h-4 text-muted-foreground" />
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Client Events */}
+                {upcomingEvents.clientEvents.map((event) => (
+                  <div key={event.id} className="flex items-start space-x-3 p-3 bg-emerald-50 dark:bg-emerald-950/20 rounded-lg border-l-4 border-l-emerald-500">
+                    <div className="p-1 bg-emerald-100 dark:bg-emerald-900 rounded-full">
+                      <Building2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-foreground">{event.title}</div>
+                      <div className="text-xs text-primary font-medium">{event.clientName}</div>
+                      <div className="text-xs text-muted-foreground mt-1">{event.description}</div>
+                      <div className="flex items-center space-x-2 mt-2">
+                        <span className="text-xs text-muted-foreground">
+                          {format(event.date, "MMM d, yyyy")}
+                        </span>
+                        {event.value && (
+                          <span className="flex items-center text-xs text-emerald-600 font-medium">
+                            <DollarSign className="w-3 h-3 mr-1" />
+                            ${event.value.toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="text-xs">
+                      {event.type.replace('_', ' ')}
+                    </Badge>
+                  </div>
+                ))}
+
+                {/* No events message */}
+                {upcomingEvents.companyEvents.length === 0 && upcomingEvents.clientEvents.length === 0 && (
+                  <div className="text-center py-8">
+                    <CalendarIcon className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-50" />
+                    <div className="text-sm font-medium text-foreground">No upcoming events</div>
+                    <div className="text-xs text-muted-foreground">Your calendar is clear for the next 30 days</div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
         {/* Project Overview */}
         <Card className="glassmorphism" data-testid="card-projects-overview">
@@ -532,120 +764,6 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Company Goals Management - Admin Only */}
-        {user?.role === 'admin' && (
-          <Card className="glassmorphism" data-testid="card-company-goals">
-            <CardHeader>
-              <CardTitle>Company Goals Management</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
-                {/* Create New Goal Form */}
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-                  <div>
-                    <Label htmlFor="metric">Metric</Label>
-                    <Select
-                      value={newGoal.metric}
-                      onValueChange={(value) => setNewGoal({ ...newGoal, metric: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select metric" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="revenue">Revenue</SelectItem>
-                        <SelectItem value="pipeline">Pipeline Value</SelectItem>
-                        <SelectItem value="projects">Active Projects</SelectItem>
-                        <SelectItem value="tickets">Open Tickets</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="target">Target</Label>
-                    <Input
-                      id="target"
-                      type="number"
-                      placeholder="Enter target"
-                      value={newGoal.target}
-                      onChange={(e) => setNewGoal({ ...newGoal, target: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="year">Year</Label>
-                    <Input
-                      id="year"
-                      type="number"
-                      value={newGoal.year}
-                      onChange={(e) => setNewGoal({ ...newGoal, year: parseInt(e.target.value) })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="quarter">Quarter (Optional)</Label>
-                    <Select
-                      value={newGoal.quarter?.toString() || 'annual'}
-                      onValueChange={(value) => setNewGoal({ ...newGoal, quarter: value === 'annual' ? null : parseInt(value) })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Annual" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="annual">Annual</SelectItem>
-                        <SelectItem value="1">Q1</SelectItem>
-                        <SelectItem value="2">Q2</SelectItem>
-                        <SelectItem value="3">Q3</SelectItem>
-                        <SelectItem value="4">Q4</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Button
-                    onClick={() => createGoalMutation.mutate(newGoal)}
-                    disabled={!newGoal.metric || !newGoal.target || createGoalMutation.isPending}
-                  >
-                    Add Goal
-                  </Button>
-                </div>
-
-                {/* Existing Goals List */}
-                <div className="space-y-3">
-                  <h3 className="text-lg font-medium">Current Goals</h3>
-                  {companyGoals && companyGoals.length > 0 ? (
-                    <div className="space-y-2">
-                      {companyGoals.map((goal) => (
-                        <div
-                          key={goal.id}
-                          className="flex items-center justify-between p-3 border rounded-lg"
-                        >
-                          <div className="flex-1">
-                            <div className="font-medium capitalize">
-                              {goal.metric} - {goal.year}{goal.quarter ? ` Q${goal.quarter}` : ' (Annual)'}
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                              Target: {goal.metric === 'revenue' || goal.metric === 'pipeline'
-                                ? `$${Number(goal.target).toLocaleString()}`
-                                : Number(goal.target).toLocaleString()}
-                            </div>
-                          </div>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => deleteGoalMutation.mutate(goal.id)}
-                            disabled={deleteGoalMutation.isPending}
-                          >
-                            Delete
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <div className="text-sm">No company goals set yet</div>
-                      <div className="text-xs">Add goals above to track KPI targets</div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
       </div>
     </Layout>
   );

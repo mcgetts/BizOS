@@ -1,14 +1,17 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import type { User } from "@shared/schema";
+import type { User, SystemVariable } from "@shared/schema";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { 
   Settings, 
   Users, 
@@ -44,6 +47,15 @@ export default function Admin() {
     apiCalls: 15420
   });
   const [isLoadingData, setIsLoadingData] = useState(true);
+  const [newVariable, setNewVariable] = useState({
+    key: '',
+    value: '',
+    description: '',
+    category: 'general',
+    dataType: 'string',
+  });
+  const [formValues, setFormValues] = useState<Record<string, string>>({});
+  const queryClient = useQueryClient();
 
   // Fetch real data from API
   useEffect(() => {
@@ -118,6 +130,104 @@ export default function Admin() {
       return;
     }
   }, [isAuthenticated, isLoading, user, toast]);
+
+
+  // System variables queries and mutations
+  const { data: systemVariables } = useQuery<SystemVariable[]>({
+    queryKey: ["/api/system-variables"],
+    enabled: isAuthenticated && user?.role === 'admin',
+  });
+
+  // Helper function to get variable value
+  const getVariableValue = (key: string, defaultValue: string = '') => {
+    return formValues[key] || systemVariables?.find(v => v.key === key)?.value || defaultValue;
+  };
+
+  // Update form values when systemVariables change
+  useEffect(() => {
+    if (systemVariables) {
+      const newFormValues: Record<string, string> = {};
+      systemVariables.forEach(variable => {
+        newFormValues[variable.key] = variable.value;
+      });
+      setFormValues(prev => ({ ...newFormValues, ...prev }));
+    }
+  }, [systemVariables]);
+
+  const createVariableMutation = useMutation({
+    mutationFn: async (variableData: any) => {
+      const response = await fetch('/api/system-variables', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(variableData),
+      });
+      if (!response.ok) throw new Error('Failed to create system variable');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/system-variables"] });
+      setNewVariable({ key: '', value: '', description: '', category: 'general', dataType: 'string' });
+      toast({ title: "Success", description: "System variable created successfully" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to create system variable", variant: "destructive" });
+    },
+  });
+
+  const updateVariableMutation = useMutation({
+    mutationFn: async ({ key, data }: { key: string; data: any }) => {
+      const response = await fetch(`/api/system-variables/${key}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Failed to update system variable ${key}:`, {
+          status: response.status,
+          statusText: response.statusText,
+          body: errorText,
+          data: data
+        });
+        throw new Error(`Failed to update system variable: ${response.status} ${response.statusText}`);
+      }
+      return response.json();
+    },
+    onSuccess: (_, { key, data }) => {
+      // Update local form state immediately
+      setFormValues(prev => ({ ...prev, [key]: data.value }));
+      queryClient.invalidateQueries({ queryKey: ["/api/system-variables"] });
+      toast({ title: "Success", description: "System variable updated successfully" });
+    },
+    onError: (error: any) => {
+      console.error("Update variable mutation error:", error);
+      toast({
+        title: "Error",
+        description: `Failed to update system variable: ${error.message}`,
+        variant: "destructive"
+      });
+    },
+  });
+
+  const deleteVariableMutation = useMutation({
+    mutationFn: async (key: string) => {
+      const response = await fetch(`/api/system-variables/${key}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error('Failed to delete system variable');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/system-variables"] });
+      toast({ title: "Success", description: "System variable deleted successfully" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to delete system variable", variant: "destructive" });
+    },
+  });
 
   if (isLoading || !isAuthenticated) {
     return (
@@ -398,7 +508,7 @@ export default function Admin() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="system" className="space-y-4">
+<TabsContent value="system" className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Card className="glassmorphism">
                 <CardHeader>
@@ -449,6 +559,7 @@ export default function Admin() {
                 </CardContent>
               </Card>
             </div>
+
           </TabsContent>
 
           <TabsContent value="security" className="space-y-4">
@@ -521,57 +632,707 @@ export default function Admin() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="settings" className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Card className="glassmorphism">
-                <CardHeader>
-                  <CardTitle>General Settings</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Company Name</label>
-                    <Input defaultValue="BizOS Inc." />
+          <TabsContent value="settings" className="space-y-6">
+            {/* Business Settings */}
+            <Card className="glassmorphism">
+              <CardHeader>
+                <CardTitle>Business Settings</CardTitle>
+                <p className="text-sm text-muted-foreground">Core business information and financial settings</p>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Company Information */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-medium">Company Information</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <Label>Company Name</Label>
+                        <Input
+                          value={getVariableValue('company_name', 'BizOS Inc.')}
+                          onChange={(e) => setFormValues(prev => ({ ...prev, company_name: e.target.value }))}
+                          onBlur={(e) => updateVariableMutation.mutate({
+                            key: 'company_name',
+                            data: { value: e.target.value }
+                          })}
+                        />
+                      </div>
+                      <div>
+                        <Label>Company Email</Label>
+                        <Input
+                          type="email"
+                          placeholder="contact@company.com"
+                          value={getVariableValue('company_email')}
+                          onChange={(e) => setFormValues(prev => ({ ...prev, company_email: e.target.value }))}
+                          onBlur={(e) => updateVariableMutation.mutate({
+                            key: 'company_email',
+                            data: { value: e.target.value }
+                          })}
+                        />
+                      </div>
+                      <div>
+                        <Label>Company Phone</Label>
+                        <Input
+                          placeholder="+44 20 1234 5678"
+                          value={getVariableValue('company_phone')}
+                          onChange={(e) => setFormValues(prev => ({ ...prev, company_phone: e.target.value }))}
+                          onBlur={(e) => updateVariableMutation.mutate({
+                            key: 'company_phone',
+                            data: { value: e.target.value }
+                          })}
+                        />
+                      </div>
+                      <div>
+                        <Label>VAT Number</Label>
+                        <Input
+                          placeholder="GB123456789"
+                          value={getVariableValue('vat_number')}
+                          onChange={(e) => setFormValues(prev => ({ ...prev, vat_number: e.target.value }))}
+                          onBlur={(e) => updateVariableMutation.mutate({
+                            key: 'vat_number',
+                            data: { value: e.target.value }
+                          })}
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Time Zone</label>
-                    <Input defaultValue="UTC-8 (PST)" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Default Currency</label>
-                    <Input defaultValue="USD" />
-                  </div>
-                </CardContent>
-              </Card>
 
-              <Card className="glassmorphism">
-                <CardHeader>
-                  <CardTitle>Notification Settings</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium">Email Notifications</p>
-                      <p className="text-xs text-muted-foreground">Send system alerts via email</p>
+                  {/* Financial Settings */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-medium">Financial Settings</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <Label>Default Currency</Label>
+                        <Select
+                          value={getVariableValue('default_currency', 'GBP')}
+                          onValueChange={(value) => {
+                            setFormValues(prev => ({ ...prev, default_currency: value }));
+                            updateVariableMutation.mutate({
+                              key: 'default_currency',
+                              data: { value }
+                            });
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="GBP">GBP (£) - British Pound</SelectItem>
+                            <SelectItem value="USD">USD ($) - US Dollar</SelectItem>
+                            <SelectItem value="EUR">EUR (€) - Euro</SelectItem>
+                            <SelectItem value="CAD">CAD ($) - Canadian Dollar</SelectItem>
+                            <SelectItem value="AUD">AUD ($) - Australian Dollar</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>Decimal Places</Label>
+                        <Select
+                          value={getVariableValue('decimal_places', '2')}
+                          onValueChange={(value) => {
+                            setFormValues(prev => ({ ...prev, decimal_places: value }));
+                            updateVariableMutation.mutate({
+                              key: 'decimal_places',
+                              data: { value }
+                            });
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="0">0 (No decimals)</SelectItem>
+                            <SelectItem value="1">1 decimal place</SelectItem>
+                            <SelectItem value="2">2 decimal places</SelectItem>
+                            <SelectItem value="3">3 decimal places</SelectItem>
+                            <SelectItem value="4">4 decimal places</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>Default Tax Rate (%)</Label>
+                        <Input
+                          type="number"
+                          placeholder="20"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          value={getVariableValue('tax_rate_default')}
+                          onChange={(e) => setFormValues(prev => ({ ...prev, tax_rate_default: e.target.value }))}
+                          onBlur={(e) => updateVariableMutation.mutate({
+                            key: 'tax_rate_default',
+                            data: { value: e.target.value }
+                          })}
+                        />
+                      </div>
+                      <div>
+                        <Label>Invoice Prefix</Label>
+                        <Input
+                          placeholder="INV-"
+                          value={getVariableValue('invoice_prefix')}
+                          onChange={(e) => setFormValues(prev => ({ ...prev, invoice_prefix: e.target.value }))}
+                          onBlur={(e) => updateVariableMutation.mutate({
+                            key: 'invoice_prefix',
+                            data: { value: e.target.value }
+                          })}
+                        />
+                      </div>
                     </div>
-                    <Switch defaultChecked />
                   </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium">Slack Integration</p>
-                      <p className="text-xs text-muted-foreground">Post updates to Slack</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Localization Settings */}
+            <Card className="glassmorphism">
+              <CardHeader>
+                <CardTitle>Localization & Time Settings</CardTitle>
+                <p className="text-sm text-muted-foreground">Regional and time zone preferences</p>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-medium">Regional Settings</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <Label>Timezone</Label>
+                        <Select
+                          value={getVariableValue('timezone', 'Europe/London')}
+                          onValueChange={(value) => {
+                            setFormValues(prev => ({ ...prev, timezone: value }));
+                            updateVariableMutation.mutate({
+                              key: 'timezone',
+                              data: { value }
+                            });
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Europe/London">London (GMT/BST)</SelectItem>
+                            <SelectItem value="America/New_York">New York (EST/EDT)</SelectItem>
+                            <SelectItem value="America/Los_Angeles">Los Angeles (PST/PDT)</SelectItem>
+                            <SelectItem value="Europe/Paris">Paris (CET/CEST)</SelectItem>
+                            <SelectItem value="Asia/Tokyo">Tokyo (JST)</SelectItem>
+                            <SelectItem value="Australia/Sydney">Sydney (AEST/AEDT)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>Date Format</Label>
+                        <Select
+                          value={getVariableValue('date_format', 'DD/MM/YYYY')}
+                          onValueChange={(value) => {
+                            setFormValues(prev => ({ ...prev, date_format: value }));
+                            updateVariableMutation.mutate({
+                              key: 'date_format',
+                              data: { value }
+                            });
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="DD/MM/YYYY">DD/MM/YYYY (31/12/2024)</SelectItem>
+                            <SelectItem value="MM/DD/YYYY">MM/DD/YYYY (12/31/2024)</SelectItem>
+                            <SelectItem value="YYYY-MM-DD">YYYY-MM-DD (2024-12-31)</SelectItem>
+                            <SelectItem value="DD-MM-YYYY">DD-MM-YYYY (31-12-2024)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>Time Format</Label>
+                        <Select
+                          value={getVariableValue('time_format', '24h')}
+                          onValueChange={(value) => {
+                            setFormValues(prev => ({ ...prev, time_format: value }));
+                            updateVariableMutation.mutate({
+                              key: 'time_format',
+                              data: { value }
+                            });
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="24h">24 Hour (14:30)</SelectItem>
+                            <SelectItem value="12h">12 Hour (2:30 PM)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>First Day of Week</Label>
+                        <Select
+                          value={getVariableValue('first_day_of_week', '1')}
+                          onValueChange={(value) => {
+                            setFormValues(prev => ({ ...prev, first_day_of_week: value }));
+                            updateVariableMutation.mutate({
+                              key: 'first_day_of_week',
+                              data: { value }
+                            });
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="0">Sunday</SelectItem>
+                            <SelectItem value="1">Monday</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
-                    <Switch />
                   </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium">Weekly Reports</p>
-                      <p className="text-xs text-muted-foreground">Automated system reports</p>
+
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-medium">Business Hours</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <Label>Business Hours Start</Label>
+                        <Input
+                          type="time"
+                          value={getVariableValue('business_hours_start', '09:00')}
+                          onChange={(e) => setFormValues(prev => ({ ...prev, business_hours_start: e.target.value }))}
+                          onBlur={(e) => updateVariableMutation.mutate({
+                            key: 'business_hours_start',
+                            data: { value: e.target.value }
+                          })}
+                        />
+                      </div>
+                      <div>
+                        <Label>Business Hours End</Label>
+                        <Input
+                          type="time"
+                          value={getVariableValue('business_hours_end', '17:00')}
+                          onChange={(e) => setFormValues(prev => ({ ...prev, business_hours_end: e.target.value }))}
+                          onBlur={(e) => updateVariableMutation.mutate({
+                            key: 'business_hours_end',
+                            data: { value: e.target.value }
+                          })}
+                        />
+                      </div>
                     </div>
-                    <Switch defaultChecked />
                   </div>
-                </CardContent>
-              </Card>
-            </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Operations Settings */}
+            <Card className="glassmorphism">
+              <CardHeader>
+                <CardTitle>Operations Settings</CardTitle>
+                <p className="text-sm text-muted-foreground">Targets, SLAs, and operational preferences</p>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-medium">Business Targets</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <Label>Annual Revenue Target</Label>
+                        <Input
+                          type="number"
+                          placeholder="500000"
+                          value={getVariableValue('revenue_target_annual')}
+                          onChange={(e) => setFormValues(prev => ({ ...prev, revenue_target_annual: e.target.value }))}
+                          onBlur={(e) => updateVariableMutation.mutate({
+                            key: 'revenue_target_annual',
+                            data: { value: e.target.value }
+                          })}
+                        />
+                      </div>
+                      <div>
+                        <Label>Annual Pipeline Target</Label>
+                        <Input
+                          type="number"
+                          placeholder="200000"
+                          value={getVariableValue('pipeline_target_annual')}
+                          onChange={(e) => setFormValues(prev => ({ ...prev, pipeline_target_annual: e.target.value }))}
+                          onBlur={(e) => updateVariableMutation.mutate({
+                            key: 'pipeline_target_annual',
+                            data: { value: e.target.value }
+                          })}
+                        />
+                      </div>
+                      <div>
+                        <Label>Active Projects Target</Label>
+                        <Input
+                          type="number"
+                          placeholder="25"
+                          value={getVariableValue('projects_target_annual')}
+                          onChange={(e) => setFormValues(prev => ({ ...prev, projects_target_annual: e.target.value }))}
+                          onBlur={(e) => updateVariableMutation.mutate({
+                            key: 'projects_target_annual',
+                            data: { value: e.target.value }
+                          })}
+                        />
+                      </div>
+                      <div>
+                        <Label>Max Open Tickets</Label>
+                        <Input
+                          type="number"
+                          placeholder="5"
+                          value={getVariableValue('tickets_target_max')}
+                          onChange={(e) => setFormValues(prev => ({ ...prev, tickets_target_max: e.target.value }))}
+                          onBlur={(e) => updateVariableMutation.mutate({
+                            key: 'tickets_target_max',
+                            data: { value: e.target.value }
+                          })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-medium">Support & SLAs</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <Label>Ticket Prefix</Label>
+                        <Input
+                          placeholder="TKT-"
+                          value={getVariableValue('ticket_prefix')}
+                          onChange={(e) => setFormValues(prev => ({ ...prev, ticket_prefix: e.target.value }))}
+                          onBlur={(e) => updateVariableMutation.mutate({
+                            key: 'ticket_prefix',
+                            data: { value: e.target.value }
+                          })}
+                        />
+                      </div>
+                      <div>
+                        <Label>SLA Response Time (hours)</Label>
+                        <Input
+                          type="number"
+                          placeholder="24"
+                          min="1"
+                          max="168"
+                          value={getVariableValue('sla_response_hours')}
+                          onChange={(e) => setFormValues(prev => ({ ...prev, sla_response_hours: e.target.value }))}
+                          onBlur={(e) => updateVariableMutation.mutate({
+                            key: 'sla_response_hours',
+                            data: { value: e.target.value }
+                          })}
+                        />
+                      </div>
+                      <div>
+                        <Label>SLA Resolution Time (hours)</Label>
+                        <Input
+                          type="number"
+                          placeholder="72"
+                          min="1"
+                          max="168"
+                          value={getVariableValue('sla_resolution_hours')}
+                          onChange={(e) => setFormValues(prev => ({ ...prev, sla_resolution_hours: e.target.value }))}
+                          onBlur={(e) => updateVariableMutation.mutate({
+                            key: 'sla_resolution_hours',
+                            data: { value: e.target.value }
+                          })}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label>Auto-assign Tickets</Label>
+                          <p className="text-xs text-muted-foreground">Automatically assign new tickets</p>
+                        </div>
+                        <Switch
+                          checked={getVariableValue('ticket_auto_assign') === 'true'}
+                          onCheckedChange={(checked) => {
+                            const value = checked.toString();
+                            setFormValues(prev => ({ ...prev, ticket_auto_assign: value }));
+                            updateVariableMutation.mutate({
+                              key: 'ticket_auto_assign',
+                              data: { value }
+                            });
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* User Experience Settings */}
+            <Card className="glassmorphism">
+              <CardHeader>
+                <CardTitle>User Experience Settings</CardTitle>
+                <p className="text-sm text-muted-foreground">Interface and notification preferences</p>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-medium">Interface Settings</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <Label>Default Theme</Label>
+                        <Select
+                          value={getVariableValue('theme_default', 'light')}
+                          onValueChange={(value) => {
+                            setFormValues(prev => ({ ...prev, theme_default: value }));
+                            updateVariableMutation.mutate({
+                              key: 'theme_default',
+                              data: { value }
+                            });
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="light">Light</SelectItem>
+                            <SelectItem value="dark">Dark</SelectItem>
+                            <SelectItem value="system">System</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>Items Per Page</Label>
+                        <Select
+                          value={getVariableValue('pagination_default_size', '20')}
+                          onValueChange={(value) => {
+                            setFormValues(prev => ({ ...prev, pagination_default_size: value }));
+                            updateVariableMutation.mutate({
+                              key: 'pagination_default_size',
+                              data: { value }
+                            });
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="10">10 items</SelectItem>
+                            <SelectItem value="20">20 items</SelectItem>
+                            <SelectItem value="50">50 items</SelectItem>
+                            <SelectItem value="100">100 items</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>Default Chart Period</Label>
+                        <Select
+                          value={getVariableValue('chart_default_period', '6')}
+                          onValueChange={(value) => {
+                            setFormValues(prev => ({ ...prev, chart_default_period: value }));
+                            updateVariableMutation.mutate({
+                              key: 'chart_default_period',
+                              data: { value }
+                            });
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="3">3 months</SelectItem>
+                            <SelectItem value="6">6 months</SelectItem>
+                            <SelectItem value="12">12 months</SelectItem>
+                            <SelectItem value="24">24 months</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label>Auto-refresh Dashboard</Label>
+                          <p className="text-xs text-muted-foreground">Automatically refresh dashboard data</p>
+                        </div>
+                        <Switch
+                          checked={getVariableValue('dashboard_refresh_auto', 'true') === 'true'}
+                          onCheckedChange={(checked) => {
+                            const value = checked.toString();
+                            setFormValues(prev => ({ ...prev, dashboard_refresh_auto: value }));
+                            updateVariableMutation.mutate({
+                              key: 'dashboard_refresh_auto',
+                              data: { value }
+                            });
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-medium">Notification Settings</h3>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label>Email Notifications</Label>
+                          <p className="text-xs text-muted-foreground">Send system alerts via email</p>
+                        </div>
+                        <Switch
+                          checked={getVariableValue('email_enabled', 'true') === 'true'}
+                          onCheckedChange={(checked) => {
+                            const value = checked.toString();
+                            setFormValues(prev => ({ ...prev, email_enabled: value }));
+                            updateVariableMutation.mutate({
+                              key: 'email_enabled',
+                              data: { value }
+                            });
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <Label>Email From Name</Label>
+                        <Input
+                          placeholder="BizOS System"
+                          value={getVariableValue('email_from_name')}
+                          onChange={(e) => setFormValues(prev => ({ ...prev, email_from_name: e.target.value }))}
+                          onBlur={(e) => updateVariableMutation.mutate({
+                            key: 'email_from_name',
+                            data: { value: e.target.value }
+                          })}
+                        />
+                      </div>
+                      <div>
+                        <Label>Daily Digest Time</Label>
+                        <Input
+                          type="time"
+                          value={getVariableValue('notification_digest_hour', '09:00')}
+                          onChange={(e) => setFormValues(prev => ({ ...prev, notification_digest_hour: e.target.value }))}
+                          onBlur={(e) => updateVariableMutation.mutate({
+                            key: 'notification_digest_hour',
+                            data: { value: e.target.value.split(':')[0] }
+                          })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* User Management Settings */}
+            <Card className="glassmorphism">
+              <CardHeader>
+                <CardTitle>User Management Settings</CardTitle>
+                <p className="text-sm text-muted-foreground">Default user settings and security preferences</p>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-medium">Default User Settings</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <Label>Default User Role</Label>
+                        <Select
+                          value={getVariableValue('default_user_role', 'employee')}
+                          onValueChange={(value) => {
+                            setFormValues(prev => ({ ...prev, default_user_role: value }));
+                            updateVariableMutation.mutate({
+                              key: 'default_user_role',
+                              data: { value }
+                            });
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="employee">Employee</SelectItem>
+                            <SelectItem value="manager">Manager</SelectItem>
+                            <SelectItem value="client">Client</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>Session Timeout (minutes)</Label>
+                        <Select
+                          value={getVariableValue('session_timeout', '120')}
+                          onValueChange={(value) => {
+                            setFormValues(prev => ({ ...prev, session_timeout: value }));
+                            updateVariableMutation.mutate({
+                              key: 'session_timeout',
+                              data: { value }
+                            });
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="30">30 minutes</SelectItem>
+                            <SelectItem value="60">1 hour</SelectItem>
+                            <SelectItem value="120">2 hours</SelectItem>
+                            <SelectItem value="240">4 hours</SelectItem>
+                            <SelectItem value="480">8 hours</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label>Require 2FA for Admins</Label>
+                          <p className="text-xs text-muted-foreground">Force two-factor authentication for admin users</p>
+                        </div>
+                        <Switch
+                          checked={getVariableValue('require_2fa_admin') === 'true'}
+                          onCheckedChange={(checked) => {
+                            const value = checked.toString();
+                            setFormValues(prev => ({ ...prev, require_2fa_admin: value }));
+                            updateVariableMutation.mutate({
+                              key: 'require_2fa_admin',
+                              data: { value }
+                            });
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-medium">Project Settings</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <Label>Default Project Status</Label>
+                        <Select
+                          value={getVariableValue('default_project_status', 'planning')}
+                          onValueChange={(value) => {
+                            setFormValues(prev => ({ ...prev, default_project_status: value }));
+                            updateVariableMutation.mutate({
+                              key: 'default_project_status',
+                              data: { value }
+                            });
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="planning">Planning</SelectItem>
+                            <SelectItem value="in_progress">In Progress</SelectItem>
+                            <SelectItem value="on_hold">On Hold</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>Auto-archive Projects (days)</Label>
+                        <Select
+                          value={getVariableValue('project_archive_days', '90')}
+                          onValueChange={(value) => {
+                            setFormValues(prev => ({ ...prev, project_archive_days: value }));
+                            updateVariableMutation.mutate({
+                              key: 'project_archive_days',
+                              data: { value }
+                            });
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="30">30 days</SelectItem>
+                            <SelectItem value="60">60 days</SelectItem>
+                            <SelectItem value="90">90 days</SelectItem>
+                            <SelectItem value="180">180 days</SelectItem>
+                            <SelectItem value="365">365 days</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>

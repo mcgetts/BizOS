@@ -16,14 +16,19 @@ import Finance from "@/pages/Finance";
 import Knowledge from "@/pages/Knowledge";
 import Marketing from "@/pages/Marketing";
 import Support from "@/pages/Support";
+import Company from "@/pages/Company";
 import Admin from "@/pages/Admin";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
 
+  if (isLoading) {
+    return <Landing />;
+  }
+
   return (
     <Switch>
-      {isLoading || !isAuthenticated ? (
+      {!isAuthenticated ? (
         <Route path="/" component={Landing} />
       ) : (
         <>
@@ -37,6 +42,7 @@ function Router() {
           <Route path="/knowledge" component={Knowledge} />
           <Route path="/marketing" component={Marketing} />
           <Route path="/support" component={Support} />
+          <Route path="/company" component={Company} />
           <Route path="/admin" component={Admin} />
         </>
       )}

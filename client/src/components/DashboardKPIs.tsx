@@ -123,7 +123,7 @@ export function DashboardKPIs() {
     );
   }
 
-  const formatCurrency = (value: number) => `$${value.toLocaleString()}`;
+  const formatCurrency = (value: number) => `£${value.toLocaleString()}`;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6" data-testid="dashboard-kpis">

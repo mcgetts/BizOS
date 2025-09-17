@@ -265,7 +265,7 @@ function ProjectForm({ project, onSuccess }: { project?: Project; onSuccess: () 
             name="budget"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Budget ($)</FormLabel>
+                <FormLabel>Budget (£)</FormLabel>
                 <FormControl>
                   <Input type="number" placeholder="50000" {...field} data-testid="input-project-budget" />
                 </FormControl>
@@ -278,7 +278,7 @@ function ProjectForm({ project, onSuccess }: { project?: Project; onSuccess: () 
             name="actualCost"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Actual Cost ($)</FormLabel>
+                <FormLabel>Actual Cost (£)</FormLabel>
                 <FormControl>
                   <Input type="number" placeholder="0" {...field} data-testid="input-project-actual-cost" />
                 </FormControl>
@@ -601,7 +601,7 @@ export default function Projects() {
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Total Budget</p>
                   <p className="text-2xl font-bold" data-testid="text-total-budget">
-                    ${projects?.reduce((sum: number, project: any) => sum + (parseFloat(project.budget) || 0), 0).toLocaleString() || '0'}
+                    £{projects?.reduce((sum: number, project: any) => sum + (parseFloat(project.budget) || 0), 0).toLocaleString() || '0'}
                   </p>
                 </div>
                 <TrendingUp className="w-8 h-8 text-accent-foreground" />
@@ -723,7 +723,7 @@ export default function Projects() {
                           </td>
                           <td className="py-4">
                             <div className="text-sm text-foreground">
-                              ${parseFloat(project.budget || 0).toLocaleString()}
+                              £{parseFloat(project.budget || 0).toLocaleString()}
                             </div>
                           </td>
                           <td className="py-4">

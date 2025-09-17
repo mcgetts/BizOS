@@ -45,24 +45,24 @@ import {
 } from "lucide-react";
 
 // Utility functions for precise decimal math (to avoid floating-point issues)
-function toCents(dollarAmount: string | number): number {
-  const amount = typeof dollarAmount === 'string' ? parseFloat(dollarAmount || '0') : (dollarAmount || 0);
+function toCents(poundAmount: string | number): number {
+  const amount = typeof poundAmount === 'string' ? parseFloat(poundAmount || '0') : (poundAmount || 0);
   return Math.round(amount * 100);
 }
 
-function toDollars(centsAmount: number): number {
+function toPounds(centsAmount: number): number {
   return centsAmount / 100;
 }
 
 function addDecimal(amount1: string | number, amount2: string | number): string {
   const cents1 = toCents(amount1 || 0);
   const cents2 = toCents(amount2 || 0);
-  return (toDollars(cents1 + cents2)).toFixed(2);
+  return (toPounds(cents1 + cents2)).toFixed(2);
 }
 
 function sumAmounts(amounts: (string | number)[]): number {
   const totalCents = amounts.reduce((sum: number, amount) => sum + toCents(amount || 0), 0);
-  return toDollars(totalCents);
+  return toPounds(totalCents);
 }
 
 // Form validation schemas derived from shared schemas with UI extensions
@@ -847,7 +847,7 @@ export default function Finance() {
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Total Revenue</p>
                   <p className="text-2xl font-bold text-success" data-testid="text-total-revenue">
-                    ${totalRevenue.toLocaleString()}
+                    £{totalRevenue.toLocaleString()}
                   </p>
                 </div>
                 <div className="p-2 bg-success/10 rounded-lg">
@@ -867,7 +867,7 @@ export default function Finance() {
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Pending Revenue</p>
                   <p className="text-2xl font-bold text-warning" data-testid="text-pending-revenue">
-                    ${pendingRevenue.toLocaleString()}
+                    £{pendingRevenue.toLocaleString()}
                   </p>
                 </div>
                 <div className="p-2 bg-warning/10 rounded-lg">
@@ -886,7 +886,7 @@ export default function Finance() {
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Total Expenses</p>
                   <p className="text-2xl font-bold text-destructive" data-testid="text-total-expenses">
-                    ${totalExpenses.toLocaleString()}
+                    £{totalExpenses.toLocaleString()}
                   </p>
                 </div>
                 <div className="p-2 bg-destructive/10 rounded-lg">
@@ -905,7 +905,7 @@ export default function Finance() {
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Net Profit</p>
                   <p className="text-2xl font-bold text-primary" data-testid="text-net-profit">
-                    ${(totalRevenue - totalExpenses).toLocaleString()}
+                    £{(totalRevenue - totalExpenses).toLocaleString()}
                   </p>
                 </div>
                 <div className="p-2 bg-primary/10 rounded-lg">
@@ -1008,7 +1008,7 @@ export default function Finance() {
                               </td>
                               <td className="py-4">
                                 <div className="font-medium text-foreground">
-                                  ${parseFloat(invoice.total || '0').toLocaleString()}
+                                  £{parseFloat(invoice.total || '0').toLocaleString()}
                                 </div>
                               </td>
                               <td className="py-4">
@@ -1144,7 +1144,7 @@ export default function Finance() {
                               </td>
                               <td className="py-4">
                                 <div className="font-medium text-destructive">
-                                  ${parseFloat(expense.amount || '0').toLocaleString()}
+                                  £{parseFloat(expense.amount || '0').toLocaleString()}
                                 </div>
                               </td>
                               <td className="py-4">

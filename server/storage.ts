@@ -1,6 +1,8 @@
 import {
   users,
   clients,
+  companies,
+  salesOpportunities,
   projects,
   tasks,
   invoices,
@@ -11,12 +13,16 @@ import {
   supportTickets,
   timeEntries,
   clientInteractions,
-  companyGoals,
+  systemVariables,
   type User,
   type UpsertUser,
   type InsertUser,
   type InsertClient,
   type Client,
+  type InsertCompany,
+  type Company,
+  type InsertSalesOpportunity,
+  type SalesOpportunity,
   type InsertProject,
   type Project,
   type InsertTask,
@@ -34,9 +40,9 @@ import {
   type InsertSupportTicket,
   type SupportTicket,
   type UpdateSupportTicket,
-  type InsertCompanyGoal,
-  type UpdateCompanyGoal,
-  type CompanyGoal,
+  type InsertSystemVariable,
+  type UpdateSystemVariable,
+  type SystemVariable,
   type TimeEntry,
   type ClientInteraction,
 } from "@shared/schema";
@@ -59,6 +65,21 @@ export interface IStorage {
   createClient(client: InsertClient): Promise<Client>;
   updateClient(id: string, client: Partial<InsertClient>): Promise<Client>;
   deleteClient(id: string): Promise<void>;
+
+  // Company operations
+  getCompanies(): Promise<Company[]>;
+  getCompany(id: string): Promise<Company | undefined>;
+  createCompany(company: InsertCompany): Promise<Company>;
+  updateCompany(id: string, company: Partial<InsertCompany>): Promise<Company>;
+  deleteCompany(id: string): Promise<void>;
+
+  // Sales opportunity operations
+  getSalesOpportunities(): Promise<SalesOpportunity[]>;
+  getSalesOpportunity(id: string): Promise<SalesOpportunity | undefined>;
+  getSalesOpportunitiesByStage(stage: string): Promise<SalesOpportunity[]>;
+  createSalesOpportunity(opportunity: InsertSalesOpportunity): Promise<SalesOpportunity>;
+  updateSalesOpportunity(id: string, opportunity: Partial<InsertSalesOpportunity>): Promise<SalesOpportunity>;
+  deleteSalesOpportunity(id: string): Promise<void>;
   
   // Project operations
   getProjects(): Promise<Project[]>;
@@ -109,12 +130,13 @@ export interface IStorage {
   updateSupportTicket(id: string, ticket: UpdateSupportTicket): Promise<SupportTicket>;
   deleteSupportTicket(id: string): Promise<void>;
 
-  // Company goals operations
-  getCompanyGoals(): Promise<CompanyGoal[]>;
-  getCompanyGoal(id: string): Promise<CompanyGoal | undefined>;
-  createCompanyGoal(goal: InsertCompanyGoal): Promise<CompanyGoal>;
-  updateCompanyGoal(id: string, goal: UpdateCompanyGoal): Promise<CompanyGoal>;
-  deleteCompanyGoal(id: string): Promise<void>;
+
+  // System variables operations
+  getSystemVariables(): Promise<SystemVariable[]>;
+  getSystemVariable(key: string): Promise<SystemVariable | undefined>;
+  createSystemVariable(variable: InsertSystemVariable): Promise<SystemVariable>;
+  updateSystemVariable(key: string, variable: UpdateSystemVariable): Promise<SystemVariable>;
+  deleteSystemVariable(key: string): Promise<void>;
 
   // Dashboard analytics
   getDashboardKPIs(): Promise<{
@@ -213,6 +235,73 @@ export class DatabaseStorage implements IStorage {
 
   async deleteClient(id: string): Promise<void> {
     await db.delete(clients).where(eq(clients.id, id));
+  }
+
+  // Company operations
+  async getCompanies(): Promise<Company[]> {
+    return await db.select().from(companies).where(eq(companies.isActive, true)).orderBy(desc(companies.createdAt));
+  }
+
+  async getCompany(id: string): Promise<Company | undefined> {
+    const [company] = await db.select().from(companies).where(eq(companies.id, id));
+    return company;
+  }
+
+  async createCompany(company: InsertCompany): Promise<Company> {
+    const [newCompany] = await db.insert(companies).values(company).returning();
+    return newCompany;
+  }
+
+  async updateCompany(id: string, company: Partial<InsertCompany>): Promise<Company> {
+    const [updatedCompany] = await db
+      .update(companies)
+      .set({ ...company, updatedAt: new Date() })
+      .where(eq(companies.id, id))
+      .returning();
+    return updatedCompany;
+  }
+
+  async deleteCompany(id: string): Promise<void> {
+    await db.update(companies).set({ isActive: false }).where(eq(companies.id, id));
+  }
+
+  // Sales opportunity operations
+  async getSalesOpportunities(): Promise<SalesOpportunity[]> {
+    return await db.select().from(salesOpportunities).orderBy(desc(salesOpportunities.createdAt));
+  }
+
+  async getSalesOpportunity(id: string): Promise<SalesOpportunity | undefined> {
+    const [opportunity] = await db.select().from(salesOpportunities).where(eq(salesOpportunities.id, id));
+    return opportunity;
+  }
+
+  async getSalesOpportunitiesByStage(stage: string): Promise<SalesOpportunity[]> {
+    return await db.select().from(salesOpportunities).where(eq(salesOpportunities.stage, stage)).orderBy(desc(salesOpportunities.lastActivityDate));
+  }
+
+  async createSalesOpportunity(opportunity: InsertSalesOpportunity): Promise<SalesOpportunity> {
+    const [newOpportunity] = await db.insert(salesOpportunities).values({
+      ...opportunity,
+      lastActivityDate: new Date(),
+    }).returning();
+    return newOpportunity;
+  }
+
+  async updateSalesOpportunity(id: string, opportunity: Partial<InsertSalesOpportunity>): Promise<SalesOpportunity> {
+    const [updatedOpportunity] = await db
+      .update(salesOpportunities)
+      .set({
+        ...opportunity,
+        updatedAt: new Date(),
+        lastActivityDate: new Date(),
+      })
+      .where(eq(salesOpportunities.id, id))
+      .returning();
+    return updatedOpportunity;
+  }
+
+  async deleteSalesOpportunity(id: string): Promise<void> {
+    await db.delete(salesOpportunities).where(eq(salesOpportunities.id, id));
   }
 
   // Project operations
@@ -494,42 +583,65 @@ export class DatabaseStorage implements IStorage {
     await db.delete(supportTickets).where(eq(supportTickets.id, id));
   }
 
-  // Company goals operations
-  async getCompanyGoals(): Promise<CompanyGoal[]> {
+
+  // System variables operations
+  async getSystemVariables(): Promise<SystemVariable[]> {
     return await db
       .select()
-      .from(companyGoals)
-      .where(eq(companyGoals.isActive, true))
-      .orderBy(desc(companyGoals.year), companyGoals.quarter);
+      .from(systemVariables)
+      .orderBy(systemVariables.category, systemVariables.key);
   }
 
-  async getCompanyGoal(id: string): Promise<CompanyGoal | undefined> {
-    const [goal] = await db
+  async getSystemVariable(key: string): Promise<SystemVariable | undefined> {
+    const [variable] = await db
       .select()
-      .from(companyGoals)
-      .where(eq(companyGoals.id, id));
-    return goal;
+      .from(systemVariables)
+      .where(eq(systemVariables.key, key));
+    return variable;
   }
 
-  async createCompanyGoal(goalData: InsertCompanyGoal): Promise<CompanyGoal> {
-    const [goal] = await db
-      .insert(companyGoals)
-      .values(goalData)
+  async createSystemVariable(variableData: InsertSystemVariable): Promise<SystemVariable> {
+    const [variable] = await db
+      .insert(systemVariables)
+      .values(variableData)
       .returning();
-    return goal;
+    return variable;
   }
 
-  async updateCompanyGoal(id: string, goalData: UpdateCompanyGoal): Promise<CompanyGoal> {
-    const [goal] = await db
-      .update(companyGoals)
-      .set(goalData)
-      .where(eq(companyGoals.id, id))
-      .returning();
-    return goal;
+  async updateSystemVariable(key: string, variableData: UpdateSystemVariable): Promise<SystemVariable> {
+    // First, check if the variable exists
+    const existingVariable = await this.getSystemVariable(key);
+
+    if (existingVariable) {
+      // Update existing variable
+      const [variable] = await db
+        .update(systemVariables)
+        .set({ ...variableData, updatedAt: new Date() })
+        .where(eq(systemVariables.key, key))
+        .returning();
+      return variable;
+    } else {
+      // Create new variable with default values
+      const defaultData = {
+        key,
+        value: variableData.value || '',
+        description: variableData.description || '',
+        category: variableData.category || 'general',
+        dataType: variableData.dataType || 'string',
+        isEditable: true,
+        updatedBy: variableData.updatedBy,
+      };
+
+      const [variable] = await db
+        .insert(systemVariables)
+        .values(defaultData)
+        .returning();
+      return variable;
+    }
   }
 
-  async deleteCompanyGoal(id: string): Promise<void> {
-    await db.delete(companyGoals).where(eq(companyGoals.id, id));
+  async deleteSystemVariable(key: string): Promise<void> {
+    await db.delete(systemVariables).where(eq(systemVariables.key, key));
   }
 
   // Dashboard analytics
@@ -544,15 +656,15 @@ export class DatabaseStorage implements IStorage {
     const lastMonthDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
     const twoMonthsAgoDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 2, 1);
 
-    // Get company goals for current year
-    const goals = await db
+    // Get business targets from system variables
+    const businessTargets = await db
       .select()
-      .from(companyGoals)
-      .where(and(eq(companyGoals.year, currentYear), eq(companyGoals.isActive, true)));
+      .from(systemVariables)
+      .where(like(systemVariables.key, '%_target_%'));
 
-    const getTarget = (metric: string, defaultTarget: number) => {
-      const goal = goals.find(g => g.metric === metric);
-      return goal ? Number(goal.target) : defaultTarget;
+    const getTarget = (targetKey: string, defaultTarget: number) => {
+      const target = businessTargets.find(t => t.key === targetKey);
+      return target ? Number(target.value) : defaultTarget;
     };
 
     // Calculate revenue data with growth
@@ -670,22 +782,22 @@ export class DatabaseStorage implements IStorage {
     return {
       revenue: {
         current: Number(currentRevenue?.total || 0),
-        target: getTarget('revenue', 500000),
+        target: getTarget('revenue_target_annual', 500000),
         growth: Math.round(revenueGrowth * 10) / 10,
       },
       pipeline: {
         current: Number(currentPipeline?.total || 0),
-        target: getTarget('pipeline', 200000),
+        target: getTarget('pipeline_target_annual', 200000),
         growth: Math.round(pipelineGrowth * 10) / 10,
       },
       projects: {
         current: currentProjects?.count || 0,
-        target: getTarget('projects', 25),
+        target: getTarget('projects_target_annual', 25),
         growth: Math.round(projectsGrowth * 10) / 10,
       },
       tickets: {
         current: currentTickets?.count || 0,
-        target: getTarget('tickets', 5), // Target is to keep tickets low
+        target: getTarget('tickets_target_max', 5), // Target is to keep tickets low
         growth: Math.round(ticketsGrowth * 10) / 10,
       },
     };

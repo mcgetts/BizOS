@@ -43,23 +43,22 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// Clients table
+// Clients table (now represents individual contacts within companies)
 export const clients = pgTable("clients", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: varchar("name").notNull(),
   email: varchar("email"),
   phone: varchar("phone"),
-  company: varchar("company"),
-  industry: varchar("industry"),
-  website: varchar("website"),
-  address: text("address"),
-  status: varchar("status").default("lead"), // lead, qualified, proposal, client, inactive
+  companyId: varchar("company_id").references(() => companies.id),
+  position: varchar("position"), // Job title/position
+  department: varchar("department"),
+  isPrimaryContact: boolean("is_primary_contact").default(false),
   source: varchar("source"), // referral, website, marketing, etc.
   assignedTo: varchar("assigned_to").references(() => users.id),
-  totalValue: decimal("total_value", { precision: 10, scale: 2 }).default("0"),
   lastContactDate: timestamp("last_contact_date"),
   notes: text("notes"),
   tags: text("tags").array(),
+  isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -69,7 +68,8 @@ export const projects = pgTable("projects", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: varchar("name").notNull(),
   description: text("description"),
-  clientId: varchar("client_id").references(() => clients.id),
+  companyId: varchar("company_id").references(() => companies.id),
+  clientId: varchar("client_id").references(() => clients.id), // Secondary link to primary contact
   managerId: varchar("manager_id").references(() => users.id),
   status: varchar("status").default("planning"), // planning, active, review, completed, cancelled
   priority: varchar("priority").default("medium"), // low, medium, high, urgent
@@ -122,7 +122,8 @@ export const timeEntries = pgTable("time_entries", {
 export const invoices = pgTable("invoices", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   invoiceNumber: varchar("invoice_number").unique().notNull(),
-  clientId: varchar("client_id").references(() => clients.id),
+  companyId: varchar("company_id").references(() => companies.id),
+  clientId: varchar("client_id").references(() => clients.id), // Contact person
   projectId: varchar("project_id").references(() => projects.id),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   tax: decimal("tax", { precision: 10, scale: 2 }).default("0"),
@@ -236,6 +237,20 @@ export const companyGoals = pgTable("company_goals", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// System variables table
+export const systemVariables = pgTable("system_variables", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  key: varchar("key").unique().notNull(), // e.g., 'default_currency', 'date_format', 'timezone'
+  value: text("value").notNull(), // e.g., 'GBP', 'DD/MM/YYYY', 'Europe/London'
+  description: text("description"), // Human-readable description
+  category: varchar("category").default("general"), // general, localization, financial, etc.
+  dataType: varchar("data_type").default("string"), // string, number, boolean, json
+  isEditable: boolean("is_editable").default(true),
+  updatedBy: varchar("updated_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Client interactions table
 export const clientInteractions = pgTable("client_interactions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -247,6 +262,50 @@ export const clientInteractions = pgTable("client_interactions", {
   outcome: varchar("outcome"), // positive, neutral, negative
   followUpDate: timestamp("follow_up_date"),
   createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Companies table
+export const companies = pgTable("companies", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name").notNull(),
+  industry: varchar("industry"),
+  website: varchar("website"),
+  address: text("address"),
+  phone: varchar("phone"),
+  email: varchar("email"),
+  description: text("description"),
+  size: varchar("size"), // small, medium, large, enterprise
+  revenue: decimal("revenue", { precision: 12, scale: 2 }),
+  foundedYear: integer("founded_year"),
+  linkedinUrl: varchar("linkedin_url"),
+  twitterUrl: varchar("twitter_url"),
+  tags: text("tags").array(),
+  assignedTo: varchar("assigned_to").references(() => users.id),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Sales opportunities table for the CRM pipeline
+export const salesOpportunities = pgTable("sales_opportunities", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: varchar("title").notNull(),
+  description: text("description"),
+  companyId: varchar("company_id").references(() => companies.id),
+  contactId: varchar("contact_id").references(() => clients.id), // Primary contact for this opportunity
+  assignedTo: varchar("assigned_to").references(() => users.id),
+  stage: varchar("stage").default("lead"), // lead, qualified, proposal, negotiation, closed_won, closed_lost
+  value: decimal("value", { precision: 10, scale: 2 }),
+  probability: integer("probability").default(50), // 0-100 percentage
+  expectedCloseDate: timestamp("expected_close_date"),
+  actualCloseDate: timestamp("actual_close_date"),
+  source: varchar("source"), // referral, website, marketing, cold_outreach, etc.
+  priority: varchar("priority").default("medium"), // low, medium, high
+  tags: text("tags").array(),
+  notes: text("notes"),
+  lastActivityDate: timestamp("last_activity_date"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // Relations
@@ -269,14 +328,50 @@ export const clientRelations = relations(clients, ({ one, many }) => ({
     fields: [clients.assignedTo],
     references: [users.id],
   }),
+  company: one(companies, {
+    fields: [clients.companyId],
+    references: [companies.id],
+  }),
   projects: many(projects),
   invoices: many(invoices),
   documents: many(documents),
   supportTickets: many(supportTickets),
   interactions: many(clientInteractions),
+  opportunities: many(salesOpportunities, { relationName: "contact" }),
+}));
+
+export const companyRelations = relations(companies, ({ one, many }) => ({
+  assignedUser: one(users, {
+    fields: [companies.assignedTo],
+    references: [users.id],
+  }),
+  clients: many(clients),
+  projects: many(projects),
+  invoices: many(invoices),
+  opportunities: many(salesOpportunities),
+}));
+
+export const salesOpportunityRelations = relations(salesOpportunities, ({ one }) => ({
+  company: one(companies, {
+    fields: [salesOpportunities.companyId],
+    references: [companies.id],
+  }),
+  contact: one(clients, {
+    fields: [salesOpportunities.contactId],
+    references: [clients.id],
+    relationName: "contact",
+  }),
+  assignedUser: one(users, {
+    fields: [salesOpportunities.assignedTo],
+    references: [users.id],
+  }),
 }));
 
 export const projectRelations = relations(projects, ({ one, many }) => ({
+  company: one(companies, {
+    fields: [projects.companyId],
+    references: [companies.id],
+  }),
   client: one(clients, {
     fields: [projects.clientId],
     references: [clients.id],
@@ -332,15 +427,13 @@ export const insertClientSchema = createInsertSchema(clients).omit({
   createdAt: true,
   updatedAt: true,
 }).extend({
-  totalValue: z.string().optional(),
   email: z.string().optional(),
   phone: z.string().optional(),
-  company: z.string().optional(),
-  industry: z.string().optional(),
-  website: z.string().optional(),
-  address: z.string().optional(),
+  position: z.string().optional(),
+  department: z.string().optional(),
   source: z.string().optional(),
   notes: z.string().optional(),
+  tags: z.array(z.string()).optional(),
 });
 
 export const insertProjectSchema = createInsertSchema(projects).omit({
@@ -427,6 +520,40 @@ export const updateCompanyGoalSchema = createInsertSchema(companyGoals).omit({
   updatedAt: true,
 }).partial();
 
+export const insertSystemVariableSchema = createInsertSchema(systemVariables).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const updateSystemVariableSchema = createInsertSchema(systemVariables).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).partial();
+
+export const insertCompanySchema = createInsertSchema(companies).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  revenue: z.string().optional(),
+  foundedYear: z.number().optional(),
+  tags: z.array(z.string()).optional(),
+});
+
+export const insertSalesOpportunitySchema = createInsertSchema(salesOpportunities).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  value: z.string().optional(),
+  expectedCloseDate: z.coerce.date().nullable().optional(),
+  actualCloseDate: z.coerce.date().nullable().optional(),
+  lastActivityDate: z.coerce.date().nullable().optional(),
+  tags: z.array(z.string()).optional(),
+});
+
 // Types
 export type UpsertUser = z.infer<typeof upsertUserSchema>;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -453,5 +580,12 @@ export type SupportTicket = typeof supportTickets.$inferSelect;
 export type InsertCompanyGoal = z.infer<typeof insertCompanyGoalSchema>;
 export type UpdateCompanyGoal = z.infer<typeof updateCompanyGoalSchema>;
 export type CompanyGoal = typeof companyGoals.$inferSelect;
+export type InsertSystemVariable = z.infer<typeof insertSystemVariableSchema>;
+export type UpdateSystemVariable = z.infer<typeof updateSystemVariableSchema>;
+export type SystemVariable = typeof systemVariables.$inferSelect;
 export type TimeEntry = typeof timeEntries.$inferSelect;
 export type ClientInteraction = typeof clientInteractions.$inferSelect;
+export type InsertCompany = z.infer<typeof insertCompanySchema>;
+export type Company = typeof companies.$inferSelect;
+export type InsertSalesOpportunity = z.infer<typeof insertSalesOpportunitySchema>;
+export type SalesOpportunity = typeof salesOpportunities.$inferSelect;

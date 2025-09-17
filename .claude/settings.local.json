@@ -32,7 +32,8 @@
       "Bash(npm test:*)",
       "Bash(node:*)",
       "Bash(npx vitest run:*)",
-      "Bash(kill:*)"
+      "Bash(kill:*)",
+      "Bash(npm run:*)"
     ],
     "deny": [],
     "ask": []

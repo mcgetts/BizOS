@@ -23,7 +23,7 @@ const navigationItems = [
     icon: LayoutDashboard,
   },
   {
-    title: "Clients",
+    title: "CRM",
     href: "/clients",
     icon: Users,
   },
@@ -61,6 +61,11 @@ const navigationItems = [
     title: "Support",
     href: "/support",
     icon: HelpCircle,
+  },
+  {
+    title: "Company",
+    href: "/company",
+    icon: Building2,
   },
 ];
 

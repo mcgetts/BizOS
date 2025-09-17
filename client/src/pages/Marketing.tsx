@@ -141,7 +141,7 @@ export default function Marketing() {
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Total Budget</p>
                   <p className="text-2xl font-bold text-primary" data-testid="text-total-budget">
-                    ${totalBudget.toLocaleString()}
+                    £{totalBudget.toLocaleString()}
                   </p>
                 </div>
                 <div className="p-2 bg-primary/10 rounded-lg">
@@ -160,7 +160,7 @@ export default function Marketing() {
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Total Spent</p>
                   <p className="text-2xl font-bold text-destructive" data-testid="text-total-spent">
-                    ${totalSpent.toLocaleString()}
+                    £{totalSpent.toLocaleString()}
                   </p>
                 </div>
                 <div className="p-2 bg-destructive/10 rounded-lg">
@@ -249,7 +249,7 @@ export default function Marketing() {
                             </div>
                             <div>
                               <p className="text-sm font-medium text-muted-foreground">Budget</p>
-                              <p className="text-sm text-foreground">${parseFloat(campaign.budget || 0).toLocaleString()}</p>
+                              <p className="text-sm text-foreground">£{parseFloat(campaign.budget || 0).toLocaleString()}</p>
                             </div>
                             <div>
                               <p className="text-sm font-medium text-muted-foreground">Spent</p>
