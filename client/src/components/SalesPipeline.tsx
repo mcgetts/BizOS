@@ -67,9 +67,14 @@ export function SalesPipeline() {
 
   const updateOpportunityMutation = useMutation({
     mutationFn: async ({ id, stage }: { id: string; stage: string }) => {
-      return apiRequest(`/api/opportunities/${id}`, "PUT", { stage });
+      return apiRequest("PUT", `/api/opportunities/${id}`, { stage });
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/opportunities'] });
+    },
+    onError: (error) => {
+      console.error('Failed to update opportunity:', error);
+      // Revert optimistic update by refetching data
       queryClient.invalidateQueries({ queryKey: ['/api/opportunities'] });
     },
   });
@@ -246,8 +251,7 @@ export function SalesPipeline() {
                     <div
                       {...provided.droppableProps}
                       ref={provided.innerRef}
-                      className="flex-1 p-2 bg-gray-50 rounded-b-lg space-y-2"
-                      style={{ height: 'calc(5 * 140px + 4 * 8px + 16px)', overflowY: 'auto' }}
+                      className="flex-1 p-2 bg-gray-50 rounded-b-lg space-y-2 min-h-[140px]"
                     >
                       {stageOpportunities.map((opportunity, index) => (
                         <Draggable
