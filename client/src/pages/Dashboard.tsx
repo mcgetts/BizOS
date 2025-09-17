@@ -227,22 +227,22 @@ export default function Dashboard() {
   const recentActivity = [
     // Recent completed tasks
     ...(tasks?.filter(t => t.status === 'completed')
-      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+      .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())
       .slice(0, 2)
       .map(task => {
-        const user = users?.find(u => u.id === task.assigneeId) || users?.[0];
+        const user = users?.find(u => u.id === task.assignedTo) || users?.[0];
         return {
           user: user ? `${user.firstName} ${user.lastName}` : 'Team Member',
           action: 'completed task',
           target: task.title,
-          time: getTimeAgo(new Date(task.updatedAt)),
+          time: task.updatedAt ? getTimeAgo(new Date(task.updatedAt)) : 'Recently',
           status: 'Completed',
-          avatar: user ? getInitialsAvatar(user.firstName, user.lastName) : ''
+          avatar: (user && user.firstName && user.lastName) ? getInitialsAvatar(user.firstName, user.lastName) : ''
         };
       }) || []),
     // Recent in-progress projects
     ...(projects?.filter(p => p.status === 'in_progress')
-      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+      .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())
       .slice(0, 1)
       .map(project => {
         const user = users?.find(u => u.role === 'manager') || users?.[1];
@@ -250,9 +250,9 @@ export default function Dashboard() {
           user: user ? `${user.firstName} ${user.lastName}` : 'Project Manager',
           action: 'is working on',
           target: project.name,
-          time: getTimeAgo(new Date(project.updatedAt)),
+          time: project.updatedAt ? getTimeAgo(new Date(project.updatedAt)) : 'Recently',
           status: 'In Progress',
-          avatar: user ? getInitialsAvatar(user.firstName, user.lastName) : ''
+          avatar: (user && user.firstName && user.lastName) ? getInitialsAvatar(user.firstName, user.lastName) : ''
         };
       }) || [])
   ].slice(0, 3);
@@ -516,7 +516,7 @@ export default function Dashboard() {
                            project.status === "completed" ? "Completed" :
                            project.status === "planning" ? "Planning" :
                            project.status === "on_hold" ? "On Hold" :
-                           project.status.charAt(0).toUpperCase() + project.status.slice(1)}
+                           project.status ? project.status.charAt(0).toUpperCase() + project.status.slice(1) : "Unknown"}
                         </Badge>
                       </td>
                       <td className="py-4">
@@ -581,8 +581,8 @@ export default function Dashboard() {
                   <div>
                     <Label htmlFor="quarter">Quarter (Optional)</Label>
                     <Select
-                      value={newGoal.quarter?.toString() || ''}
-                      onValueChange={(value) => setNewGoal({ ...newGoal, quarter: value ? parseInt(value) : null })}
+                      value={newGoal.quarter?.toString() || 'annual'}
+                      onValueChange={(value) => setNewGoal({ ...newGoal, quarter: value === 'annual' ? null : parseInt(value) })}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Annual" />
