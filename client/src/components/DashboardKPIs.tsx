@@ -1,14 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { TrendingUp, TrendingDown, Minus, DollarSign, Users, FolderOpen, UserCog } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, DollarSign, Users, FolderOpen, Ticket } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface DashboardKPIs {
   revenue: { current: number; target: number; growth: number };
-  clients: { current: number; target: number; growth: number };
+  pipeline: { current: number; target: number; growth: number };
   projects: { current: number; target: number; growth: number };
-  team: { current: number; target: number; growth: number };
+  tickets: { current: number; target: number; growth: number };
 }
 
 interface KPICardProps {
@@ -28,29 +28,21 @@ function KPICard({ title, current, target, growth, icon: Icon, color, formatter 
     success: {
       bg: "bg-success/10",
       text: "text-success",
-      pulse: "pulse-success bg-success/20",
-      dot: "bg-success",
       progress: "bg-success",
     },
     primary: {
       bg: "bg-primary/10",
       text: "text-primary",
-      pulse: "pulse-primary bg-primary/20",
-      dot: "bg-primary",
       progress: "bg-primary",
     },
     warning: {
       bg: "bg-warning/10",
       text: "text-warning",
-      pulse: "pulse-warning bg-warning/20",
-      dot: "bg-warning",
       progress: "bg-warning",
     },
     accent: {
       bg: "bg-accent/10",
       text: "text-accent-foreground",
-      pulse: "pulse-primary bg-accent/20",
-      dot: "bg-accent-foreground",
       progress: "bg-accent-foreground",
     },
   };
@@ -85,9 +77,9 @@ function KPICard({ title, current, target, growth, icon: Icon, color, formatter 
             <span className="text-muted-foreground">
               Target: <span data-testid={`text-target-${title.toLowerCase().replace(' ', '-')}`}>{formatter(target)}</span>
             </span>
-            <div className={cn("w-12 h-12 rounded-full flex items-center justify-center", classes.pulse)}>
-              <div className={cn("w-3 h-3 rounded-full", classes.dot)}></div>
-            </div>
+            <span className="text-xs text-muted-foreground">
+              {progress.toFixed(0)}% of target
+            </span>
           </div>
           <Progress 
             value={progress} 
@@ -145,12 +137,13 @@ export function DashboardKPIs() {
         formatter={formatCurrency}
       />
       <KPICard
-        title="Active Clients"
-        current={kpis.clients.current}
-        target={kpis.clients.target}
-        growth={kpis.clients.growth}
-        icon={Users}
+        title="Pipeline Value"
+        current={kpis.pipeline.current}
+        target={kpis.pipeline.target}
+        growth={kpis.pipeline.growth}
+        icon={TrendingUp}
         color="primary"
+        formatter={formatCurrency}
       />
       <KPICard
         title="Active Projects"
@@ -161,11 +154,11 @@ export function DashboardKPIs() {
         color="warning"
       />
       <KPICard
-        title="Team Members"
-        current={kpis.team.current}
-        target={kpis.team.target}
-        growth={kpis.team.growth}
-        icon={UserCog}
+        title="Open Tickets"
+        current={kpis.tickets.current}
+        target={kpis.tickets.target}
+        growth={kpis.tickets.growth}
+        icon={Ticket}
         color="accent"
       />
     </div>

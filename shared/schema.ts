@@ -223,6 +223,19 @@ export const supportTickets = pgTable("support_tickets", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Company goals table
+export const companyGoals = pgTable("company_goals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  metric: varchar("metric").notNull(), // revenue, pipeline, projects, tickets
+  target: decimal("target", { precision: 12, scale: 2 }).notNull(),
+  year: integer("year").notNull(),
+  quarter: integer("quarter"), // 1-4, null for annual goals
+  isActive: boolean("is_active").default(true),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Client interactions table
 export const clientInteractions = pgTable("client_interactions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -402,6 +415,18 @@ export const updateSupportTicketSchema = createInsertSchema(supportTickets).omit
   updatedAt: true,
 }).partial();
 
+export const insertCompanyGoalSchema = createInsertSchema(companyGoals).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const updateCompanyGoalSchema = createInsertSchema(companyGoals).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).partial();
+
 // Types
 export type UpsertUser = z.infer<typeof upsertUserSchema>;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -425,5 +450,8 @@ export type MarketingCampaign = typeof marketingCampaigns.$inferSelect;
 export type InsertSupportTicket = z.infer<typeof insertSupportTicketSchema>;
 export type UpdateSupportTicket = z.infer<typeof updateSupportTicketSchema>;
 export type SupportTicket = typeof supportTickets.$inferSelect;
+export type InsertCompanyGoal = z.infer<typeof insertCompanyGoalSchema>;
+export type UpdateCompanyGoal = z.infer<typeof updateCompanyGoalSchema>;
+export type CompanyGoal = typeof companyGoals.$inferSelect;
 export type TimeEntry = typeof timeEntries.$inferSelect;
 export type ClientInteraction = typeof clientInteractions.$inferSelect;

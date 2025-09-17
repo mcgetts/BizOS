@@ -11,6 +11,7 @@ import {
   supportTickets,
   timeEntries,
   clientInteractions,
+  companyGoals,
   type User,
   type UpsertUser,
   type InsertUser,
@@ -32,6 +33,10 @@ import {
   type MarketingCampaign,
   type InsertSupportTicket,
   type SupportTicket,
+  type UpdateSupportTicket,
+  type InsertCompanyGoal,
+  type UpdateCompanyGoal,
+  type CompanyGoal,
   type TimeEntry,
   type ClientInteraction,
 } from "@shared/schema";
@@ -101,16 +106,30 @@ export interface IStorage {
   getSupportTickets(): Promise<SupportTicket[]>;
   getSupportTicket(id: string): Promise<SupportTicket | undefined>;
   createSupportTicket(ticket: InsertSupportTicket): Promise<SupportTicket>;
-  updateSupportTicket(id: string, ticket: Partial<InsertSupportTicket>): Promise<SupportTicket>;
+  updateSupportTicket(id: string, ticket: UpdateSupportTicket): Promise<SupportTicket>;
   deleteSupportTicket(id: string): Promise<void>;
-  
+
+  // Company goals operations
+  getCompanyGoals(): Promise<CompanyGoal[]>;
+  getCompanyGoal(id: string): Promise<CompanyGoal | undefined>;
+  createCompanyGoal(goal: InsertCompanyGoal): Promise<CompanyGoal>;
+  updateCompanyGoal(id: string, goal: UpdateCompanyGoal): Promise<CompanyGoal>;
+  deleteCompanyGoal(id: string): Promise<void>;
+
   // Dashboard analytics
   getDashboardKPIs(): Promise<{
     revenue: { current: number; target: number; growth: number };
-    clients: { current: number; target: number; growth: number };
+    pipeline: { current: number; target: number; growth: number };
     projects: { current: number; target: number; growth: number };
-    team: { current: number; target: number; growth: number };
+    tickets: { current: number; target: number; growth: number };
   }>;
+
+  getRevenueTrends(months: number): Promise<Array<{
+    month: string;
+    year: number;
+    revenue: number;
+    invoiceCount: number;
+  }>>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -475,59 +494,261 @@ export class DatabaseStorage implements IStorage {
     await db.delete(supportTickets).where(eq(supportTickets.id, id));
   }
 
+  // Company goals operations
+  async getCompanyGoals(): Promise<CompanyGoal[]> {
+    return await db
+      .select()
+      .from(companyGoals)
+      .where(eq(companyGoals.isActive, true))
+      .orderBy(desc(companyGoals.year), companyGoals.quarter);
+  }
+
+  async getCompanyGoal(id: string): Promise<CompanyGoal | undefined> {
+    const [goal] = await db
+      .select()
+      .from(companyGoals)
+      .where(eq(companyGoals.id, id));
+    return goal;
+  }
+
+  async createCompanyGoal(goalData: InsertCompanyGoal): Promise<CompanyGoal> {
+    const [goal] = await db
+      .insert(companyGoals)
+      .values(goalData)
+      .returning();
+    return goal;
+  }
+
+  async updateCompanyGoal(id: string, goalData: UpdateCompanyGoal): Promise<CompanyGoal> {
+    const [goal] = await db
+      .update(companyGoals)
+      .set(goalData)
+      .where(eq(companyGoals.id, id))
+      .returning();
+    return goal;
+  }
+
+  async deleteCompanyGoal(id: string): Promise<void> {
+    await db.delete(companyGoals).where(eq(companyGoals.id, id));
+  }
+
   // Dashboard analytics
   async getDashboardKPIs(): Promise<{
     revenue: { current: number; target: number; growth: number };
-    clients: { current: number; target: number; growth: number };
+    pipeline: { current: number; target: number; growth: number };
     projects: { current: number; target: number; growth: number };
-    team: { current: number; target: number; growth: number };
+    tickets: { current: number; target: number; growth: number };
   }> {
-    // Get total revenue from paid invoices
-    const [revenueResult] = await db
+    const currentYear = new Date().getFullYear();
+    const currentDate = new Date();
+    const lastMonthDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
+    const twoMonthsAgoDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 2, 1);
+
+    // Get company goals for current year
+    const goals = await db
+      .select()
+      .from(companyGoals)
+      .where(and(eq(companyGoals.year, currentYear), eq(companyGoals.isActive, true)));
+
+    const getTarget = (metric: string, defaultTarget: number) => {
+      const goal = goals.find(g => g.metric === metric);
+      return goal ? Number(goal.target) : defaultTarget;
+    };
+
+    // Calculate revenue data with growth
+    const [currentRevenue] = await db
       .select({ total: sql<number>`COALESCE(SUM(${invoices.total}), 0)` })
       .from(invoices)
       .where(eq(invoices.status, 'paid'));
 
-    // Get active clients count
-    const [clientsResult] = await db
-      .select({ count: count() })
-      .from(clients)
-      .where(eq(clients.status, 'client'));
+    const [lastMonthRevenue] = await db
+      .select({ total: sql<number>`COALESCE(SUM(${invoices.total}), 0)` })
+      .from(invoices)
+      .where(and(
+        eq(invoices.status, 'paid'),
+        sql`${invoices.paidAt} >= ${lastMonthDate.toISOString()}`,
+        sql`${invoices.paidAt} < ${currentDate.toISOString()}`
+      ));
 
-    // Get active projects count
-    const [projectsResult] = await db
+    const [twoMonthsAgoRevenue] = await db
+      .select({ total: sql<number>`COALESCE(SUM(${invoices.total}), 0)` })
+      .from(invoices)
+      .where(and(
+        eq(invoices.status, 'paid'),
+        sql`${invoices.paidAt} >= ${twoMonthsAgoDate.toISOString()}`,
+        sql`${invoices.paidAt} < ${lastMonthDate.toISOString()}`
+      ));
+
+    const revenueGrowth = twoMonthsAgoRevenue.total > 0
+      ? ((lastMonthRevenue.total - twoMonthsAgoRevenue.total) / twoMonthsAgoRevenue.total) * 100
+      : 0;
+
+    // Calculate pipeline value (pending/draft invoices)
+    const [currentPipeline] = await db
+      .select({ total: sql<number>`COALESCE(SUM(${invoices.total}), 0)` })
+      .from(invoices)
+      .where(or(eq(invoices.status, 'pending'), eq(invoices.status, 'draft')));
+
+    const [lastMonthPipeline] = await db
+      .select({ total: sql<number>`COALESCE(SUM(${invoices.total}), 0)` })
+      .from(invoices)
+      .where(and(
+        or(eq(invoices.status, 'pending'), eq(invoices.status, 'draft')),
+        sql`${invoices.createdAt} >= ${lastMonthDate.toISOString()}`,
+        sql`${invoices.createdAt} < ${currentDate.toISOString()}`
+      ));
+
+    const [twoMonthsAgoPipeline] = await db
+      .select({ total: sql<number>`COALESCE(SUM(${invoices.total}), 0)` })
+      .from(invoices)
+      .where(and(
+        or(eq(invoices.status, 'pending'), eq(invoices.status, 'draft')),
+        sql`${invoices.createdAt} >= ${twoMonthsAgoDate.toISOString()}`,
+        sql`${invoices.createdAt} < ${lastMonthDate.toISOString()}`
+      ));
+
+    const pipelineGrowth = twoMonthsAgoPipeline.total > 0
+      ? ((lastMonthPipeline.total - twoMonthsAgoPipeline.total) / twoMonthsAgoPipeline.total) * 100
+      : 0;
+
+    // Calculate active projects with growth
+    const [currentProjects] = await db
       .select({ count: count() })
       .from(projects)
       .where(or(eq(projects.status, 'in_progress'), eq(projects.status, 'planning')));
 
-    // Get team members count
-    const [teamResult] = await db
+    const [lastMonthProjects] = await db
       .select({ count: count() })
-      .from(users)
-      .where(and(eq(users.isActive, true), or(eq(users.role, 'employee'), eq(users.role, 'manager'))));
+      .from(projects)
+      .where(and(
+        or(eq(projects.status, 'in_progress'), eq(projects.status, 'planning')),
+        sql`${projects.createdAt} >= ${lastMonthDate.toISOString()}`,
+        sql`${projects.createdAt} < ${currentDate.toISOString()}`
+      ));
+
+    const [twoMonthsAgoProjects] = await db
+      .select({ count: count() })
+      .from(projects)
+      .where(and(
+        or(eq(projects.status, 'in_progress'), eq(projects.status, 'planning')),
+        sql`${projects.createdAt} >= ${twoMonthsAgoDate.toISOString()}`,
+        sql`${projects.createdAt} < ${lastMonthDate.toISOString()}`
+      ));
+
+    const projectsGrowth = twoMonthsAgoProjects.count > 0
+      ? ((lastMonthProjects.count - twoMonthsAgoProjects.count) / twoMonthsAgoProjects.count) * 100
+      : 0;
+
+    // Calculate open tickets with growth
+    const [currentTickets] = await db
+      .select({ count: count() })
+      .from(supportTickets)
+      .where(or(eq(supportTickets.status, 'open'), eq(supportTickets.status, 'in_progress')));
+
+    const [lastMonthTickets] = await db
+      .select({ count: count() })
+      .from(supportTickets)
+      .where(and(
+        or(eq(supportTickets.status, 'open'), eq(supportTickets.status, 'in_progress')),
+        sql`${supportTickets.createdAt} >= ${lastMonthDate.toISOString()}`,
+        sql`${supportTickets.createdAt} < ${currentDate.toISOString()}`
+      ));
+
+    const [twoMonthsAgoTickets] = await db
+      .select({ count: count() })
+      .from(supportTickets)
+      .where(and(
+        or(eq(supportTickets.status, 'open'), eq(supportTickets.status, 'in_progress')),
+        sql`${supportTickets.createdAt} >= ${twoMonthsAgoDate.toISOString()}`,
+        sql`${supportTickets.createdAt} < ${lastMonthDate.toISOString()}`
+      ));
+
+    const ticketsGrowth = twoMonthsAgoTickets.count > 0
+      ? ((lastMonthTickets.count - twoMonthsAgoTickets.count) / twoMonthsAgoTickets.count) * 100
+      : 0;
 
     return {
       revenue: {
-        current: Number(revenueResult?.total || 0),
-        target: 500000,
-        growth: 12.5,
+        current: Number(currentRevenue?.total || 0),
+        target: getTarget('revenue', 500000),
+        growth: Math.round(revenueGrowth * 10) / 10,
       },
-      clients: {
-        current: clientsResult?.count || 0,
-        target: 50,
-        growth: 8.3,
+      pipeline: {
+        current: Number(currentPipeline?.total || 0),
+        target: getTarget('pipeline', 200000),
+        growth: Math.round(pipelineGrowth * 10) / 10,
       },
       projects: {
-        current: projectsResult?.count || 0,
-        target: 25,
-        growth: 0,
+        current: currentProjects?.count || 0,
+        target: getTarget('projects', 25),
+        growth: Math.round(projectsGrowth * 10) / 10,
       },
-      team: {
-        current: teamResult?.count || 0,
-        target: 45,
-        growth: 5.0,
+      tickets: {
+        current: currentTickets?.count || 0,
+        target: getTarget('tickets', 5), // Target is to keep tickets low
+        growth: Math.round(ticketsGrowth * 10) / 10,
       },
     };
+  }
+
+  async getRevenueTrends(months: number = 6): Promise<Array<{
+    month: string;
+    year: number;
+    revenue: number;
+    invoiceCount: number;
+  }>> {
+    // Get revenue trends by grouping paid invoices by month
+    const result = await db
+      .select({
+        month: sql<string>`TO_CHAR(${invoices.paidAt}, 'Mon')`,
+        year: sql<number>`EXTRACT(YEAR FROM ${invoices.paidAt})::int`,
+        monthNum: sql<number>`EXTRACT(MONTH FROM ${invoices.paidAt})::int`,
+        revenue: sql<number>`COALESCE(SUM(${invoices.total}), 0)`,
+        invoiceCount: sql<number>`COUNT(*)::int`,
+      })
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.status, 'paid'),
+          sql`${invoices.paidAt} >= CURRENT_DATE - INTERVAL '${sql.raw(months.toString())} months'`
+        )
+      )
+      .groupBy(
+        sql`EXTRACT(YEAR FROM ${invoices.paidAt})`,
+        sql`EXTRACT(MONTH FROM ${invoices.paidAt})`,
+        sql`TO_CHAR(${invoices.paidAt}, 'Mon')`
+      )
+      .orderBy(
+        sql`EXTRACT(YEAR FROM ${invoices.paidAt})`,
+        sql`EXTRACT(MONTH FROM ${invoices.paidAt})`
+      );
+
+    // Fill in missing months with zero revenue
+    const now = new Date();
+    const trends: Array<{
+      month: string;
+      year: number;
+      revenue: number;
+      invoiceCount: number;
+    }> = [];
+
+    for (let i = months - 1; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthName = date.toLocaleDateString('en-US', { month: 'short' });
+      const year = date.getFullYear();
+      const monthNum = date.getMonth() + 1;
+
+      const existingData = result.find(r => r.year === year && r.monthNum === monthNum);
+
+      trends.push({
+        month: monthName,
+        year: year,
+        revenue: existingData ? Number(existingData.revenue) : 0,
+        invoiceCount: existingData ? existingData.invoiceCount : 0,
+      });
+    }
+
+    return trends;
   }
 }
 

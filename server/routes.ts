@@ -226,6 +226,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get('/api/dashboard/revenue-trends', isAuthenticated, async (req, res) => {
+    try {
+      const months = parseInt(req.query.months as string) || 6;
+      const trends = await storage.getRevenueTrends(months);
+      res.json(trends);
+    } catch (error) {
+      console.error("Error fetching revenue trends:", error);
+      res.status(500).json({ message: "Failed to fetch revenue trends" });
+    }
+  });
+
+  // Company goals routes (admin only)
+  app.get('/api/company-goals', isAuthenticated, requireRole(['admin']), async (req, res) => {
+    try {
+      const goals = await storage.getCompanyGoals();
+      res.json(goals);
+    } catch (error) {
+      console.error("Error fetching company goals:", error);
+      res.status(500).json({ message: "Failed to fetch company goals" });
+    }
+  });
+
+  app.post('/api/company-goals', isAuthenticated, requireRole(['admin']), async (req, res) => {
+    try {
+      const goal = await storage.createCompanyGoal({
+        ...req.body,
+        createdBy: req.user.id,
+      });
+      res.status(201).json(goal);
+    } catch (error) {
+      console.error("Error creating company goal:", error);
+      res.status(400).json({ message: "Failed to create company goal" });
+    }
+  });
+
+  app.put('/api/company-goals/:id', isAuthenticated, requireRole(['admin']), async (req, res) => {
+    try {
+      const goal = await storage.updateCompanyGoal(req.params.id, req.body);
+      res.json(goal);
+    } catch (error) {
+      console.error("Error updating company goal:", error);
+      res.status(400).json({ message: "Failed to update company goal" });
+    }
+  });
+
+  app.delete('/api/company-goals/:id', isAuthenticated, requireRole(['admin']), async (req, res) => {
+    try {
+      await storage.deleteCompanyGoal(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting company goal:", error);
+      res.status(400).json({ message: "Failed to delete company goal" });
+    }
+  });
+
   // Client routes
   app.get('/api/clients', isAuthenticated, async (req, res) => {
     try {
