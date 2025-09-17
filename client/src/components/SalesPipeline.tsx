@@ -1,7 +1,8 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 import { DollarSign, Calendar, User, Building2, MoreVertical } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,16 +53,32 @@ const priorityColors = {
 
 export function SalesPipeline() {
   const [viewMode, setViewMode] = useState<"kanban" | "table">("kanban");
+  const [localOpportunities, setLocalOpportunities] = useState<SalesOpportunity[]>([]);
 
   const { data: opportunities, isLoading } = useQuery<SalesOpportunity[]>({
     queryKey: ["/api/opportunities"],
+  });
+
+  useEffect(() => {
+    if (opportunities) {
+      setLocalOpportunities(opportunities);
+    }
+  }, [opportunities]);
+
+  const updateOpportunityMutation = useMutation({
+    mutationFn: async ({ id, stage }: { id: string; stage: string }) => {
+      return apiRequest(`/api/opportunities/${id}`, "PUT", { stage });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/opportunities'] });
+    },
   });
 
   const organizeByStage = (opportunities: SalesOpportunity[]) => {
     const organized: Record<string, SalesOpportunity[]> = {};
 
     stageConfig.forEach(stage => {
-      organized[stage.key] = opportunities?.filter(opp => opp.stage === stage.key) || [];
+      organized[stage.key] = opportunities.filter(opp => opp.stage === stage.key);
     });
 
     return organized;
@@ -94,7 +111,31 @@ export function SalesPipeline() {
     );
   }
 
-  const organizedOpportunities = organizeByStage(opportunities || []);
+  const organizedOpportunities = organizeByStage(localOpportunities);
+
+  const handleDragEnd = (result: any) => {
+    const { destination, source, draggableId } = result;
+
+    if (!destination) return;
+    if (destination.droppableId === source.droppableId && destination.index === source.index) return;
+
+    const opportunity = localOpportunities.find(opp => opp.id === draggableId);
+    if (!opportunity) return;
+
+    // Update local state immediately for optimistic UI
+    const updatedOpportunities = localOpportunities.map(opp => 
+      opp.id === draggableId 
+        ? { ...opp, stage: destination.droppableId }
+        : opp
+    );
+    setLocalOpportunities(updatedOpportunities);
+
+    // Update backend
+    updateOpportunityMutation.mutate({ 
+      id: draggableId, 
+      stage: destination.droppableId 
+    });
+  };
 
   const header = (
     <div className="flex items-center justify-between">
@@ -185,7 +226,7 @@ export function SalesPipeline() {
     <div className="space-y-4">
       {header}
 
-      <DragDropContext onDragEnd={() => {}}>
+      <DragDropContext onDragEnd={handleDragEnd}>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
           {stageConfig.map((stage) => {
             const stageOpportunities = organizedOpportunities[stage.key];
@@ -205,7 +246,8 @@ export function SalesPipeline() {
                     <div
                       {...provided.droppableProps}
                       ref={provided.innerRef}
-                      className="flex-1 p-2 bg-gray-50 rounded-b-lg max-h-[400px] overflow-y-auto space-y-2"
+                      className="flex-1 p-2 bg-gray-50 rounded-b-lg space-y-2"
+                      style={{ height: 'calc(5 * 140px + 4 * 8px + 16px)', overflowY: 'auto' }}
                     >
                       {stageOpportunities.map((opportunity, index) => (
                         <Draggable
