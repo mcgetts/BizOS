@@ -26,13 +26,32 @@ const getOidcConfig = memoize(
 
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
+  
+  // Use in-memory store for development or when DATABASE_URL is not set
+  if (process.env.NODE_ENV !== 'production' || !process.env.DATABASE_URL) {
+    console.log('🔧 Using in-memory session store for development');
+    return session({
+      secret: process.env.SESSION_SECRET || 'dev-secret-key-change-in-production',
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: sessionTtl,
+      },
+    });
+  }
+  
+  // Use PostgreSQL session store for production
+  console.log('🔧 Using PostgreSQL session store for production');
   const pgStore = connectPg(session);
   const sessionStore = new pgStore({
     conString: process.env.DATABASE_URL,
-    createTableIfMissing: false,
+    createTableIfMissing: true, // Auto-create sessions table
     ttl: sessionTtl,
     tableName: "sessions",
   });
+  
   return session({
     secret: process.env.SESSION_SECRET!,
     store: sessionStore,
