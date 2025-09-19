@@ -20,6 +20,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertInvoiceSchema, insertExpenseSchema } from "@shared/schema";
 import type { Invoice, Expense, InsertInvoice, InsertExpense, Client, Project, User } from "@shared/schema";
+import { useTableSort, SortConfig } from "@/hooks/useTableSort";
+import { SortableHeader } from "@/components/SortableHeader";
 import { z } from "zod";
 import {
   Plus,
@@ -962,6 +964,45 @@ export default function Finance() {
     projects?.find(p => p.id === expense.projectId)?.name?.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
 
+  // Invoice sorting configuration
+  const invoiceSortConfigs: SortConfig[] = [
+    { key: 'invoiceNumber', type: 'string' },
+    {
+      key: 'client',
+      type: 'string',
+      accessor: (invoice: Invoice) => clients?.find(c => c.id === invoice.clientId)?.name || ''
+    },
+    {
+      key: 'project',
+      type: 'string',
+      accessor: (invoice: Invoice) => projects?.find(p => p.id === invoice.projectId)?.name || ''
+    },
+    { key: 'total', type: 'number' },
+    {
+      key: 'status',
+      type: 'custom',
+      customOrder: { draft: 0, sent: 1, paid: 2, overdue: 3 }
+    },
+    { key: 'dueDate', type: 'date' }
+  ];
+
+  // Expense sorting configuration
+  const expenseSortConfigs: SortConfig[] = [
+    { key: 'description', type: 'string' },
+    { key: 'category', type: 'string' },
+    {
+      key: 'project',
+      type: 'string',
+      accessor: (expense: Expense) => projects?.find(p => p.id === expense.projectId)?.name || ''
+    },
+    { key: 'amount', type: 'number' },
+    { key: 'date', type: 'date' },
+    { key: 'status', type: 'string' }
+  ];
+
+  const { sortedData: sortedInvoices, sortState: invoiceSortState, handleSort: handleInvoiceSort } = useTableSort(filteredInvoices, invoiceSortConfigs);
+  const { sortedData: sortedExpenses, sortState: expenseSortState, handleSort: handleExpenseSort } = useTableSort(filteredExpenses, expenseSortConfigs);
+
   return (
     <Layout title="Financial Management" breadcrumbs={["Finance"]}>
       <div className="space-y-6">
@@ -1142,17 +1183,59 @@ export default function Finance() {
                     <table className="w-full" data-testid="table-invoices">
                       <thead>
                         <tr className="border-b border-border">
-                          <th className="text-left text-sm font-medium text-muted-foreground py-3">Invoice #</th>
-                          <th className="text-left text-sm font-medium text-muted-foreground py-3">Client</th>
-                          <th className="text-left text-sm font-medium text-muted-foreground py-3">Project</th>
-                          <th className="text-left text-sm font-medium text-muted-foreground py-3">Total</th>
-                          <th className="text-left text-sm font-medium text-muted-foreground py-3">Status</th>
-                          <th className="text-left text-sm font-medium text-muted-foreground py-3">Due Date</th>
+                          <SortableHeader
+                            column="invoiceNumber"
+                            currentSort={invoiceSortState.column}
+                            direction={invoiceSortState.direction}
+                            onSort={handleInvoiceSort}
+                          >
+                            Invoice #
+                          </SortableHeader>
+                          <SortableHeader
+                            column="client"
+                            currentSort={invoiceSortState.column}
+                            direction={invoiceSortState.direction}
+                            onSort={handleInvoiceSort}
+                          >
+                            Client
+                          </SortableHeader>
+                          <SortableHeader
+                            column="project"
+                            currentSort={invoiceSortState.column}
+                            direction={invoiceSortState.direction}
+                            onSort={handleInvoiceSort}
+                          >
+                            Project
+                          </SortableHeader>
+                          <SortableHeader
+                            column="total"
+                            currentSort={invoiceSortState.column}
+                            direction={invoiceSortState.direction}
+                            onSort={handleInvoiceSort}
+                          >
+                            Total
+                          </SortableHeader>
+                          <SortableHeader
+                            column="status"
+                            currentSort={invoiceSortState.column}
+                            direction={invoiceSortState.direction}
+                            onSort={handleInvoiceSort}
+                          >
+                            Status
+                          </SortableHeader>
+                          <SortableHeader
+                            column="dueDate"
+                            currentSort={invoiceSortState.column}
+                            direction={invoiceSortState.direction}
+                            onSort={handleInvoiceSort}
+                          >
+                            Due Date
+                          </SortableHeader>
                           <th className="text-left text-sm font-medium text-muted-foreground py-3">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
-                        {filteredInvoices.map((invoice: Invoice, index: number) => {
+                        {sortedInvoices.map((invoice: Invoice, index: number) => {
                           const client = clients?.find(c => c.id === invoice.clientId);
                           const project = projects?.find(p => p.id === invoice.projectId);
                           
@@ -1277,17 +1360,59 @@ export default function Finance() {
                     <table className="w-full" data-testid="table-expenses">
                       <thead>
                         <tr className="border-b border-border">
-                          <th className="text-left text-sm font-medium text-muted-foreground py-3">Description</th>
-                          <th className="text-left text-sm font-medium text-muted-foreground py-3">Category</th>
-                          <th className="text-left text-sm font-medium text-muted-foreground py-3">Project</th>
-                          <th className="text-left text-sm font-medium text-muted-foreground py-3">Amount</th>
-                          <th className="text-left text-sm font-medium text-muted-foreground py-3">Date</th>
-                          <th className="text-left text-sm font-medium text-muted-foreground py-3">Status</th>
+                          <SortableHeader
+                            column="description"
+                            currentSort={expenseSortState.column}
+                            direction={expenseSortState.direction}
+                            onSort={handleExpenseSort}
+                          >
+                            Description
+                          </SortableHeader>
+                          <SortableHeader
+                            column="category"
+                            currentSort={expenseSortState.column}
+                            direction={expenseSortState.direction}
+                            onSort={handleExpenseSort}
+                          >
+                            Category
+                          </SortableHeader>
+                          <SortableHeader
+                            column="project"
+                            currentSort={expenseSortState.column}
+                            direction={expenseSortState.direction}
+                            onSort={handleExpenseSort}
+                          >
+                            Project
+                          </SortableHeader>
+                          <SortableHeader
+                            column="amount"
+                            currentSort={expenseSortState.column}
+                            direction={expenseSortState.direction}
+                            onSort={handleExpenseSort}
+                          >
+                            Amount
+                          </SortableHeader>
+                          <SortableHeader
+                            column="date"
+                            currentSort={expenseSortState.column}
+                            direction={expenseSortState.direction}
+                            onSort={handleExpenseSort}
+                          >
+                            Date
+                          </SortableHeader>
+                          <SortableHeader
+                            column="status"
+                            currentSort={expenseSortState.column}
+                            direction={expenseSortState.direction}
+                            onSort={handleExpenseSort}
+                          >
+                            Status
+                          </SortableHeader>
                           <th className="text-left text-sm font-medium text-muted-foreground py-3">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
-                        {filteredExpenses.map((expense: Expense, index: number) => {
+                        {sortedExpenses.map((expense: Expense, index: number) => {
                           const project = projects?.find(p => p.id === expense.projectId);
                           
                           return (

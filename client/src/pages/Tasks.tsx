@@ -20,6 +20,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertTaskSchema } from "@shared/schema";
 import type { Task, InsertTask, Project, User, Company } from "@shared/schema";
+import { useTableSort, SortConfig } from "@/hooks/useTableSort";
+import { SortableTableHead } from "@/components/SortableHeader";
 import { z } from "zod";
 import { 
   Plus,
@@ -477,6 +479,42 @@ export default function Tasks() {
     return matchesSearch && matchesStatus && matchesPriority && matchesProject && matchesAssignee && matchesCompany;
   }) || [];
 
+  // Sorting configuration
+  const sortConfigs: SortConfig[] = [
+    { key: 'title', type: 'string' },
+    {
+      key: 'status',
+      type: 'custom',
+      customOrder: { todo: 0, in_progress: 1, blocked: 2, review: 3, completed: 4 }
+    },
+    {
+      key: 'priority',
+      type: 'custom',
+      customOrder: { low: 0, medium: 1, high: 2 }
+    },
+    {
+      key: 'project',
+      type: 'string',
+      accessor: (task: Task) => projects?.find(p => p.id === task.projectId)?.name || ''
+    },
+    {
+      key: 'assignee',
+      type: 'string',
+      accessor: (task: Task) => {
+        const user = users?.find(u => u.id === task.assignedTo);
+        return user ? `${user.firstName} ${user.lastName}` : '';
+      }
+    },
+    { key: 'dueDate', type: 'date' },
+    {
+      key: 'hours',
+      type: 'number',
+      accessor: (task: Task) => parseFloat(task.actualHours?.toString() || '0')
+    }
+  ];
+
+  const { sortedData: sortedTasks, sortState, handleSort } = useTableSort(filteredTasks, sortConfigs);
+
   // Calculate stats
   const totalTasks = tasks?.length || 0;
   const activeTasks = tasks?.filter(t => t.status !== "completed").length || 0;
@@ -699,18 +737,67 @@ export default function Tasks() {
             <TableComponent>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Task</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Priority</TableHead>
-                  <TableHead>Project</TableHead>
-                  <TableHead>Assignee</TableHead>
-                  <TableHead>Due Date</TableHead>
-                  <TableHead>Hours</TableHead>
-                  <TableHead className="w-[50px]">Actions</TableHead>
+                  <SortableTableHead
+                    column="title"
+                    currentSort={sortState.column}
+                    direction={sortState.direction}
+                    onSort={handleSort}
+                  >
+                    Task
+                  </SortableTableHead>
+                  <SortableTableHead
+                    column="status"
+                    currentSort={sortState.column}
+                    direction={sortState.direction}
+                    onSort={handleSort}
+                  >
+                    Status
+                  </SortableTableHead>
+                  <SortableTableHead
+                    column="priority"
+                    currentSort={sortState.column}
+                    direction={sortState.direction}
+                    onSort={handleSort}
+                  >
+                    Priority
+                  </SortableTableHead>
+                  <SortableTableHead
+                    column="project"
+                    currentSort={sortState.column}
+                    direction={sortState.direction}
+                    onSort={handleSort}
+                  >
+                    Project
+                  </SortableTableHead>
+                  <SortableTableHead
+                    column="assignee"
+                    currentSort={sortState.column}
+                    direction={sortState.direction}
+                    onSort={handleSort}
+                  >
+                    Assignee
+                  </SortableTableHead>
+                  <SortableTableHead
+                    column="dueDate"
+                    currentSort={sortState.column}
+                    direction={sortState.direction}
+                    onSort={handleSort}
+                  >
+                    Due Date
+                  </SortableTableHead>
+                  <SortableTableHead
+                    column="hours"
+                    currentSort={sortState.column}
+                    direction={sortState.direction}
+                    onSort={handleSort}
+                  >
+                    Hours
+                  </SortableTableHead>
+                  <th className="w-[50px] p-2">Actions</th>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredTasks.map((task) => (
+                {sortedTasks.map((task) => (
                   <TableRow key={task.id} className={isOverdue(task.dueDate) && task.status !== "completed" ? "bg-red-50 dark:bg-red-950" : ""}>
                     <TableCell>
                       <div>

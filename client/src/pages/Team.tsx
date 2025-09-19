@@ -20,6 +20,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { createInsertSchema } from "drizzle-zod";
 import { users } from "@shared/schema";
 import type { Task, User, Project } from "@shared/schema";
+import { useTableSort, SortConfig } from "@/hooks/useTableSort";
+import { SortableTableHead } from "@/components/SortableHeader";
 import {
   Plus,
   Search,
@@ -284,6 +286,35 @@ export default function Team() {
            department.includes(searchLower) ||
            email.includes(searchLower);
   });
+
+  // Sorting configuration
+  const sortConfigs: SortConfig[] = [
+    {
+      key: 'name',
+      type: 'string',
+      accessor: (member: User) => getUserDisplayName(member)
+    },
+    { key: 'role', type: 'string' },
+    { key: 'department', type: 'string' },
+    {
+      key: 'contact',
+      type: 'string',
+      accessor: (member: User) => member.email || member.phone || ''
+    },
+    {
+      key: 'tasks',
+      type: 'number',
+      accessor: (member: User) => getMemberTasks(member.id).filter(t => t.status !== 'completed').length
+    },
+    {
+      key: 'status',
+      type: 'custom',
+      customOrder: { true: 0, false: 1 },
+      accessor: (member: User) => member.isActive?.toString() || 'false'
+    }
+  ];
+
+  const { sortedData: sortedMembers, sortState, handleSort } = useTableSort(filteredMembers, sortConfigs);
 
   const openDetailsDialog = (member: User) => {
     setSelectedMember(member);
@@ -720,17 +751,59 @@ export default function Team() {
               <TableComponent>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Member</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Department</TableHead>
-                    <TableHead>Contact</TableHead>
-                    <TableHead>Tasks</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="w-[100px]">Actions</TableHead>
+                    <SortableTableHead
+                      column="name"
+                      currentSort={sortState.column}
+                      direction={sortState.direction}
+                      onSort={handleSort}
+                    >
+                      Member
+                    </SortableTableHead>
+                    <SortableTableHead
+                      column="role"
+                      currentSort={sortState.column}
+                      direction={sortState.direction}
+                      onSort={handleSort}
+                    >
+                      Role
+                    </SortableTableHead>
+                    <SortableTableHead
+                      column="department"
+                      currentSort={sortState.column}
+                      direction={sortState.direction}
+                      onSort={handleSort}
+                    >
+                      Department
+                    </SortableTableHead>
+                    <SortableTableHead
+                      column="contact"
+                      currentSort={sortState.column}
+                      direction={sortState.direction}
+                      onSort={handleSort}
+                    >
+                      Contact
+                    </SortableTableHead>
+                    <SortableTableHead
+                      column="tasks"
+                      currentSort={sortState.column}
+                      direction={sortState.direction}
+                      onSort={handleSort}
+                    >
+                      Tasks
+                    </SortableTableHead>
+                    <SortableTableHead
+                      column="status"
+                      currentSort={sortState.column}
+                      direction={sortState.direction}
+                      onSort={handleSort}
+                    >
+                      Status
+                    </SortableTableHead>
+                    <th className="w-[100px] p-2">Actions</th>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredMembers.map((member, index) => {
+                  {sortedMembers.map((member, index) => {
                     const memberTasks = getMemberTasks(member.id);
                     const activeTasks = memberTasks.filter(task => task.status !== 'completed');
                     const completedTasks = memberTasks.filter(task => task.status === 'completed');

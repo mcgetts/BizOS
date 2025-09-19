@@ -316,11 +316,7 @@ function CompanyForm({ company, onSuccess }: { company?: Company; onSuccess: () 
       const response = await fetch("/api/companies", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...data,
-          foundedYear: data.foundedYear ? parseInt(data.foundedYear) : null,
-          revenue: data.revenue || null,
-        }),
+        body: JSON.stringify(data),
       });
       if (!response.ok) throw new Error("Failed to create company");
       return response.json();
@@ -340,11 +336,7 @@ function CompanyForm({ company, onSuccess }: { company?: Company; onSuccess: () 
       const response = await fetch(`/api/companies/${company!.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...data,
-          foundedYear: data.foundedYear ? parseInt(data.foundedYear) : null,
-          revenue: data.revenue || null,
-        }),
+        body: JSON.stringify(data),
       });
       if (!response.ok) throw new Error("Failed to update company");
       return response.json();

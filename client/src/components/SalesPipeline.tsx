@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
-import { DollarSign, Calendar, User, Building2, MoreVertical, MoreHorizontal, Plus, AlertCircle, Eye, Edit, Trash2 } from "lucide-react";
+import { DollarSign, Calendar, User, Building2, MoreVertical, MoreHorizontal, Plus, AlertCircle, Eye, Edit, Trash2, ChevronUp, ChevronDown } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -126,6 +126,9 @@ const priorityColors = {
   high: "bg-red-100 dark:bg-red-800 text-red-800 dark:text-red-100",
 };
 
+type SortColumn = "title" | "company" | "stage" | "value" | "probability" | "closeDate" | "priority";
+type SortDirection = "asc" | "desc" | null;
+
 export function SalesPipeline() {
   const [viewMode, setViewMode] = useState<"kanban" | "table">("kanban");
   const [localOpportunities, setLocalOpportunities] = useState<SalesOpportunity[]>([]);
@@ -135,6 +138,8 @@ export function SalesPipeline() {
   const [selectedOpportunity, setSelectedOpportunity] = useState<SalesOpportunity | null>(null);
   const [dragError, setDragError] = useState<string | null>(null);
   const [isOptimisticUpdate, setIsOptimisticUpdate] = useState(false);
+  const [sortColumn, setSortColumn] = useState<SortColumn | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(null);
   const [editForm, setEditForm] = useState<CreateOpportunityForm>({
     title: "",
     description: "",
@@ -163,6 +168,7 @@ export function SalesPipeline() {
     priority: "medium",
     tags: [],
   });
+
 
   const { data: opportunities, isLoading } = useQuery<SalesOpportunity[]>({
     queryKey: ["/api/opportunities"],
@@ -302,11 +308,18 @@ export function SalesPipeline() {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-    });
+    try {
+      if (!dateString) return "No date";
+      return new Date(dateString).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      });
+    } catch (error) {
+      console.warn("Invalid date format:", dateString);
+      return "Invalid date";
+    }
   };
+
 
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -407,6 +420,98 @@ export function SalesPipeline() {
   }
 
   const organizedOpportunities = organizeByStage(localOpportunities);
+
+  const handleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      // Toggle through: asc -> desc -> null
+      if (sortDirection === "asc") {
+        setSortDirection("desc");
+      } else if (sortDirection === "desc") {
+        setSortDirection(null);
+        setSortColumn(null);
+      } else {
+        setSortDirection("asc");
+      }
+    } else {
+      setSortColumn(column);
+      setSortDirection("asc");
+    }
+  };
+
+  const getSortedOpportunities = (opportunities: SalesOpportunity[]) => {
+    if (!sortColumn || !sortDirection) {
+      return opportunities;
+    }
+
+    return [...opportunities].sort((a, b) => {
+      let aValue: any;
+      let bValue: any;
+
+      switch (sortColumn) {
+        case "title":
+          aValue = a.title?.toLowerCase() || "";
+          bValue = b.title?.toLowerCase() || "";
+          break;
+        case "company":
+          aValue = a.company?.name?.toLowerCase() || "";
+          bValue = b.company?.name?.toLowerCase() || "";
+          break;
+        case "stage":
+          // Custom stage order
+          const stageOrder = { lead: 0, qualified: 1, proposal: 2, negotiation: 3, closed_won: 4, closed_lost: 5 };
+          aValue = stageOrder[a.stage as keyof typeof stageOrder] ?? 999;
+          bValue = stageOrder[b.stage as keyof typeof stageOrder] ?? 999;
+          break;
+        case "value":
+          aValue = parseFloat(a.value || "0");
+          bValue = parseFloat(b.value || "0");
+          break;
+        case "probability":
+          aValue = a.probability || 0;
+          bValue = b.probability || 0;
+          break;
+        case "closeDate":
+          aValue = new Date(a.expectedCloseDate).getTime();
+          bValue = new Date(b.expectedCloseDate).getTime();
+          break;
+        case "priority":
+          // Custom priority order
+          const priorityOrder = { low: 0, medium: 1, high: 2 };
+          aValue = priorityOrder[a.priority as keyof typeof priorityOrder] ?? 999;
+          bValue = priorityOrder[b.priority as keyof typeof priorityOrder] ?? 999;
+          break;
+        default:
+          return 0;
+      }
+
+      if (aValue < bValue) {
+        return sortDirection === "asc" ? -1 : 1;
+      }
+      if (aValue > bValue) {
+        return sortDirection === "asc" ? 1 : -1;
+      }
+      return 0;
+    });
+  };
+
+  const SortableHeader = ({ column, children }: { column: SortColumn; children: React.ReactNode }) => (
+    <th
+      className="text-left p-4 font-medium text-gray-900 dark:text-gray-100 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 select-none"
+      onClick={() => handleSort(column)}
+    >
+      <div className="flex items-center space-x-1">
+        <span>{children}</span>
+        <div className="flex flex-col">
+          <ChevronUp
+            className={`w-3 h-3 ${sortColumn === column && sortDirection === "asc" ? "text-blue-600" : "text-gray-300"}`}
+          />
+          <ChevronDown
+            className={`w-3 h-3 -mt-1 ${sortColumn === column && sortDirection === "desc" ? "text-blue-600" : "text-gray-300"}`}
+          />
+        </div>
+      </div>
+    </th>
+  );
 
   const handleDragEnd = (result: any) => {
     const { destination, source, draggableId } = result;
@@ -697,100 +802,141 @@ export function SalesPipeline() {
   );
 
   if (viewMode === "table") {
+    // Apply sorting to the opportunities
+    const sortedOpportunities = getSortedOpportunities(localOpportunities);
+
+    // Debug logging
+    console.log("Table view - localOpportunities:", localOpportunities.length);
+    console.log("Table view - sortedOpportunities:", sortedOpportunities.length);
+
     return (
       <div className="space-y-4">
         {header}
+
+
+        {/* Results Summary */}
+        <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
+          <span>
+            Showing {sortedOpportunities.length} opportunities {sortColumn && sortDirection && (
+              <span className="text-blue-600">
+                (sorted by {sortColumn} {sortDirection === "asc" ? "↑" : "↓"})
+              </span>
+            )}
+          </span>
+          <span>
+            Total Value: {formatCurrency(sortedOpportunities.reduce((sum, opp) => sum + parseFloat(opp.value || "0"), 0))}
+          </span>
+        </div>
 
         <div className="border rounded-lg overflow-hidden">
           <div className="max-h-96 overflow-y-auto">
             <table className="w-full">
               <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0">
                 <tr>
-                  <th className="text-left p-4 font-medium text-gray-900 dark:text-gray-100">Opportunity</th>
-                  <th className="text-left p-4 font-medium text-gray-900 dark:text-gray-100">Company</th>
-                  <th className="text-left p-4 font-medium text-gray-900 dark:text-gray-100">Stage</th>
-                  <th className="text-left p-4 font-medium text-gray-900 dark:text-gray-100">Value</th>
-                  <th className="text-left p-4 font-medium text-gray-900 dark:text-gray-100">Probability</th>
-                  <th className="text-left p-4 font-medium text-gray-900 dark:text-gray-100">Close Date</th>
-                  <th className="text-left p-4 font-medium text-gray-900 dark:text-gray-100">Priority</th>
+                  <SortableHeader column="title">Opportunity</SortableHeader>
+                  <SortableHeader column="company">Company</SortableHeader>
+                  <SortableHeader column="stage">Stage</SortableHeader>
+                  <SortableHeader column="value">Value</SortableHeader>
+                  <SortableHeader column="probability">Probability</SortableHeader>
+                  <SortableHeader column="closeDate">Close Date</SortableHeader>
+                  <SortableHeader column="priority">Priority</SortableHeader>
                   <th className="text-left p-4 font-medium text-gray-900 dark:text-gray-100 w-[100px]">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {localOpportunities?.map((opportunity) => (
-                <tr key={opportunity.id} className="border-t hover:bg-gray-50 dark:hover:bg-gray-700">
-                  <td className="p-4">
-                    <div
-                      className="font-medium cursor-pointer hover:text-blue-600 hover:underline"
-                      onClick={() => handleViewDetails(opportunity)}
-                    >
-                      {opportunity.title}
-                    </div>
-                    <div className="text-sm text-gray-500">{opportunity.description}</div>
-                  </td>
-                  <td className="p-4">
-                    <div className="flex items-center space-x-2">
-                      <Building2 className="w-4 h-4 text-gray-400" />
-                      <span>{opportunity.company?.name}</span>
-                    </div>
-                  </td>
-                  <td className="p-4">
-                    <Badge variant="outline">
-                      {stageConfig.find(s => s.key === opportunity.stage)?.label}
-                    </Badge>
-                  </td>
-                  <td className="p-4 font-medium">
-                    {formatCurrency(parseFloat(opportunity.value))}
-                  </td>
-                  <td className="p-4">{opportunity.probability}%</td>
-                  <td className="p-4">{formatDate(opportunity.expectedCloseDate)}</td>
-                  <td className="p-4">
-                    <Badge
-                      className={priorityColors[opportunity.priority as keyof typeof priorityColors]}
-                      variant="outline"
-                    >
-                      {opportunity.priority}
-                    </Badge>
-                  </td>
-                  <td className="p-4">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0"
-                          onClick={(e) => e.stopPropagation()}
+                {sortedOpportunities.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="p-8 text-center text-gray-500 dark:text-gray-400">
+                      No opportunities found.
+                    </td>
+                  </tr>
+                ) : (
+                  sortedOpportunities.map((opportunity) => {
+                    // Safety checks
+                    if (!opportunity || !opportunity.id) {
+                      console.warn("Invalid opportunity data:", opportunity);
+                      return null;
+                    }
+
+                    return (
+                    <tr key={opportunity.id} className="border-t hover:bg-gray-50 dark:hover:bg-gray-700">
+                      <td className="p-4">
+                        <div
+                          className="font-medium cursor-pointer hover:text-blue-600 hover:underline"
+                          onClick={() => handleViewDetails(opportunity)}
                         >
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleViewDetails(opportunity)}>
-                          <Eye className="w-4 h-4 mr-2" />
-                          View
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleEdit(opportunity)}>
-                          <Edit className="w-4 h-4 mr-2" />
-                          Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => handleDelete(opportunity)}
-                          className="text-red-600 focus:text-red-600"
+                          {opportunity.title}
+                        </div>
+                        <div className="text-sm text-gray-500">{opportunity.description}</div>
+                      </td>
+                      <td className="p-4">
+                        <div className="flex items-center space-x-2">
+                          <Building2 className="w-4 h-4 text-gray-400" />
+                          <span>{opportunity.company?.name || "No Company"}</span>
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <Badge
+                          className={stageConfig.find(s => s.key === opportunity.stage)?.color}
+                          variant="outline"
                         >
-                          <Trash2 className="w-4 h-4 mr-2" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </td>
-                </tr>
-              ))}
+                          {stageConfig.find(s => s.key === opportunity.stage)?.label}
+                        </Badge>
+                      </td>
+                      <td className="p-4 font-medium">
+                        {formatCurrency(parseFloat(opportunity.value || "0"))}
+                      </td>
+                      <td className="p-4">{opportunity.probability}%</td>
+                      <td className="p-4">{formatDate(opportunity.expectedCloseDate)}</td>
+                      <td className="p-4">
+                        <Badge
+                          className={priorityColors[opportunity.priority as keyof typeof priorityColors]}
+                          variant="outline"
+                        >
+                          {opportunity.priority}
+                        </Badge>
+                      </td>
+                      <td className="p-4">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleViewDetails(opportunity)}>
+                              <Eye className="w-4 h-4 mr-2" />
+                              View
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleEdit(opportunity)}>
+                              <Edit className="w-4 h-4 mr-2" />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handleDelete(opportunity)}
+                              className="text-red-600 focus:text-red-600"
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </td>
+                    </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
-          {localOpportunities && localOpportunities.length > 10 && (
+          {sortedOpportunities.length > 10 && (
             <div className="text-center text-xs text-gray-500 dark:text-gray-400 py-2 border-t border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800">
-              Showing {Math.min(10, localOpportunities.length)} of {localOpportunities.length} opportunities - scroll to see all
+              Showing {Math.min(10, sortedOpportunities.length)} of {sortedOpportunities.length} opportunities - scroll to see all
             </div>
           )}
         </div>
@@ -833,7 +979,10 @@ export function SalesPipeline() {
                 <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label className="font-medium">Stage</Label>
-                    <Badge variant="outline">
+                    <Badge
+                      className={stageConfig.find(s => s.key === selectedOpportunity.stage)?.color}
+                      variant="outline"
+                    >
                       {stageConfig.find(s => s.key === selectedOpportunity.stage)?.label}
                     </Badge>
                   </div>
@@ -1343,7 +1492,10 @@ export function SalesPipeline() {
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label className="font-medium">Stage</Label>
-                  <Badge variant="outline">
+                  <Badge
+                    className={stageConfig.find(s => s.key === selectedOpportunity.stage)?.color}
+                    variant="outline"
+                  >
                     {stageConfig.find(s => s.key === selectedOpportunity.stage)?.label}
                   </Badge>
                 </div>

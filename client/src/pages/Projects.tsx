@@ -21,6 +21,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertProjectSchema } from "@shared/schema";
 import type { Project, InsertProject, Client, User, Task } from "@shared/schema";
+import { useTableSort, SortConfig } from "@/hooks/useTableSort";
+import { SortableHeader } from "@/components/SortableHeader";
 import { z } from "zod";
 import {
   Plus,
@@ -604,6 +606,36 @@ export default function Projects() {
     return matchesSearch && matchesStatus && matchesPriority;
   }) || [];
 
+  // Sorting configuration
+  const sortConfigs: SortConfig[] = [
+    { key: 'name', type: 'string' },
+    {
+      key: 'client',
+      type: 'string',
+      accessor: (project: any) => clients?.find(c => c.id === project.clientId)?.name || ''
+    },
+    {
+      key: 'company',
+      type: 'string',
+      accessor: (project: any) => companies?.find(c => c.id === (project as any).companyId)?.name || ''
+    },
+    { key: 'progress', type: 'number' },
+    {
+      key: 'status',
+      type: 'custom',
+      customOrder: { planning: 0, active: 1, review: 2, paused: 3, on_hold: 3, completed: 4, cancelled: 5 }
+    },
+    {
+      key: 'priority',
+      type: 'custom',
+      customOrder: { low: 0, medium: 1, high: 2, urgent: 3 }
+    },
+    { key: 'budget', type: 'number' },
+    { key: 'endDate', type: 'date' }
+  ];
+
+  const { sortedData: sortedProjects, sortState, handleSort } = useTableSort(filteredProjects, sortConfigs);
+
   const groupProjectsByStatus = () => {
     // Exclude cancelled status from Kanban view
     const statuses = ["planning", "active", "review", "paused", "completed"];
@@ -955,19 +987,75 @@ export default function Projects() {
                 <table className="w-full" data-testid="table-projects">
                   <thead>
                     <tr className="border-b border-border">
-                      <th className="text-left text-sm font-medium text-muted-foreground py-3">Project</th>
-                      <th className="text-left text-sm font-medium text-muted-foreground py-3">Client</th>
-                      <th className="text-left text-sm font-medium text-muted-foreground py-3">Company</th>
-                      <th className="text-left text-sm font-medium text-muted-foreground py-3">Progress</th>
-                      <th className="text-left text-sm font-medium text-muted-foreground py-3">Status</th>
-                      <th className="text-left text-sm font-medium text-muted-foreground py-3">Priority</th>
-                      <th className="text-left text-sm font-medium text-muted-foreground py-3">Budget</th>
-                      <th className="text-left text-sm font-medium text-muted-foreground py-3">Due Date</th>
+                      <SortableHeader
+                        column="name"
+                        currentSort={sortState.column}
+                        direction={sortState.direction}
+                        onSort={handleSort}
+                      >
+                        Project
+                      </SortableHeader>
+                      <SortableHeader
+                        column="client"
+                        currentSort={sortState.column}
+                        direction={sortState.direction}
+                        onSort={handleSort}
+                      >
+                        Client
+                      </SortableHeader>
+                      <SortableHeader
+                        column="company"
+                        currentSort={sortState.column}
+                        direction={sortState.direction}
+                        onSort={handleSort}
+                      >
+                        Company
+                      </SortableHeader>
+                      <SortableHeader
+                        column="progress"
+                        currentSort={sortState.column}
+                        direction={sortState.direction}
+                        onSort={handleSort}
+                      >
+                        Progress
+                      </SortableHeader>
+                      <SortableHeader
+                        column="status"
+                        currentSort={sortState.column}
+                        direction={sortState.direction}
+                        onSort={handleSort}
+                      >
+                        Status
+                      </SortableHeader>
+                      <SortableHeader
+                        column="priority"
+                        currentSort={sortState.column}
+                        direction={sortState.direction}
+                        onSort={handleSort}
+                      >
+                        Priority
+                      </SortableHeader>
+                      <SortableHeader
+                        column="budget"
+                        currentSort={sortState.column}
+                        direction={sortState.direction}
+                        onSort={handleSort}
+                      >
+                        Budget
+                      </SortableHeader>
+                      <SortableHeader
+                        column="endDate"
+                        currentSort={sortState.column}
+                        direction={sortState.direction}
+                        onSort={handleSort}
+                      >
+                        Due Date
+                      </SortableHeader>
                       <th className="text-left text-sm font-medium text-muted-foreground py-3">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {filteredProjects.map((project: any, index: number) => {
+                    {sortedProjects.map((project: any, index: number) => {
                       const StatusIcon = getStatusIcon(project.status);
 
                       return (

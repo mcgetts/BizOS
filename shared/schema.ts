@@ -537,8 +537,11 @@ export const insertCompanySchema = createInsertSchema(companies).omit({
   createdAt: true,
   updatedAt: true,
 }).extend({
-  revenue: z.string().optional(),
-  foundedYear: z.number().optional(),
+  revenue: z.string().nullable().optional().transform((val) => val === "" || !val ? null : val),
+  foundedYear: z.union([z.string(), z.number()]).nullable().optional().transform((val) => {
+    if (!val || val === "") return null;
+    return typeof val === "string" ? parseInt(val, 10) : val;
+  }),
   tags: z.array(z.string()).optional(),
 });
 
