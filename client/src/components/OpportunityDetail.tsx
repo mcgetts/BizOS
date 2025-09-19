@@ -109,24 +109,55 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
   const [isAddingStakeholder, setIsAddingStakeholder] = useState(false);
 
   // Fetch next steps
-  const { data: nextSteps = [] } = useQuery({
+  const { data: nextStepsData = [] } = useQuery({
     queryKey: [`/api/opportunities/${opportunity.id}/next-steps`],
     queryFn: () => apiRequest("GET", `/api/opportunities/${opportunity.id}/next-steps`),
     enabled: isOpen,
   });
+  const nextSteps = Array.isArray(nextStepsData) ? nextStepsData : [];
 
   // Fetch communications
-  const { data: communications = [] } = useQuery({
+  const { data: communicationsData = [] } = useQuery({
     queryKey: [`/api/opportunities/${opportunity.id}/communications`],
     queryFn: () => apiRequest("GET", `/api/opportunities/${opportunity.id}/communications`),
     enabled: isOpen,
   });
+  const communications = Array.isArray(communicationsData) ? communicationsData : [];
 
   // Fetch stakeholders
-  const { data: stakeholders = [] } = useQuery({
+  const { data: stakeholdersData = [] } = useQuery({
     queryKey: [`/api/opportunities/${opportunity.id}/stakeholders`],
     queryFn: () => apiRequest("GET", `/api/opportunities/${opportunity.id}/stakeholders`),
     enabled: isOpen,
+  });
+  const stakeholders = Array.isArray(stakeholdersData) ? stakeholdersData : [];
+
+  // Create mutations for deletions
+  const deleteNextStepMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/opportunities/${opportunity.id}/next-steps/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: [`/api/opportunities/${opportunity.id}/next-steps`]
+      });
+    },
+  });
+
+  const deleteCommunicationMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/opportunities/${opportunity.id}/communications/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: [`/api/opportunities/${opportunity.id}/communications`]
+      });
+    },
+  });
+
+  const deleteStakeholderMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/opportunities/${opportunity.id}/stakeholders/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: [`/api/opportunities/${opportunity.id}/stakeholders`]
+      });
+    },
   });
 
   const priorityColors = {
