@@ -727,6 +727,13 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertClient = z.infer<typeof insertClientSchema>;
 export type Client = typeof clients.$inferSelect;
+export type ClientWithCompany = Omit<Client, 'company'> & {
+  company: {
+    id: string;
+    name: string;
+    industry: string | null;
+  } | null;
+};
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 export type Project = typeof projects.$inferSelect;
 export type InsertTask = z.infer<typeof insertTaskSchema>;

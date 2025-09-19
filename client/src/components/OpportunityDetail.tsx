@@ -50,7 +50,7 @@ type SalesOpportunity = {
   decisionProcess?: string;
   createdAt: string;
   company?: { id: string; name: string; };
-  contact?: { id: string; name: string; email?: string; };
+  contact?: { id: string; name: string; email?: string | null; phone?: string | null; position?: string | null; };
   assignedUser?: { id: string; firstName: string; lastName: string; };
 };
 
@@ -160,6 +160,46 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
     },
   });
 
+  // Create mutations
+  const createNextStepMutation = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", `/api/opportunities/${opportunity.id}/next-steps`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: [`/api/opportunities/${opportunity.id}/next-steps`]
+      });
+      setIsAddingNextStep(false);
+      // Reset form by getting the form element and resetting it
+      const form = document.querySelector('#next-step-form') as HTMLFormElement;
+      if (form) form.reset();
+    },
+  });
+
+  const createCommunicationMutation = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", `/api/opportunities/${opportunity.id}/communications`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: [`/api/opportunities/${opportunity.id}/communications`]
+      });
+      setIsAddingCommunication(false);
+      // Reset form by getting the form element and resetting it
+      const form = document.querySelector('#communication-form') as HTMLFormElement;
+      if (form) form.reset();
+    },
+  });
+
+  const createStakeholderMutation = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", `/api/opportunities/${opportunity.id}/stakeholders`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: [`/api/opportunities/${opportunity.id}/stakeholders`]
+      });
+      setIsAddingStakeholder(false);
+      // Reset form by getting the form element and resetting it
+      const form = document.querySelector('#stakeholder-form') as HTMLFormElement;
+      if (form) form.reset();
+    },
+  });
+
   const priorityColors = {
     low: "bg-gray-100 text-gray-800",
     medium: "bg-blue-100 text-blue-800",
@@ -192,9 +232,62 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
     }
   };
 
+  // Form handlers
+  const handleAddNextStep = (e: React.FormEvent) => {
+    e.preventDefault();
+    const form = e.target as HTMLFormElement;
+    const formData = new FormData(form);
+
+    const dueDateValue = formData.get('dueDate') as string;
+    const dueDate = dueDateValue ? new Date(dueDateValue).toISOString() : null;
+
+    createNextStepMutation.mutate({
+      title: formData.get('title'),
+      description: formData.get('description'),
+      assignedTo: formData.get('assignedTo') || null,
+      dueDate,
+      priority: formData.get('priority') || 'medium',
+      status: 'pending'
+    });
+  };
+
+  const handleAddCommunication = (e: React.FormEvent) => {
+    e.preventDefault();
+    const form = e.target as HTMLFormElement;
+    const formData = new FormData(form);
+
+    const commDate = formData.get('communicationDate') as string;
+    const communicationDate = commDate ? new Date(commDate).toISOString() : new Date().toISOString();
+
+    createCommunicationMutation.mutate({
+      type: formData.get('type') || 'email',
+      subject: formData.get('subject'),
+      summary: formData.get('summary'),
+      outcome: formData.get('outcome') || 'neutral',
+      communicationDate,
+      followUpRequired: formData.get('followUpRequired') === 'on'
+    });
+  };
+
+  const handleAddStakeholder = (e: React.FormEvent) => {
+    e.preventDefault();
+    const form = e.target as HTMLFormElement;
+    const formData = new FormData(form);
+
+    createStakeholderMutation.mutate({
+      name: formData.get('name'),
+      role: formData.get('role') || 'user',
+      email: formData.get('email') || null,
+      phone: formData.get('phone') || null,
+      influence: formData.get('influence') || 'medium',
+      relationshipStrength: formData.get('relationshipStrength') || 'neutral',
+      notes: formData.get('notes') || null
+    });
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-hidden">
+      <DialogContent className="sm:max-w-[900px] max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between">
             <span>{opportunity.title}</span>
@@ -207,7 +300,7 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 overflow-hidden">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
           <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="next-steps">
@@ -229,7 +322,7 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
             <TabsTrigger value="strategy">Strategy</TabsTrigger>
           </TabsList>
 
-          <div className="mt-4 overflow-y-auto flex-1">
+          <div className="mt-4 overflow-y-auto flex-1 min-h-0">
             <TabsContent value="overview" className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <Card>
@@ -307,16 +400,76 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
                   </CardContent>
                 </Card>
               )}
+
+              {/* Action Buttons - Only on Overview Tab */}
+              <div className="flex justify-end space-x-2 pt-4 border-t">
+                <Button variant="destructive" onClick={onDelete}>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete
+                </Button>
+                <Button onClick={onEdit}>
+                  <Edit className="w-4 h-4 mr-2" />
+                  Edit
+                </Button>
+              </div>
             </TabsContent>
 
             <TabsContent value="next-steps" className="space-y-4">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-medium">Next Steps</h3>
-                <Button onClick={() => setIsAddingNextStep(true)} size="sm">
+                <Button onClick={() => setIsAddingNextStep(!isAddingNextStep)} size="sm">
                   <Plus className="w-4 h-4 mr-2" />
-                  Add Next Step
+                  {isAddingNextStep ? 'Cancel' : 'Add Next Step'}
                 </Button>
               </div>
+
+              {isAddingNextStep && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Add Next Step</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <form id="next-step-form" onSubmit={handleAddNextStep} className="space-y-4">
+                      <div>
+                        <Label htmlFor="title">Title *</Label>
+                        <Input name="title" required placeholder="e.g., Follow up with decision maker" />
+                      </div>
+                      <div>
+                        <Label htmlFor="description">Description</Label>
+                        <Textarea name="description" placeholder="Additional details..." />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="priority">Priority</Label>
+                          <Select name="priority" defaultValue="medium">
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="low">Low</SelectItem>
+                              <SelectItem value="medium">Medium</SelectItem>
+                              <SelectItem value="high">High</SelectItem>
+                              <SelectItem value="urgent">Urgent</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label htmlFor="dueDate">Due Date</Label>
+                          <Input name="dueDate" type="date" />
+                        </div>
+                      </div>
+                      <div className="flex justify-end space-x-2">
+                        <Button type="button" variant="outline" onClick={() => setIsAddingNextStep(false)}>
+                          Cancel
+                        </Button>
+                        <Button type="submit" disabled={createNextStepMutation.isPending}>
+                          {createNextStepMutation.isPending ? 'Adding...' : 'Add Next Step'}
+                        </Button>
+                      </div>
+                    </form>
+                  </CardContent>
+                </Card>
+              )}
 
               <div className="space-y-3">
                 {nextSteps.map((nextStep: NextStep) => (
@@ -379,11 +532,81 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
             <TabsContent value="communications" className="space-y-4">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-medium">Communications</h3>
-                <Button onClick={() => setIsAddingCommunication(true)} size="sm">
+                <Button onClick={() => setIsAddingCommunication(!isAddingCommunication)} size="sm">
                   <Plus className="w-4 h-4 mr-2" />
-                  Log Communication
+                  {isAddingCommunication ? 'Cancel' : 'Log Communication'}
                 </Button>
               </div>
+
+              {isAddingCommunication && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Log Communication</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <form id="communication-form" onSubmit={handleAddCommunication} className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="type">Type</Label>
+                          <Select name="type" defaultValue="email">
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="call">Call</SelectItem>
+                              <SelectItem value="email">Email</SelectItem>
+                              <SelectItem value="meeting">Meeting</SelectItem>
+                              <SelectItem value="demo">Demo</SelectItem>
+                              <SelectItem value="proposal">Proposal</SelectItem>
+                              <SelectItem value="contract">Contract</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label htmlFor="outcome">Outcome</Label>
+                          <Select name="outcome" defaultValue="neutral">
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="positive">Positive</SelectItem>
+                              <SelectItem value="neutral">Neutral</SelectItem>
+                              <SelectItem value="negative">Negative</SelectItem>
+                              <SelectItem value="no_response">No Response</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div>
+                        <Label htmlFor="subject">Subject</Label>
+                        <Input name="subject" placeholder="e.g., Proposal discussion" />
+                      </div>
+                      <div>
+                        <Label htmlFor="summary">Summary</Label>
+                        <Textarea name="summary" placeholder="What was discussed or communicated..." />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="communicationDate">Date</Label>
+                          <Input name="communicationDate" type="datetime-local" defaultValue={new Date().toISOString().slice(0, 16)} />
+                        </div>
+                        <div className="flex items-center space-x-2 pt-6">
+                          <input type="checkbox" name="followUpRequired" id="followUpRequired" />
+                          <Label htmlFor="followUpRequired">Follow-up required</Label>
+                        </div>
+                      </div>
+                      <div className="flex justify-end space-x-2">
+                        <Button type="button" variant="outline" onClick={() => setIsAddingCommunication(false)}>
+                          Cancel
+                        </Button>
+                        <Button type="submit" disabled={createCommunicationMutation.isPending}>
+                          {createCommunicationMutation.isPending ? 'Logging...' : 'Log Communication'}
+                        </Button>
+                      </div>
+                    </form>
+                  </CardContent>
+                </Card>
+              )}
 
               <div className="space-y-3">
                 {communications.map((comm: Communication) => {
@@ -447,11 +670,93 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
             <TabsContent value="stakeholders" className="space-y-4">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-medium">Stakeholders</h3>
-                <Button onClick={() => setIsAddingStakeholder(true)} size="sm">
+                <Button onClick={() => setIsAddingStakeholder(!isAddingStakeholder)} size="sm">
                   <Plus className="w-4 h-4 mr-2" />
-                  Add Stakeholder
+                  {isAddingStakeholder ? 'Cancel' : 'Add Stakeholder'}
                 </Button>
               </div>
+
+              {isAddingStakeholder && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Add Stakeholder</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <form id="stakeholder-form" onSubmit={handleAddStakeholder} className="space-y-4">
+                      <div>
+                        <Label htmlFor="name">Name *</Label>
+                        <Input name="name" required placeholder="e.g., John Smith" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="role">Role</Label>
+                          <Select name="role" defaultValue="user">
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="decision_maker">Decision Maker</SelectItem>
+                              <SelectItem value="influencer">Influencer</SelectItem>
+                              <SelectItem value="user">User</SelectItem>
+                              <SelectItem value="blocker">Blocker</SelectItem>
+                              <SelectItem value="champion">Champion</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label htmlFor="influence">Influence Level</Label>
+                          <Select name="influence" defaultValue="medium">
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="low">Low</SelectItem>
+                              <SelectItem value="medium">Medium</SelectItem>
+                              <SelectItem value="high">High</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="email">Email</Label>
+                          <Input name="email" type="email" placeholder="john@company.com" />
+                        </div>
+                        <div>
+                          <Label htmlFor="phone">Phone</Label>
+                          <Input name="phone" placeholder="+1 (555) 123-4567" />
+                        </div>
+                      </div>
+                      <div>
+                        <Label htmlFor="relationshipStrength">Relationship Strength</Label>
+                        <Select name="relationshipStrength" defaultValue="neutral">
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="strong">Strong</SelectItem>
+                            <SelectItem value="neutral">Neutral</SelectItem>
+                            <SelectItem value="weak">Weak</SelectItem>
+                            <SelectItem value="unknown">Unknown</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="notes">Notes</Label>
+                        <Textarea name="notes" placeholder="Additional information about this stakeholder..." />
+                      </div>
+                      <div className="flex justify-end space-x-2">
+                        <Button type="button" variant="outline" onClick={() => setIsAddingStakeholder(false)}>
+                          Cancel
+                        </Button>
+                        <Button type="submit" disabled={createStakeholderMutation.isPending}>
+                          {createStakeholderMutation.isPending ? 'Adding...' : 'Add Stakeholder'}
+                        </Button>
+                      </div>
+                    </form>
+                  </CardContent>
+                </Card>
+              )}
 
               <div className="grid gap-3">
                 {stakeholders.map((stakeholder: Stakeholder) => {
@@ -598,20 +903,10 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
           </div>
         </Tabs>
 
-        <DialogFooter>
+        <DialogFooter className="border-t pt-4">
           <Button variant="outline" onClick={onClose}>
             Close
           </Button>
-          <div className="flex space-x-2">
-            <Button variant="destructive" onClick={onDelete}>
-              <Trash2 className="w-4 h-4 mr-2" />
-              Delete
-            </Button>
-            <Button onClick={onEdit}>
-              <Edit className="w-4 h-4 mr-2" />
-              Edit
-            </Button>
-          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

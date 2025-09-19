@@ -254,7 +254,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Client operations
-  async getClients(): Promise<Client[]> {
+  async getClients(): Promise<ClientWithCompany[]> {
     return await db
       .select({
         id: clients.id,
@@ -272,7 +272,11 @@ export class DatabaseStorage implements IStorage {
         tags: clients.tags,
         isActive: clients.isActive,
         // Legacy fields
-        company: clients.company,
+        company: {
+          id: companies.id,
+          name: companies.name,
+          industry: companies.industry,
+        },
         industry: clients.industry,
         website: clients.website,
         address: clients.address,
@@ -282,10 +286,11 @@ export class DatabaseStorage implements IStorage {
         updatedAt: clients.updatedAt,
       })
       .from(clients)
+      .leftJoin(companies, eq(clients.companyId, companies.id))
       .orderBy(desc(clients.createdAt));
   }
 
-  async getClient(id: string): Promise<Client | undefined> {
+  async getClient(id: string): Promise<ClientWithCompany | undefined> {
     const [client] = await db
       .select({
         id: clients.id,
@@ -303,7 +308,11 @@ export class DatabaseStorage implements IStorage {
         tags: clients.tags,
         isActive: clients.isActive,
         // Legacy fields
-        company: clients.company,
+        company: {
+          id: companies.id,
+          name: companies.name,
+          industry: companies.industry,
+        },
         industry: clients.industry,
         website: clients.website,
         address: clients.address,
@@ -313,6 +322,7 @@ export class DatabaseStorage implements IStorage {
         updatedAt: clients.updatedAt,
       })
       .from(clients)
+      .leftJoin(companies, eq(clients.companyId, companies.id))
       .where(eq(clients.id, id));
     return client;
   }

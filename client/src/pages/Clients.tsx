@@ -551,9 +551,19 @@ export default function Clients() {
     }
   }, [isAuthenticated, isLoading, toast]);
 
-  const { data: clients, isLoading: clientsLoading, error } = useQuery<Client[]>({
+  // Clear cache to ensure we get the new data structure with company info
+  useEffect(() => {
+    if (isAuthenticated) {
+      queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+    }
+  }, [isAuthenticated, queryClient]);
+
+  const { data: clients, isLoading: clientsLoading, error } = useQuery<(Client & { company?: { id: string; name: string; industry: string } })[]>({
     queryKey: ["/api/clients"],
     enabled: isAuthenticated,
+    staleTime: 0,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 
   // Companies query
@@ -907,7 +917,7 @@ export default function Clients() {
                         direction={companySortState.direction}
                         onSort={handleCompanySort}
                       >
-                        Opportunities
+                        Active Opportunities
                       </SortableTableHead>
                       <SortableTableHead
                         column="projects"
@@ -915,7 +925,7 @@ export default function Clients() {
                         direction={companySortState.direction}
                         onSort={handleCompanySort}
                       >
-                        Projects
+                        Active Projects
                       </SortableTableHead>
                       <SortableTableHead
                         column="size"
@@ -1119,7 +1129,7 @@ export default function Clients() {
                           direction={clientSortState.direction}
                           onSort={handleClientSort}
                         >
-                          Opportunities
+                          Active Opportunities
                         </SortableHeader>
                         <SortableHeader
                           column="projects"
@@ -1127,7 +1137,7 @@ export default function Clients() {
                           direction={clientSortState.direction}
                           onSort={handleClientSort}
                         >
-                          Projects
+                          Active Projects
                         </SortableHeader>
                         <th className="text-left text-sm font-medium text-muted-foreground py-3">Actions</th>
                       </tr>
@@ -1144,21 +1154,13 @@ export default function Clients() {
                             </div>
                           </td>
                           <td className="py-4">
-                            <div className="flex items-center space-x-2">
-                              <Building2 className="w-4 h-4 text-blue-600" />
-                              <div>
-                                <div className="text-sm text-foreground font-medium">
-                                  {client.company?.name || 'No company'}
-                                </div>
-                              </div>
+                            <div className="text-sm text-foreground">
+                              {client.company?.name || '—'}
                             </div>
                           </td>
                           <td className="py-4">
                             <div className="text-sm text-foreground">
                               {client.position || 'Contact'}
-                              {client.department && (
-                                <div className="text-xs text-muted-foreground">{client.department}</div>
-                              )}
                             </div>
                           </td>
                           <td className="py-4">
@@ -1487,7 +1489,12 @@ export default function Clients() {
                     <label className="font-medium">Company</label>
                     <div className="flex items-center space-x-2">
                       <Building2 className="w-4 h-4 text-blue-600" />
-                      <span>{viewingClient.company.name}</span>
+                      <div>
+                        <span className="font-medium">{viewingClient.company.name}</span>
+                        {viewingClient.company.industry && (
+                          <div className="text-sm text-muted-foreground">{viewingClient.company.industry}</div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1513,6 +1520,13 @@ export default function Clients() {
                   <div className="space-y-2">
                     <label className="font-medium">Department</label>
                     <span>{viewingClient.department}</span>
+                  </div>
+                )}
+
+                {viewingClient.source && (
+                  <div className="space-y-2">
+                    <label className="font-medium">Source</label>
+                    <span className="capitalize">{viewingClient.source}</span>
                   </div>
                 )}
 

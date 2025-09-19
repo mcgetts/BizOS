@@ -653,12 +653,12 @@ export default function Projects() {
       if (statusItem.key === "active") {
         // Only include "active" status projects
         acc[statusItem.key] = filteredProjects.filter(project =>
-          project.status === "active" && project.status !== "cancelled"
+          project.status === "active"
         );
       } else if (statusItem.key === "paused") {
         // Include both "paused" and "on_hold" in the paused column
         acc[statusItem.key] = filteredProjects.filter(project =>
-          (project.status === "paused" || project.status === "on_hold") && project.status !== "cancelled"
+          (project.status === "paused" || project.status === "on_hold")
         );
       } else {
         acc[statusItem.key] = filteredProjects.filter(project => project.status === statusItem.key && project.status !== "cancelled");
@@ -1211,7 +1211,7 @@ export default function Projects() {
                   <div>
                     <label className="text-sm font-medium text-muted-foreground">Status</label>
                     <Badge className={getStatusColor(viewingProject.status || '')} variant="outline">
-                      {viewingProject.status?.charAt(0).toUpperCase() + viewingProject.status?.slice(1)}
+                      {viewingProject.status ? viewingProject.status.charAt(0).toUpperCase() + viewingProject.status.slice(1) : 'Unknown'}
                     </Badge>
                   </div>
                   <div>

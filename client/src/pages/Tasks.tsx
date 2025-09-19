@@ -1038,13 +1038,13 @@ export default function Tasks() {
                   <div>
                     <label className="text-sm font-medium text-muted-foreground">Status</label>
                     <Badge className={getStatusBadge(viewingTask.status || 'todo')} variant="outline">
-                      {viewingTask.status?.charAt(0).toUpperCase() + viewingTask.status?.slice(1) || 'To Do'}
+                      {viewingTask.status ? viewingTask.status.charAt(0).toUpperCase() + viewingTask.status.slice(1) : 'To Do'}
                     </Badge>
                   </div>
                   <div>
                     <label className="text-sm font-medium text-muted-foreground">Priority</label>
                     <Badge className={`mt-1 ${getPriorityBadge(viewingTask.priority || 'medium')}`}>
-                      {viewingTask.priority?.charAt(0).toUpperCase() + viewingTask.priority?.slice(1) || 'Medium'}
+                      {viewingTask.priority ? viewingTask.priority.charAt(0).toUpperCase() + viewingTask.priority.slice(1) : 'Medium'}
                     </Badge>
                   </div>
                 </div>
@@ -1085,9 +1085,9 @@ export default function Tasks() {
                     </div>
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-muted-foreground">Company</label>
+                    <label className="text-sm font-medium text-muted-foreground">Project</label>
                     <div className="text-sm mt-1">
-                      {getCompanyName(viewingTask.companyId) || 'No company'}
+                      {viewingTask.projectId ? getProjectName(viewingTask.projectId) : 'No project'}
                     </div>
                   </div>
                 </div>

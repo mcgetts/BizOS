@@ -268,6 +268,11 @@ export function SalesPipeline() {
         source: "",
         priority: "medium",
         tags: [],
+        painPoints: [],
+        successCriteria: [],
+        budget: "",
+        budgetStatus: "",
+        decisionProcess: "",
       });
     },
     onError: (error) => {

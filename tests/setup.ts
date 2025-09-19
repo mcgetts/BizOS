@@ -1,9 +1,10 @@
 import { beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { db } from '@server/db';
 import {
-  users, clients, projects, tasks, invoices, expenses,
+  users, clients, companies, projects, tasks, invoices, expenses,
   knowledgeArticles, marketingCampaigns, supportTickets,
-  timeEntries, clientInteractions, documents
+  timeEntries, clientInteractions, documents, salesOpportunities,
+  opportunityNextSteps, opportunityCommunications, opportunityStakeholders
 } from '@shared/schema';
 
 // Test database cleanup utilities
@@ -19,7 +20,15 @@ export async function cleanupDatabase() {
   await db.delete(invoices);
   await db.delete(tasks);
   await db.delete(projects);
+
+  // Clean up opportunity-related tables first (in dependency order)
+  await db.delete(opportunityNextSteps);
+  await db.delete(opportunityCommunications);
+  await db.delete(opportunityStakeholders);
+  await db.delete(salesOpportunities);
+
   await db.delete(clients);
+  await db.delete(companies);
   // Note: Keep users for authentication tests
 }
 

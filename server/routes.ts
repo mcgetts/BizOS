@@ -283,7 +283,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const variable = await storage.createSystemVariable({
         ...req.body,
-        updatedBy: req.user.claims.sub,
+        updatedBy: (req.user as any)?.claims?.sub,
       });
       res.status(201).json(variable);
     } catch (error) {
@@ -296,7 +296,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const variable = await storage.updateSystemVariable(req.params.key, {
         ...req.body,
-        updatedBy: req.user.claims.sub,
+        updatedBy: (req.user as any)?.claims?.sub,
       });
       res.json(variable);
     } catch (error) {
