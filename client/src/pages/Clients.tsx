@@ -644,20 +644,39 @@ export default function Clients() {
               Manage customer contacts and relationships
             </p>
           </div>
-          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-            <DialogTrigger asChild>
-              <Button data-testid="button-add-client">
-                <Plus className="w-4 h-4 mr-2" />
-                Add Contact
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Add New Contact</DialogTitle>
-              </DialogHeader>
-              <ClientForm onSuccess={() => setIsAddDialogOpen(false)} companies={companies} />
-            </DialogContent>
-          </Dialog>
+          <div className="flex space-x-3">
+            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+              <DialogTrigger asChild>
+                <Button data-testid="button-add-client">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Contact
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Add New Contact</DialogTitle>
+                </DialogHeader>
+                <ClientForm onSuccess={() => setIsAddDialogOpen(false)} companies={companies} />
+              </DialogContent>
+            </Dialog>
+            <Dialog open={isAddCompanyDialogOpen} onOpenChange={setIsAddCompanyDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" data-testid="button-add-company">
+                  <Building2 className="w-4 h-4 mr-2" />
+                  Add Company
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Add New Company</DialogTitle>
+                  <DialogDescription>
+                    Add a new company to your CRM system.
+                  </DialogDescription>
+                </DialogHeader>
+                <CompanyForm onSuccess={() => setIsAddCompanyDialogOpen(false)} />
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
         {/* Search */}
