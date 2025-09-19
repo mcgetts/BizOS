@@ -944,10 +944,6 @@ export default function Projects() {
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onClick={() => setViewingProject(project)}>
-                                    <Eye className="w-4 h-4 mr-2" />
-                                    View Details
-                                  </DropdownMenuItem>
                                   <DropdownMenuItem onClick={() => setEditingProject(project)}>
                                     <Edit className="w-4 h-4 mr-2" />
                                     Edit
@@ -1132,13 +1128,6 @@ export default function Projects() {
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                  onClick={() => setViewingProject(project)}
-                                  data-testid={`button-view-${index}`}
-                                >
-                                  <Eye className="w-4 h-4 mr-2" />
-                                  View Details
-                                </DropdownMenuItem>
                                 <DropdownMenuItem
                                   onClick={() => setEditingProject(project)}
                                   data-testid={`button-edit-${index}`}

@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
+import { eq, desc } from "drizzle-orm";
 import { setupAuth, isAuthenticated, requireRole } from "./replitAuth";
 import {
   insertUserSchema,
@@ -29,6 +30,13 @@ import {
   timeEntries,
   clientInteractions,
   documents,
+  users,
+  opportunityNextSteps,
+  opportunityCommunications,
+  opportunityStakeholders,
+  insertOpportunityNextStepSchema,
+  insertOpportunityCommunicationSchema,
+  insertOpportunityStakeholderSchema,
 } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -479,6 +487,166 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting opportunity:", error);
       res.status(500).json({ message: "Failed to delete opportunity" });
+    }
+  });
+
+  // Opportunity Next Steps routes
+  app.get('/api/opportunities/:opportunityId/next-steps', isAuthenticated, async (req, res) => {
+    try {
+      const nextSteps = await db.select().from(opportunityNextSteps)
+        .where(eq(opportunityNextSteps.opportunityId, req.params.opportunityId))
+        .leftJoin(users, eq(opportunityNextSteps.assignedTo, users.id));
+      res.json(nextSteps);
+    } catch (error) {
+      console.error("Error fetching next steps:", error);
+      res.status(500).json({ message: "Failed to fetch next steps" });
+    }
+  });
+
+  app.post('/api/opportunities/:opportunityId/next-steps', isAuthenticated, async (req: any, res) => {
+    try {
+      const validatedData = insertOpportunityNextStepSchema.parse({
+        ...req.body,
+        opportunityId: req.params.opportunityId,
+        createdBy: req.user.claims.sub,
+      });
+      const nextStep = await db.insert(opportunityNextSteps).values(validatedData).returning();
+      res.status(201).json(nextStep[0]);
+    } catch (error) {
+      console.error("Error creating next step:", error);
+      res.status(400).json({ message: "Failed to create next step" });
+    }
+  });
+
+  app.put('/api/opportunities/:opportunityId/next-steps/:id', isAuthenticated, async (req, res) => {
+    try {
+      const validatedData = insertOpportunityNextStepSchema.partial().parse(req.body);
+      const nextStep = await db.update(opportunityNextSteps)
+        .set(validatedData)
+        .where(eq(opportunityNextSteps.id, req.params.id))
+        .returning();
+      res.json(nextStep[0]);
+    } catch (error) {
+      console.error("Error updating next step:", error);
+      res.status(400).json({ message: "Failed to update next step" });
+    }
+  });
+
+  app.delete('/api/opportunities/:opportunityId/next-steps/:id', isAuthenticated, async (req, res) => {
+    try {
+      await db.delete(opportunityNextSteps)
+        .where(eq(opportunityNextSteps.id, req.params.id));
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting next step:", error);
+      res.status(500).json({ message: "Failed to delete next step" });
+    }
+  });
+
+  // Opportunity Communications routes
+  app.get('/api/opportunities/:opportunityId/communications', isAuthenticated, async (req, res) => {
+    try {
+      const communications = await db.select().from(opportunityCommunications)
+        .where(eq(opportunityCommunications.opportunityId, req.params.opportunityId))
+        .leftJoin(users, eq(opportunityCommunications.recordedBy, users.id))
+        .orderBy(desc(opportunityCommunications.communicationDate));
+      res.json(communications);
+    } catch (error) {
+      console.error("Error fetching communications:", error);
+      res.status(500).json({ message: "Failed to fetch communications" });
+    }
+  });
+
+  app.post('/api/opportunities/:opportunityId/communications', isAuthenticated, async (req: any, res) => {
+    try {
+      const validatedData = insertOpportunityCommunicationSchema.parse({
+        ...req.body,
+        opportunityId: req.params.opportunityId,
+        recordedBy: req.user.claims.sub,
+      });
+      const communication = await db.insert(opportunityCommunications).values(validatedData).returning();
+      res.status(201).json(communication[0]);
+    } catch (error) {
+      console.error("Error creating communication:", error);
+      res.status(400).json({ message: "Failed to create communication" });
+    }
+  });
+
+  app.put('/api/opportunities/:opportunityId/communications/:id', isAuthenticated, async (req, res) => {
+    try {
+      const validatedData = insertOpportunityCommunicationSchema.partial().parse(req.body);
+      const communication = await db.update(opportunityCommunications)
+        .set(validatedData)
+        .where(eq(opportunityCommunications.id, req.params.id))
+        .returning();
+      res.json(communication[0]);
+    } catch (error) {
+      console.error("Error updating communication:", error);
+      res.status(400).json({ message: "Failed to update communication" });
+    }
+  });
+
+  app.delete('/api/opportunities/:opportunityId/communications/:id', isAuthenticated, async (req, res) => {
+    try {
+      await db.delete(opportunityCommunications)
+        .where(eq(opportunityCommunications.id, req.params.id));
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting communication:", error);
+      res.status(500).json({ message: "Failed to delete communication" });
+    }
+  });
+
+  // Opportunity Stakeholders routes
+  app.get('/api/opportunities/:opportunityId/stakeholders', isAuthenticated, async (req, res) => {
+    try {
+      const stakeholders = await db.select().from(opportunityStakeholders)
+        .where(eq(opportunityStakeholders.opportunityId, req.params.opportunityId))
+        .leftJoin(users, eq(opportunityStakeholders.createdBy, users.id));
+      res.json(stakeholders);
+    } catch (error) {
+      console.error("Error fetching stakeholders:", error);
+      res.status(500).json({ message: "Failed to fetch stakeholders" });
+    }
+  });
+
+  app.post('/api/opportunities/:opportunityId/stakeholders', isAuthenticated, async (req: any, res) => {
+    try {
+      const validatedData = insertOpportunityStakeholderSchema.parse({
+        ...req.body,
+        opportunityId: req.params.opportunityId,
+        createdBy: req.user.claims.sub,
+      });
+      const stakeholder = await db.insert(opportunityStakeholders).values(validatedData).returning();
+      res.status(201).json(stakeholder[0]);
+    } catch (error) {
+      console.error("Error creating stakeholder:", error);
+      res.status(400).json({ message: "Failed to create stakeholder" });
+    }
+  });
+
+  app.put('/api/opportunities/:opportunityId/stakeholders/:id', isAuthenticated, async (req, res) => {
+    try {
+      const validatedData = insertOpportunityStakeholderSchema.partial().parse(req.body);
+      const stakeholder = await db.update(opportunityStakeholders)
+        .set(validatedData)
+        .where(eq(opportunityStakeholders.id, req.params.id))
+        .returning();
+      res.json(stakeholder[0]);
+    } catch (error) {
+      console.error("Error updating stakeholder:", error);
+      res.status(400).json({ message: "Failed to update stakeholder" });
+    }
+  });
+
+  app.delete('/api/opportunities/:opportunityId/stakeholders/:id', isAuthenticated, async (req, res) => {
+    try {
+      await db.delete(opportunityStakeholders)
+        .where(eq(opportunityStakeholders.id, req.params.id));
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting stakeholder:", error);
+      res.status(500).json({ message: "Failed to delete stakeholder" });
     }
   });
 

@@ -31,6 +31,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { OpportunityDetail } from "./OpportunityDetail";
 
 type SalesOpportunity = {
   id: string;
@@ -109,6 +110,11 @@ type CreateOpportunityForm = {
   source: string;
   priority: string;
   tags: string[];
+  painPoints: string[];
+  successCriteria: string[];
+  budget: string;
+  budgetStatus: string;
+  decisionProcess: string;
 };
 
 const stageConfig = [
@@ -153,6 +159,11 @@ export function SalesPipeline() {
     source: "",
     priority: "medium",
     tags: [],
+    painPoints: [],
+    successCriteria: [],
+    budget: "",
+    budgetStatus: "",
+    decisionProcess: "",
   });
   const [createForm, setCreateForm] = useState<CreateOpportunityForm>({
     title: "",
@@ -167,6 +178,11 @@ export function SalesPipeline() {
     source: "",
     priority: "medium",
     tags: [],
+    painPoints: [],
+    successCriteria: [],
+    budget: "",
+    budgetStatus: "",
+    decisionProcess: "",
   });
 
 
@@ -373,6 +389,11 @@ export function SalesPipeline() {
       source: opportunity.source || "",
       priority: opportunity.priority,
       tags: opportunity.tags,
+      painPoints: (opportunity as any).painPoints || [],
+      successCriteria: (opportunity as any).successCriteria || [],
+      budget: (opportunity as any).budget || "",
+      budgetStatus: (opportunity as any).budgetStatus || "",
+      decisionProcess: (opportunity as any).decisionProcess || "",
     });
     setIsEditDialogOpen(true);
   };
@@ -912,10 +933,6 @@ export function SalesPipeline() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleViewDetails(opportunity)}>
-                              <Eye className="w-4 h-4 mr-2" />
-                              View
-                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleEdit(opportunity)}>
                               <Edit className="w-4 h-4 mr-2" />
                               Edit
@@ -1392,9 +1409,6 @@ export function SalesPipeline() {
                                       </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end">
-                                      <DropdownMenuItem onClick={() => handleViewDetails(opportunity)}>
-                                        View Details
-                                      </DropdownMenuItem>
                                       <DropdownMenuItem onClick={() => handleEdit(opportunity)}>
                                         Edit
                                       </DropdownMenuItem>
@@ -1457,162 +1471,22 @@ export function SalesPipeline() {
         </div>
       </DragDropContext>
 
-      {/* View Details Dialog */}
-      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-        <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader>
-            <DialogTitle>{selectedOpportunity?.title}</DialogTitle>
-            <DialogDescription>
-              Opportunity details and information
-            </DialogDescription>
-          </DialogHeader>
-          {selectedOpportunity && (
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="font-medium">Company</Label>
-                  <div className="flex items-center space-x-2">
-                    <Building2 className="w-4 h-4 text-gray-400" />
-                    <span>{selectedOpportunity.company?.name || "No company"}</span>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label className="font-medium">Value</Label>
-                  <div className="flex items-center space-x-2">
-                    <DollarSign className="w-4 h-4 text-green-600" />
-                    <span className="font-medium">{formatCurrency(parseFloat(selectedOpportunity.value))}</span>
-                  </div>
-                </div>
-              </div>
-
-              {selectedOpportunity.description && (
-                <div className="space-y-2">
-                  <Label className="font-medium">Description</Label>
-                  <p className="text-sm text-gray-600">{selectedOpportunity.description}</p>
-                </div>
-              )}
-
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label className="font-medium">Stage</Label>
-                  <Badge
-                    className={stageConfig.find(s => s.key === selectedOpportunity.stage)?.color}
-                    variant="outline"
-                  >
-                    {stageConfig.find(s => s.key === selectedOpportunity.stage)?.label}
-                  </Badge>
-                </div>
-                <div className="space-y-2">
-                  <Label className="font-medium">Priority</Label>
-                  <Badge
-                    className={priorityColors[selectedOpportunity.priority as keyof typeof priorityColors]}
-                    variant="outline"
-                  >
-                    {selectedOpportunity.priority}
-                  </Badge>
-                </div>
-                <div className="space-y-2">
-                  <Label className="font-medium">Probability</Label>
-                  <span>{selectedOpportunity.probability}%</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="font-medium">Expected Close Date</Label>
-                  <div className="flex items-center space-x-2">
-                    <Calendar className="w-4 h-4 text-gray-400" />
-                    <span>{formatDate(selectedOpportunity.expectedCloseDate)}</span>
-                  </div>
-                </div>
-                {selectedOpportunity.assignedUser && (
-                  <div className="space-y-2">
-                    <Label className="font-medium">Assigned To</Label>
-                    <div className="flex items-center space-x-2">
-                      <User className="w-4 h-4 text-gray-400" />
-                      <span>{selectedOpportunity.assignedUser.firstName} {selectedOpportunity.assignedUser.lastName}</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {selectedOpportunity.contact && (
-                <div className="space-y-2">
-                  <Label className="font-medium">Contact</Label>
-                  <div className="text-sm">
-                    <div>{selectedOpportunity.contact.name} {selectedOpportunity.contact.position && `- ${selectedOpportunity.contact.position}`}</div>
-                    <div className="text-gray-500">
-                      {selectedOpportunity.contact.email}
-                      {selectedOpportunity.company?.name && (
-                        <span className="ml-2 text-xs">at {selectedOpportunity.company.name}</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {selectedOpportunity.source && (
-                <div className="space-y-2">
-                  <Label className="font-medium">Source</Label>
-                  <span className="capitalize">{selectedOpportunity.source.replace('_', ' ')}</span>
-                </div>
-              )}
-
-              {selectedOpportunity.tags.length > 0 && (
-                <div className="space-y-2">
-                  <Label className="font-medium">Tags</Label>
-                  <div className="flex flex-wrap gap-1">
-                    {selectedOpportunity.tags.map((tag) => (
-                      <Badge key={tag} variant="secondary" className="text-xs">
-                        {tag}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-4 text-xs text-gray-500">
-                <div>
-                  <Label className="font-medium">Created</Label>
-                  <div>{new Date(selectedOpportunity.createdAt).toLocaleDateString()}</div>
-                </div>
-                <div>
-                  <Label className="font-medium">Last Updated</Label>
-                  <div>{new Date(selectedOpportunity.updatedAt).toLocaleDateString()}</div>
-                </div>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsViewDialogOpen(false)}>
-              Close
-            </Button>
-            <div className="flex space-x-2">
-              <Button
-                variant="destructive"
-                onClick={() => {
-                  if (selectedOpportunity) {
-                    setIsViewDialogOpen(false);
-                    handleDelete(selectedOpportunity);
-                  }
-                }}
-              >
-                <Trash2 className="w-4 h-4 mr-2" />
-                Delete
-              </Button>
-              <Button onClick={() => {
-                if (selectedOpportunity) {
-                  setIsViewDialogOpen(false);
-                  handleEdit(selectedOpportunity);
-                }
-              }}>
-                <Edit className="w-4 h-4 mr-2" />
-                Edit
-              </Button>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Enhanced Opportunity Detail Component */}
+      {selectedOpportunity && (
+        <OpportunityDetail
+          opportunity={selectedOpportunity}
+          isOpen={isViewDialogOpen}
+          onClose={() => setIsViewDialogOpen(false)}
+          onEdit={() => {
+            setIsViewDialogOpen(false);
+            handleEdit(selectedOpportunity);
+          }}
+          onDelete={() => {
+            setIsViewDialogOpen(false);
+            handleDelete(selectedOpportunity);
+          }}
+        />
+      )}
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>

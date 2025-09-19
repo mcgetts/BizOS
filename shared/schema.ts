@@ -59,6 +59,13 @@ export const clients = pgTable("clients", {
   notes: text("notes"),
   tags: text("tags").array(),
   isActive: boolean("is_active").default(true),
+  // Legacy fields to avoid data loss during migration
+  company: varchar("company"),
+  industry: varchar("industry"),
+  website: varchar("website"),
+  address: text("address"),
+  status: varchar("status"),
+  totalValue: decimal("total_value", { precision: 10, scale: 2 }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -303,7 +310,64 @@ export const salesOpportunities = pgTable("sales_opportunities", {
   priority: varchar("priority").default("medium"), // low, medium, high
   tags: text("tags").array(),
   notes: text("notes"),
+  painPoints: jsonb("pain_points"), // Array of client pain points/challenges
+  successCriteria: jsonb("success_criteria"), // How success will be measured
+  decisionProcess: text("decision_process"), // How decisions are made at the company
+  budget: decimal("budget", { precision: 12, scale: 2 }), // Known or estimated budget
+  budgetStatus: varchar("budget_status"), // approved, estimated, unknown, no_budget
+  competitorInfo: jsonb("competitor_info"), // Competing solutions and vendors
   lastActivityDate: timestamp("last_activity_date"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Opportunity next steps table
+export const opportunityNextSteps = pgTable("opportunity_next_steps", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  opportunityId: varchar("opportunity_id").references(() => salesOpportunities.id, { onDelete: "cascade" }),
+  title: varchar("title").notNull(),
+  description: text("description"),
+  assignedTo: varchar("assigned_to").references(() => users.id),
+  dueDate: timestamp("due_date"),
+  priority: varchar("priority").default("medium"), // low, medium, high, urgent
+  status: varchar("status").default("pending"), // pending, in_progress, completed, cancelled
+  completedAt: timestamp("completed_at"),
+  completedBy: varchar("completed_by").references(() => users.id),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Opportunity communications table
+export const opportunityCommunications = pgTable("opportunity_communications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  opportunityId: varchar("opportunity_id").references(() => salesOpportunities.id, { onDelete: "cascade" }),
+  type: varchar("type").notNull(), // call, email, meeting, demo, proposal, contract
+  subject: varchar("subject"),
+  summary: text("summary"),
+  outcome: varchar("outcome"), // positive, neutral, negative, no_response
+  attendees: text("attendees").array(), // Contact names/emails who attended
+  followUpRequired: boolean("follow_up_required").default(false),
+  followUpDate: timestamp("follow_up_date"),
+  attachments: jsonb("attachments"), // File references or URLs
+  recordedBy: varchar("recorded_by").references(() => users.id),
+  communicationDate: timestamp("communication_date"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Opportunity stakeholders table
+export const opportunityStakeholders = pgTable("opportunity_stakeholders", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  opportunityId: varchar("opportunity_id").references(() => salesOpportunities.id, { onDelete: "cascade" }),
+  name: varchar("name").notNull(),
+  role: varchar("role"), // decision_maker, influencer, user, blocker, champion
+  email: varchar("email"),
+  phone: varchar("phone"),
+  influence: varchar("influence").default("medium"), // low, medium, high
+  relationshipStrength: varchar("relationship_strength").default("neutral"), // strong, neutral, weak, unknown
+  notes: text("notes"),
+  createdBy: varchar("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -351,7 +415,7 @@ export const companyRelations = relations(companies, ({ one, many }) => ({
   opportunities: many(salesOpportunities),
 }));
 
-export const salesOpportunityRelations = relations(salesOpportunities, ({ one }) => ({
+export const salesOpportunityRelations = relations(salesOpportunities, ({ one, many }) => ({
   company: one(companies, {
     fields: [salesOpportunities.companyId],
     references: [companies.id],
@@ -365,6 +429,9 @@ export const salesOpportunityRelations = relations(salesOpportunities, ({ one })
     fields: [salesOpportunities.assignedTo],
     references: [users.id],
   }),
+  nextSteps: many(opportunityNextSteps),
+  communications: many(opportunityCommunications),
+  stakeholders: many(opportunityStakeholders),
 }));
 
 export const projectRelations = relations(projects, ({ one, many }) => ({
@@ -555,7 +622,87 @@ export const insertSalesOpportunitySchema = createInsertSchema(salesOpportunitie
   actualCloseDate: z.coerce.date().nullable().optional(),
   lastActivityDate: z.coerce.date().nullable().optional(),
   tags: z.array(z.string()).optional(),
+  painPoints: z.array(z.string()).optional(),
+  successCriteria: z.array(z.string()).optional(),
+  competitorInfo: z.array(z.object({
+    name: z.string(),
+    strengths: z.array(z.string()),
+    weaknesses: z.array(z.string()),
+    notes: z.string().optional(),
+  })).optional(),
 });
+
+// New table schemas
+export const insertOpportunityNextStepSchema = createInsertSchema(opportunityNextSteps).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  completedAt: true,
+}).extend({
+  dueDate: z.coerce.date().nullable().optional(),
+});
+
+export const insertOpportunityCommunicationSchema = createInsertSchema(opportunityCommunications).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  communicationDate: z.coerce.date(),
+  attendees: z.array(z.string()).optional(),
+  attachments: z.array(z.object({
+    name: z.string(),
+    url: z.string(),
+    type: z.string(),
+  })).optional(),
+});
+
+export const insertOpportunityStakeholderSchema = createInsertSchema(opportunityStakeholders).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// New relations
+export const opportunityNextStepRelations = relations(opportunityNextSteps, ({ one }) => ({
+  opportunity: one(salesOpportunities, {
+    fields: [opportunityNextSteps.opportunityId],
+    references: [salesOpportunities.id],
+  }),
+  assignedUser: one(users, {
+    fields: [opportunityNextSteps.assignedTo],
+    references: [users.id],
+  }),
+  completedByUser: one(users, {
+    fields: [opportunityNextSteps.completedBy],
+    references: [users.id],
+  }),
+  createdByUser: one(users, {
+    fields: [opportunityNextSteps.createdBy],
+    references: [users.id],
+  }),
+}));
+
+export const opportunityCommunicationRelations = relations(opportunityCommunications, ({ one }) => ({
+  opportunity: one(salesOpportunities, {
+    fields: [opportunityCommunications.opportunityId],
+    references: [salesOpportunities.id],
+  }),
+  recordedByUser: one(users, {
+    fields: [opportunityCommunications.recordedBy],
+    references: [users.id],
+  }),
+}));
+
+export const opportunityStakeholderRelations = relations(opportunityStakeholders, ({ one }) => ({
+  opportunity: one(salesOpportunities, {
+    fields: [opportunityStakeholders.opportunityId],
+    references: [salesOpportunities.id],
+  }),
+  createdByUser: one(users, {
+    fields: [opportunityStakeholders.createdBy],
+    references: [users.id],
+  }),
+}));
 
 // Types
 export type UpsertUser = z.infer<typeof upsertUserSchema>;
@@ -592,3 +739,9 @@ export type InsertCompany = z.infer<typeof insertCompanySchema>;
 export type Company = typeof companies.$inferSelect;
 export type InsertSalesOpportunity = z.infer<typeof insertSalesOpportunitySchema>;
 export type SalesOpportunity = typeof salesOpportunities.$inferSelect;
+export type InsertOpportunityNextStep = z.infer<typeof insertOpportunityNextStepSchema>;
+export type OpportunityNextStep = typeof opportunityNextSteps.$inferSelect;
+export type InsertOpportunityCommunication = z.infer<typeof insertOpportunityCommunicationSchema>;
+export type OpportunityCommunication = typeof opportunityCommunications.$inferSelect;
+export type InsertOpportunityStakeholder = z.infer<typeof insertOpportunityStakeholderSchema>;
+export type OpportunityStakeholder = typeof opportunityStakeholders.$inferSelect;

@@ -1185,10 +1185,6 @@ export default function Clients() {
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => {setViewingClient(client); setIsViewClientDialogOpen(true);}} data-testid={`button-view-${index}`}>
-                                  <Users className="w-4 h-4 mr-2" />
-                                  View Details
-                                </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => setEditingClient(client)} data-testid={`button-edit-${index}`}>
                                   <Edit className="w-4 h-4 mr-2" />
                                   Edit
