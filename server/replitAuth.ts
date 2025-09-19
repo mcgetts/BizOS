@@ -157,7 +157,8 @@ export async function setupAuth(app: Express) {
     const strategyName = `replitauth:${currentDomain}`;
     
     // Check if strategy exists, if not register dynamically with security guards
-    if (!passport._strategy || !passport._strategy[strategyName]) {
+    const strategyExists = (passport as any)._strategy ? !!(passport as any)._strategy(strategyName) : !!(passport as any)._strategies?.[strategyName];
+    if (!strategyExists) {
       // Security check: only allow configured domains or reasonable dynamic registration
       if (!configuredDomains.includes(currentDomain)) {
         // Allow dynamic registration only if we haven't hit the limit
@@ -198,9 +199,32 @@ export async function setupAuth(app: Express) {
     const strategyName = `replitauth:${currentDomain}`;
     
     // Ensure strategy exists (should rarely happen if /api/login was called first)
-    if (!passport._strategy || !passport._strategy[strategyName]) {
-      console.error(`❌ Strategy '${strategyName}' not found during callback. This should not happen.`);
-      return res.redirect("/api/login");
+    const strategyExists = (passport as any)._strategy ? !!(passport as any)._strategy(strategyName) : !!(passport as any)._strategies?.[strategyName];
+    if (!strategyExists) {
+      // If strategy missing but domain is allowed, register it here instead of redirecting
+      if (configuredDomains.includes(currentDomain) || dynamicStrategies.size < MAX_DYNAMIC_STRATEGIES) {
+        console.warn(`⚠️  Strategy '${strategyName}' missing during callback. Registering on-demand.`);
+        if (!configuredDomains.includes(currentDomain)) {
+          dynamicStrategies.add(currentDomain);
+        }
+        
+        const strategy = new Strategy(
+          {
+            name: strategyName,
+            config,
+            scope: "openid email profile offline_access",
+            callbackURL: `https://${currentDomain}/api/callback`,
+          },
+          verify,
+        );
+        passport.use(strategy);
+      } else {
+        console.error(`❌ Strategy '${strategyName}' not found and domain not allowed.`);
+        return res.status(400).json({ 
+          error: "Authentication error", 
+          message: `Domain '${currentDomain}' not configured. Add to REPLIT_DOMAINS.`
+        });
+      }
     }
     
     passport.authenticate(strategyName, {
