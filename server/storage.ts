@@ -206,16 +206,82 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteUser(id: string): Promise<void> {
+    // Check for foreign key references
+    const [clientRefs, projectRefs, taskRefs, opportunityRefs] = await Promise.all([
+      db.select({ count: count() }).from(clients).where(eq(clients.assignedTo, id)),
+      db.select({ count: count() }).from(projects).where(eq(projects.assignedTo, id)),
+      db.select({ count: count() }).from(tasks).where(eq(tasks.assignedTo, id)),
+      db.select({ count: count() }).from(salesOpportunities).where(eq(salesOpportunities.assignedTo, id))
+    ]);
+
+    const totalRefs = clientRefs[0].count + projectRefs[0].count + taskRefs[0].count + opportunityRefs[0].count;
+
+    if (totalRefs > 0) {
+      throw new Error(`Cannot delete user: ${totalRefs} records are still assigned to this user. Please reassign them first.`);
+    }
+
     await db.delete(users).where(eq(users.id, id));
   }
 
   // Client operations
   async getClients(): Promise<Client[]> {
-    return await db.select().from(clients).orderBy(desc(clients.createdAt));
+    return await db
+      .select({
+        id: clients.id,
+        name: clients.name,
+        email: clients.email,
+        phone: clients.phone,
+        companyId: clients.companyId,
+        position: clients.position,
+        department: clients.department,
+        isPrimaryContact: clients.isPrimaryContact,
+        source: clients.source,
+        assignedTo: clients.assignedTo,
+        lastContactDate: clients.lastContactDate,
+        notes: clients.notes,
+        tags: clients.tags,
+        isActive: clients.isActive,
+        createdAt: clients.createdAt,
+        updatedAt: clients.updatedAt,
+        company: {
+          id: companies.id,
+          name: companies.name,
+          industry: companies.industry,
+        }
+      })
+      .from(clients)
+      .leftJoin(companies, eq(clients.companyId, companies.id))
+      .orderBy(desc(clients.createdAt));
   }
 
   async getClient(id: string): Promise<Client | undefined> {
-    const [client] = await db.select().from(clients).where(eq(clients.id, id));
+    const [client] = await db
+      .select({
+        id: clients.id,
+        name: clients.name,
+        email: clients.email,
+        phone: clients.phone,
+        companyId: clients.companyId,
+        position: clients.position,
+        department: clients.department,
+        isPrimaryContact: clients.isPrimaryContact,
+        source: clients.source,
+        assignedTo: clients.assignedTo,
+        lastContactDate: clients.lastContactDate,
+        notes: clients.notes,
+        tags: clients.tags,
+        isActive: clients.isActive,
+        createdAt: clients.createdAt,
+        updatedAt: clients.updatedAt,
+        company: {
+          id: companies.id,
+          name: companies.name,
+          industry: companies.industry,
+        }
+      })
+      .from(clients)
+      .leftJoin(companies, eq(clients.companyId, companies.id))
+      .where(eq(clients.id, id));
     return client;
   }
 
@@ -267,16 +333,146 @@ export class DatabaseStorage implements IStorage {
 
   // Sales opportunity operations
   async getSalesOpportunities(): Promise<SalesOpportunity[]> {
-    return await db.select().from(salesOpportunities).orderBy(desc(salesOpportunities.createdAt));
+    return await db
+      .select({
+        id: salesOpportunities.id,
+        title: salesOpportunities.title,
+        description: salesOpportunities.description,
+        companyId: salesOpportunities.companyId,
+        contactId: salesOpportunities.contactId,
+        assignedTo: salesOpportunities.assignedTo,
+        stage: salesOpportunities.stage,
+        value: salesOpportunities.value,
+        probability: salesOpportunities.probability,
+        expectedCloseDate: salesOpportunities.expectedCloseDate,
+        actualCloseDate: salesOpportunities.actualCloseDate,
+        source: salesOpportunities.source,
+        priority: salesOpportunities.priority,
+        tags: salesOpportunities.tags,
+        notes: salesOpportunities.notes,
+        lastActivityDate: salesOpportunities.lastActivityDate,
+        createdAt: salesOpportunities.createdAt,
+        updatedAt: salesOpportunities.updatedAt,
+        company: {
+          id: companies.id,
+          name: companies.name,
+          industry: companies.industry,
+          website: companies.website,
+        },
+        contact: {
+          id: clients.id,
+          name: clients.name,
+          email: clients.email,
+          phone: clients.phone,
+          position: clients.position,
+        },
+        assignedUser: {
+          id: users.id,
+          firstName: users.firstName,
+          lastName: users.lastName,
+        }
+      })
+      .from(salesOpportunities)
+      .leftJoin(companies, eq(salesOpportunities.companyId, companies.id))
+      .leftJoin(clients, eq(salesOpportunities.contactId, clients.id))
+      .leftJoin(users, eq(salesOpportunities.assignedTo, users.id))
+      .orderBy(desc(salesOpportunities.createdAt));
   }
 
   async getSalesOpportunity(id: string): Promise<SalesOpportunity | undefined> {
-    const [opportunity] = await db.select().from(salesOpportunities).where(eq(salesOpportunities.id, id));
+    const [opportunity] = await db
+      .select({
+        id: salesOpportunities.id,
+        title: salesOpportunities.title,
+        description: salesOpportunities.description,
+        companyId: salesOpportunities.companyId,
+        contactId: salesOpportunities.contactId,
+        assignedTo: salesOpportunities.assignedTo,
+        stage: salesOpportunities.stage,
+        value: salesOpportunities.value,
+        probability: salesOpportunities.probability,
+        expectedCloseDate: salesOpportunities.expectedCloseDate,
+        actualCloseDate: salesOpportunities.actualCloseDate,
+        source: salesOpportunities.source,
+        priority: salesOpportunities.priority,
+        tags: salesOpportunities.tags,
+        notes: salesOpportunities.notes,
+        lastActivityDate: salesOpportunities.lastActivityDate,
+        createdAt: salesOpportunities.createdAt,
+        updatedAt: salesOpportunities.updatedAt,
+        company: {
+          id: companies.id,
+          name: companies.name,
+          industry: companies.industry,
+          website: companies.website,
+        },
+        contact: {
+          id: clients.id,
+          name: clients.name,
+          email: clients.email,
+          phone: clients.phone,
+          position: clients.position,
+        },
+        assignedUser: {
+          id: users.id,
+          firstName: users.firstName,
+          lastName: users.lastName,
+        }
+      })
+      .from(salesOpportunities)
+      .leftJoin(companies, eq(salesOpportunities.companyId, companies.id))
+      .leftJoin(clients, eq(salesOpportunities.contactId, clients.id))
+      .leftJoin(users, eq(salesOpportunities.assignedTo, users.id))
+      .where(eq(salesOpportunities.id, id));
     return opportunity;
   }
 
   async getSalesOpportunitiesByStage(stage: string): Promise<SalesOpportunity[]> {
-    return await db.select().from(salesOpportunities).where(eq(salesOpportunities.stage, stage)).orderBy(desc(salesOpportunities.lastActivityDate));
+    return await db
+      .select({
+        id: salesOpportunities.id,
+        title: salesOpportunities.title,
+        description: salesOpportunities.description,
+        companyId: salesOpportunities.companyId,
+        contactId: salesOpportunities.contactId,
+        assignedTo: salesOpportunities.assignedTo,
+        stage: salesOpportunities.stage,
+        value: salesOpportunities.value,
+        probability: salesOpportunities.probability,
+        expectedCloseDate: salesOpportunities.expectedCloseDate,
+        actualCloseDate: salesOpportunities.actualCloseDate,
+        source: salesOpportunities.source,
+        priority: salesOpportunities.priority,
+        tags: salesOpportunities.tags,
+        notes: salesOpportunities.notes,
+        lastActivityDate: salesOpportunities.lastActivityDate,
+        createdAt: salesOpportunities.createdAt,
+        updatedAt: salesOpportunities.updatedAt,
+        company: {
+          id: companies.id,
+          name: companies.name,
+          industry: companies.industry,
+          website: companies.website,
+        },
+        contact: {
+          id: clients.id,
+          name: clients.name,
+          email: clients.email,
+          phone: clients.phone,
+          position: clients.position,
+        },
+        assignedUser: {
+          id: users.id,
+          firstName: users.firstName,
+          lastName: users.lastName,
+        }
+      })
+      .from(salesOpportunities)
+      .leftJoin(companies, eq(salesOpportunities.companyId, companies.id))
+      .leftJoin(clients, eq(salesOpportunities.contactId, clients.id))
+      .leftJoin(users, eq(salesOpportunities.assignedTo, users.id))
+      .where(eq(salesOpportunities.stage, stage))
+      .orderBy(desc(salesOpportunities.lastActivityDate));
   }
 
   async createSalesOpportunity(opportunity: InsertSalesOpportunity): Promise<SalesOpportunity> {

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -22,11 +22,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { insertProjectSchema } from "@shared/schema";
 import type { Project, InsertProject, Client, User, Task } from "@shared/schema";
 import { z } from "zod";
-import { 
-  Plus, 
-  Search, 
-  FolderOpen, 
-  Calendar, 
+import {
+  Plus,
+  Search,
+  FolderOpen,
+  Calendar,
   Users,
   MoreHorizontal,
   Clock,
@@ -34,7 +34,11 @@ import {
   AlertTriangle,
   Edit,
   Trash2,
-  TrendingUp
+  TrendingUp,
+  LayoutGrid,
+  Table,
+  Building2,
+  Eye
 } from "lucide-react";
 
 // Form validation schema for project creation/editing
@@ -42,6 +46,7 @@ import {
 const projectFormSchema = z.object({
   name: z.string().min(1, "Project name is required"),
   description: z.string().optional(),
+  companyId: z.string().optional(),
   clientId: z.string().optional(),
   managerId: z.string().optional(),
   status: z.string().optional(),
@@ -61,12 +66,13 @@ type ProjectFormData = z.infer<typeof projectFormSchema>;
 // Project Form Component
 function ProjectForm({ project, onSuccess }: { project?: Project; onSuccess: () => void }) {
   const { toast } = useToast();
-  
+
   const form = useForm<ProjectFormData>({
     resolver: zodResolver(projectFormSchema),
     defaultValues: {
       name: project?.name || "",
       description: project?.description || "",
+      companyId: (project as any)?.companyId || "",
       clientId: project?.clientId || "",
       managerId: project?.managerId || "",
       status: project?.status || "planning",
@@ -86,9 +92,21 @@ function ProjectForm({ project, onSuccess }: { project?: Project; onSuccess: () 
     queryKey: ["/api/clients"],
   });
 
+  // Fetch companies for dropdown
+  const { data: companies } = useQuery<any[]>({
+    queryKey: ["/api/companies"],
+  });
+
   // Fetch users for manager dropdown
   const { data: users } = useQuery<User[]>({
     queryKey: ["/api/users"],
+  });
+
+  // Fetch tasks for this project
+  const { data: projectTasks } = useQuery<Task[]>({
+    queryKey: ["/api/tasks"],
+    enabled: !!project?.id,
+    select: (allTasks) => allTasks?.filter(task => task.projectId === project?.id) || [],
   });
 
   const createMutation = useMutation({
@@ -125,6 +143,7 @@ function ProjectForm({ project, onSuccess }: { project?: Project; onSuccess: () 
     const submitData: InsertProject = {
       name: data.name,
       description: data.description || null,
+      companyId: data.companyId && data.companyId.trim() !== "" ? data.companyId : null,
       clientId: data.clientId && data.clientId.trim() !== "" ? data.clientId : null,
       managerId: data.managerId && data.managerId.trim() !== "" ? data.managerId : null,
       status: data.status || null,
@@ -137,7 +156,7 @@ function ProjectForm({ project, onSuccess }: { project?: Project; onSuccess: () 
       completedAt: null,
       tags: data.tags || null,
       isClientPortalEnabled: data.isClientPortalEnabled ?? true,
-    };
+    } as any;
 
     if (project) {
       updateMutation.mutate(submitData);
@@ -180,7 +199,31 @@ function ProjectForm({ project, onSuccess }: { project?: Project; onSuccess: () 
                   <SelectContent>
                     {clients?.map((client) => (
                       <SelectItem key={client.id} value={client.id}>
-                        {client.name} {client.company ? `(${client.company})` : ''}
+                        {client.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="companyId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Company</FormLabel>
+                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormControl>
+                    <SelectTrigger data-testid="select-project-company">
+                      <SelectValue placeholder="Select company" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {companies?.map((company) => (
+                      <SelectItem key={company.id} value={company.id}>
+                        {company.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -229,6 +272,7 @@ function ProjectForm({ project, onSuccess }: { project?: Project; onSuccess: () 
                     <SelectItem value="planning">Planning</SelectItem>
                     <SelectItem value="active">Active</SelectItem>
                     <SelectItem value="review">Review</SelectItem>
+                    <SelectItem value="paused">Paused</SelectItem>
                     <SelectItem value="completed">Completed</SelectItem>
                     <SelectItem value="cancelled">Cancelled</SelectItem>
                   </SelectContent>
@@ -339,6 +383,58 @@ function ProjectForm({ project, onSuccess }: { project?: Project; onSuccess: () 
             </FormItem>
           )}
         />
+
+        {/* Tasks Section - Only show when editing existing project */}
+        {project && projectTasks && (
+          <div className="space-y-4">
+            <div className="border rounded-lg p-4">
+              <h3 className="text-base font-medium mb-4">Project Tasks ({projectTasks.length})</h3>
+              {projectTasks.length === 0 ? (
+                <p className="text-sm text-muted-foreground italic">No tasks assigned to this project yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {projectTasks.map((task) => (
+                    <div key={task.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-md">
+                      <div className="flex-1">
+                        <div className="font-medium text-sm">{task.title}</div>
+                        {task.description && (
+                          <div className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                            {task.description}
+                          </div>
+                        )}
+                        <div className="flex items-center space-x-2 mt-2">
+                          {task.priority && (
+                            <Badge variant="outline" className="text-xs">
+                              {task.priority}
+                            </Badge>
+                          )}
+                          {task.dueDate && (
+                            <span className="text-xs text-muted-foreground">
+                              Due: {new Date(task.dueDate).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="ml-4">
+                        <Badge
+                          variant={
+                            task.status === 'completed' ? 'default' :
+                            task.status === 'in_progress' ? 'secondary' :
+                            task.status === 'blocked' ? 'destructive' : 'outline'
+                          }
+                          className="text-xs"
+                        >
+                          {task.status || 'todo'}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         <FormField
           control={form.control}
           name="isClientPortalEnabled"
@@ -378,7 +474,9 @@ export default function Projects() {
   const [selectedPriority, setSelectedPriority] = useState<string>("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [viewingProject, setViewingProject] = useState<Project | null>(null);
   const [expandedProject, setExpandedProject] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"table" | "kanban">("kanban");
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -403,6 +501,12 @@ export default function Projects() {
   // Fetch clients for display
   const { data: clients } = useQuery<Client[]>({
     queryKey: ["/api/clients"],
+    enabled: isAuthenticated,
+  });
+
+  // Fetch companies for project display
+  const { data: companies } = useQuery<any[]>({
+    queryKey: ["/api/companies"],
     enabled: isAuthenticated,
   });
 
@@ -437,7 +541,8 @@ export default function Projects() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "active": return "default";
+      case "active":
+      case "in_progress": return "default";
       case "planning": return "secondary";
       case "review": return "outline";
       case "completed": return "default";
@@ -448,7 +553,8 @@ export default function Projects() {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case "active": return Clock;
+      case "active":
+      case "in_progress": return Clock;
       case "completed": return CheckCircle;
       case "cancelled": return AlertTriangle;
       default: return FolderOpen;
@@ -465,9 +571,16 @@ export default function Projects() {
     }
   };
 
-  const getClientName = (clientId: string) => {
+  const getClientName = (clientId: string | null | undefined) => {
+    if (!clientId) return 'No client';
     const client = clients?.find(c => c.id === clientId);
-    return client ? `${client.name}${client.company ? ` (${client.company})` : ''}` : 'No client';
+    return client ? client.name : 'No client';
+  };
+
+  const getCompanyName = (companyId: string | null | undefined) => {
+    if (!companyId) return 'No company';
+    const company = companies?.find(c => c.id === companyId);
+    return company ? company.name : 'No company';
   };
 
   const getProjectTasks = (projectId: string) => {
@@ -490,6 +603,48 @@ export default function Projects() {
     const matchesPriority = selectedPriority === "all" || project.priority === selectedPriority;
     return matchesSearch && matchesStatus && matchesPriority;
   }) || [];
+
+  const groupProjectsByStatus = () => {
+    // Exclude cancelled status from Kanban view
+    const statuses = ["planning", "active", "review", "paused", "completed"];
+    const grouped = statuses.reduce((acc, status) => {
+      if (status === "active") {
+        // Only include "active" status projects
+        acc[status] = filteredProjects.filter(project =>
+          project.status === "active" && project.status !== "cancelled"
+        );
+      } else if (status === "paused") {
+        // Include both "paused" and "on_hold" in the paused column
+        acc[status] = filteredProjects.filter(project =>
+          (project.status === "paused" || project.status === "on_hold") && project.status !== "cancelled"
+        );
+      } else {
+        acc[status] = filteredProjects.filter(project => project.status === status && project.status !== "cancelled");
+      }
+      return acc;
+    }, {} as Record<string, Project[]>);
+
+    // Handle any projects with status not in our predefined list (but exclude cancelled)
+    const unhandledProjects = filteredProjects.filter(project =>
+      !["planning", "active", "review", "paused", "on_hold", "completed", "cancelled"].includes(project.status || "") &&
+      project.status !== "cancelled"
+    );
+
+    if (unhandledProjects.length > 0) {
+      // Add them to a default category or create new ones
+      unhandledProjects.forEach(project => {
+        const status = project.status || "planning";
+        if (!grouped[status]) {
+          grouped[status] = [];
+        }
+        grouped[status].push(project);
+      });
+    }
+
+    return grouped;
+  };
+
+  const projectsByStatus = groupProjectsByStatus();
 
   return (
     <Layout title="Project Management" breadcrumbs={["Projects"]}>
@@ -516,6 +671,7 @@ export default function Projects() {
                 <SelectItem value="planning">Planning</SelectItem>
                 <SelectItem value="active">Active</SelectItem>
                 <SelectItem value="review">Review</SelectItem>
+                <SelectItem value="paused">Paused</SelectItem>
                 <SelectItem value="completed">Completed</SelectItem>
                 <SelectItem value="cancelled">Cancelled</SelectItem>
               </SelectContent>
@@ -559,7 +715,7 @@ export default function Projects() {
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Active Projects</p>
                   <p className="text-2xl font-bold" data-testid="text-active-projects">
-                    {projects?.filter((p: any) => p.status === 'active').length || 0}
+                    {projects?.filter((p: any) => p.status === 'active' || p.status === 'in_progress').length || 0}
                   </p>
                 </div>
                 <FolderOpen className="w-8 h-8 text-primary" />
@@ -610,21 +766,48 @@ export default function Projects() {
           </Card>
         </div>
 
-        {/* Projects Grid/Table */}
-        <Card className="glassmorphism">
-          <CardHeader>
-            <CardTitle>All Projects</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {projectsLoading ? (
+        {/* View Toggle Buttons */}
+        <div className="flex justify-center">
+          <div className="flex items-center border rounded-lg p-1">
+            <Button
+              variant={viewMode === "kanban" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setViewMode("kanban")}
+              data-testid="button-kanban-view"
+            >
+              Board
+            </Button>
+            <Button
+              variant={viewMode === "table" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setViewMode("table")}
+              data-testid="button-table-view"
+            >
+              Table
+            </Button>
+          </div>
+        </div>
+
+        {/* Loading and Error States */}
+        {projectsLoading ? (
+          <Card className="glassmorphism">
+            <CardContent>
               <div className="text-center py-8">
                 <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto" />
               </div>
-            ) : error ? (
+            </CardContent>
+          </Card>
+        ) : error ? (
+          <Card className="glassmorphism">
+            <CardContent>
               <div className="text-center py-8">
                 <p className="text-muted-foreground">Failed to load projects</p>
               </div>
-            ) : filteredProjects.length === 0 ? (
+            </CardContent>
+          </Card>
+        ) : filteredProjects.length === 0 ? (
+          <Card className="glassmorphism">
+            <CardContent>
               <div className="text-center py-8">
                 <FolderOpen className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                 <p className="text-muted-foreground">
@@ -649,13 +832,132 @@ export default function Projects() {
                   </Dialog>
                 )}
               </div>
-            ) : (
+            </CardContent>
+          </Card>
+        ) : viewMode === "kanban" ? (
+          /* Kanban View */
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+            {Object.entries(projectsByStatus).map(([status, statusProjects]) => (
+              <Card key={status} className="glassmorphism">
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-sm font-medium flex items-center justify-between">
+                    <span className="capitalize">{status}</span>
+                    <Badge variant="secondary" className="text-xs">
+                      {statusProjects.length}
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {statusProjects.map((project) => {
+                    const projectTasks = getProjectTasks(project.id || '');
+                    return (
+                      <Card key={project.id} className="cursor-pointer hover:shadow-md transition-shadow">
+                        <CardContent className="p-4">
+                          <div className="space-y-3">
+                            <div>
+                              <h3
+                                className="font-medium text-sm cursor-pointer hover:text-blue-600 hover:underline"
+                                onClick={() => setViewingProject(project)}
+                              >
+                                {project.name}
+                              </h3>
+                              <p className="text-xs text-muted-foreground">{getCompanyName((project as any).companyId)}</p>
+                            </div>
+
+                            <div className="flex items-center justify-between text-xs">
+                              <Badge variant={getPriorityColor(project.priority || '')}>
+                                {project.priority ? project.priority.charAt(0).toUpperCase() + project.priority.slice(1) : 'Medium'}
+                              </Badge>
+                              <span className="text-muted-foreground">
+                                {project.progress || 0}%
+                              </span>
+                            </div>
+
+                            <Progress value={project.progress || 0} className="h-1" />
+
+                            {projectTasks.length > 0 && (
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="text-muted-foreground">Tasks</span>
+                                <Badge variant="outline" className="text-xs">
+                                  {projectTasks.length}
+                                </Badge>
+                              </div>
+                            )}
+
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center text-xs text-muted-foreground">
+                                <Calendar className="w-3 h-3 mr-1" />
+                                {project.endDate
+                                  ? new Date(project.endDate).toLocaleDateString()
+                                  : 'No due date'
+                                }
+                              </div>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                                    <MoreHorizontal className="w-4 h-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => setViewingProject(project)}>
+                                    <Eye className="w-4 h-4 mr-2" />
+                                    View Details
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => setEditingProject(project)}>
+                                    <Edit className="w-4 h-4 mr-2" />
+                                    Edit
+                                  </DropdownMenuItem>
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                                        <Trash2 className="w-4 h-4 mr-2" />
+                                        Delete
+                                      </DropdownMenuItem>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>Delete Project</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          Are you sure you want to delete "{project.name}"? This action cannot be undone.
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction
+                                          onClick={() => deleteMutation.mutate(project.id)}
+                                          className="bg-destructive text-destructive-foreground"
+                                        >
+                                          Delete
+                                        </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          /* Table View */
+          <Card className="glassmorphism">
+            <CardHeader>
+              <CardTitle>All Projects</CardTitle>
+            </CardHeader>
+            <CardContent>
               <div className="overflow-x-auto">
                 <table className="w-full" data-testid="table-projects">
                   <thead>
                     <tr className="border-b border-border">
                       <th className="text-left text-sm font-medium text-muted-foreground py-3">Project</th>
                       <th className="text-left text-sm font-medium text-muted-foreground py-3">Client</th>
+                      <th className="text-left text-sm font-medium text-muted-foreground py-3">Company</th>
                       <th className="text-left text-sm font-medium text-muted-foreground py-3">Progress</th>
                       <th className="text-left text-sm font-medium text-muted-foreground py-3">Status</th>
                       <th className="text-left text-sm font-medium text-muted-foreground py-3">Priority</th>
@@ -667,41 +969,27 @@ export default function Projects() {
                   <tbody className="divide-y divide-border">
                     {filteredProjects.map((project: any, index: number) => {
                       const StatusIcon = getStatusIcon(project.status);
-                      const projectTasks = getProjectTasks(project.id);
-                      const isExpanded = expandedProject === project.id;
-                      
+
                       return (
-                        <Fragment key={project.id}>
-                          <tr data-testid={`row-project-${index}`}>
-                            <td className="py-4">
-                              <div className="flex items-center space-x-2">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => setExpandedProject(isExpanded ? null : project.id)}
-                                  className="p-1 h-6 w-6"
-                                  data-testid={`button-expand-${index}`}
-                                >
-                                  {isExpanded ? "−" : "+"}
-                                </Button>
-                                <div>
-                                  <div className="font-medium text-foreground">{project.name}</div>
-                                  <div className="text-sm text-muted-foreground">{project.description}</div>
-                                  {projectTasks.length > 0 && (
-                                    <div className="text-xs text-muted-foreground mt-1">
-                                      {projectTasks.length} task{projectTasks.length !== 1 ? 's' : ''}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            </td>
+                        <tr key={project.id} data-testid={`row-project-${index}`}>
+                          <td className="py-4">
+                            <div
+                              className="font-medium text-foreground cursor-pointer hover:text-blue-600 hover:underline"
+                              onClick={() => setViewingProject(project)}
+                            >
+                              {project.name}
+                            </div>
+                          </td>
                           <td className="py-4">
                             <div className="text-sm text-foreground">{getClientName(project.clientId)}</div>
                           </td>
                           <td className="py-4">
+                            <div className="text-sm text-foreground">{getCompanyName((project as any).companyId)}</div>
+                          </td>
+                          <td className="py-4">
                             <div className="flex items-center space-x-2">
-                              <Progress 
-                                value={project.progress || 0} 
+                              <Progress
+                                value={project.progress || 0}
                                 className="w-20 h-2"
                                 data-testid={`progress-${index}`}
                               />
@@ -729,7 +1017,7 @@ export default function Projects() {
                           <td className="py-4">
                             <div className="flex items-center space-x-1 text-sm text-muted-foreground">
                               <Calendar className="w-3 h-3" />
-                              {project.endDate 
+                              {project.endDate
                                 ? new Date(project.endDate).toLocaleDateString()
                                 : 'Not set'
                               }
@@ -743,7 +1031,14 @@ export default function Projects() {
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                <DropdownMenuItem 
+                                <DropdownMenuItem
+                                  onClick={() => setViewingProject(project)}
+                                  data-testid={`button-view-${index}`}
+                                >
+                                  <Eye className="w-4 h-4 mr-2" />
+                                  View Details
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
                                   onClick={() => setEditingProject(project)}
                                   data-testid={`button-edit-${index}`}
                                 >
@@ -752,7 +1047,7 @@ export default function Projects() {
                                 </DropdownMenuItem>
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>
-                                    <DropdownMenuItem 
+                                    <DropdownMenuItem
                                       onSelect={(e) => e.preventDefault()}
                                       data-testid={`button-delete-${index}`}
                                     >
@@ -782,71 +1077,14 @@ export default function Projects() {
                             </DropdownMenu>
                           </td>
                         </tr>
-                        
-                        {/* Expanded Tasks Row */}
-                        {isExpanded && (
-                          <tr key={`${project.id}-tasks`}>
-                            <td colSpan={8} className="py-4 px-6 bg-muted/50">
-                              <div className="space-y-3">
-                                <h4 className="font-medium text-sm text-muted-foreground mb-3">
-                                  Project Tasks ({projectTasks.length})
-                                </h4>
-                                {projectTasks.length === 0 ? (
-                                  <p className="text-sm text-muted-foreground italic">No tasks assigned to this project</p>
-                                ) : (
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    {projectTasks.map((task, taskIndex) => (
-                                      <div 
-                                        key={task.id} 
-                                        className="p-3 bg-background rounded-md border border-border"
-                                        data-testid={`task-${taskIndex}`}
-                                      >
-                                        <div className="flex items-center justify-between mb-2">
-                                          <div className="font-medium text-sm">{task.title}</div>
-                                          <Badge 
-                                            variant="outline" 
-                                            className={getTaskStatusColor(task.status || "todo")}
-                                          >
-                                            {task.status || "todo"}
-                                          </Badge>
-                                        </div>
-                                        {task.description && (
-                                          <p className="text-xs text-muted-foreground mb-2 line-clamp-2">
-                                            {task.description}
-                                          </p>
-                                        )}
-                                        <div className="flex items-center justify-between text-xs text-muted-foreground">
-                                          <span>
-                                            {task.priority && (
-                                              <Badge variant="outline" className="text-xs mr-2">
-                                                {task.priority}
-                                              </Badge>
-                                            )}
-                                            {task.assignedTo && (
-                                              <span>Assigned</span>
-                                            )}
-                                          </span>
-                                          {task.dueDate && (
-                                            <span>{new Date(task.dueDate).toLocaleDateString()}</span>
-                                          )}
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                        </Fragment>
                       );
                     })}
                   </tbody>
                 </table>
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Edit Project Dialog */}
         <Dialog open={!!editingProject} onOpenChange={() => setEditingProject(null)}>
@@ -860,6 +1098,140 @@ export default function Projects() {
                 onSuccess={() => setEditingProject(null)}
               />
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* View Project Details Dialog */}
+        <Dialog open={!!viewingProject} onOpenChange={() => setViewingProject(null)}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{viewingProject?.name}</DialogTitle>
+            </DialogHeader>
+            {viewingProject && (
+              <div className="space-y-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Client</label>
+                    <p className="text-sm">{getClientName(viewingProject.clientId)}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Company</label>
+                    <p className="text-sm">{getCompanyName((viewingProject as any).companyId)}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Status</label>
+                    <Badge variant={getStatusColor(viewingProject.status || '')}>
+                      {viewingProject.status?.charAt(0).toUpperCase() + viewingProject.status?.slice(1)}
+                    </Badge>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Priority</label>
+                    <Badge variant={getPriorityColor(viewingProject.priority || '')}>
+                      {viewingProject.priority ? viewingProject.priority.charAt(0).toUpperCase() + viewingProject.priority.slice(1) : 'Medium'}
+                    </Badge>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Progress</label>
+                    <div className="flex items-center space-x-2">
+                      <Progress value={viewingProject.progress || 0} className="flex-1" />
+                      <span className="text-sm">{viewingProject.progress || 0}%</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Budget</label>
+                    <p className="text-sm">£{parseFloat(viewingProject.budget || '0').toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Start Date</label>
+                    <p className="text-sm">
+                      {viewingProject.startDate ? new Date(viewingProject.startDate).toLocaleDateString() : 'Not set'}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Due Date</label>
+                    <p className="text-sm">
+                      {viewingProject.endDate ? new Date(viewingProject.endDate).toLocaleDateString() : 'Not set'}
+                    </p>
+                  </div>
+                </div>
+
+                {viewingProject.description && (
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Description</label>
+                    <p className="text-sm mt-1">{viewingProject.description}</p>
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Tasks ({getProjectTasks(viewingProject.id || '').length})</label>
+                  <div className="mt-2 space-y-2">
+                    {getProjectTasks(viewingProject.id || '').length === 0 ? (
+                      <p className="text-sm text-muted-foreground italic">No tasks assigned to this project.</p>
+                    ) : (
+                      getProjectTasks(viewingProject.id || '').map((task) => (
+                        <div key={task.id} className="flex items-center justify-between p-2 bg-muted/50 rounded">
+                          <div className="flex-1">
+                            <p className="text-sm font-medium">{task.title}</p>
+                            {task.description && (
+                              <p className="text-xs text-muted-foreground">{task.description}</p>
+                            )}
+                          </div>
+                          <Badge variant="outline" className="text-xs">
+                            {task.status || 'todo'}
+                          </Badge>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setViewingProject(null)}>
+                Close
+              </Button>
+              <div className="flex space-x-2">
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    if (viewingProject) {
+                      setViewingProject(null);
+                      // Delete functionality will be handled by the existing AlertDialog in dropdown
+                      // For now, we'll trigger the existing delete process
+                      const deleteProject = async () => {
+                        try {
+                          const response = await fetch(`/api/projects/${viewingProject.id}`, {
+                            method: 'DELETE'
+                          });
+                          if (response.ok) {
+                            // Refresh projects list
+                            window.location.reload();
+                          }
+                        } catch (error) {
+                          console.error('Failed to delete project:', error);
+                        }
+                      };
+
+                      if (confirm(`Are you sure you want to delete "${viewingProject.name}"? This action cannot be undone.`)) {
+                        deleteProject();
+                      }
+                    }
+                  }}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete
+                </Button>
+                <Button onClick={() => {
+                  if (viewingProject) {
+                    setViewingProject(null);
+                    setEditingProject(viewingProject);
+                  }
+                }}>
+                  <Edit className="w-4 h-4 mr-2" />
+                  Edit
+                </Button>
+              </div>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>

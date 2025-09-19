@@ -6,10 +6,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Table as TableComponent, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { isUnauthorizedError } from "@/lib/authUtils";
@@ -18,13 +19,13 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertTaskSchema } from "@shared/schema";
-import type { Task, InsertTask, Project, User } from "@shared/schema";
+import type { Task, InsertTask, Project, User, Company } from "@shared/schema";
 import { z } from "zod";
 import { 
-  Plus, 
-  Search, 
-  Clock, 
-  CheckCircle2, 
+  Plus,
+  Search,
+  Clock,
+  CheckCircle2,
   AlertCircle,
   MoreHorizontal,
   Calendar,
@@ -33,11 +34,14 @@ import {
   Timer,
   Edit,
   Trash2,
+  Eye,
   TrendingUp,
   AlertTriangle,
   Play,
   Pause,
-  RotateCcw
+  RotateCcw,
+  Table,
+  LayoutGrid
 } from "lucide-react";
 
 // Form validation schema for task creation/editing
@@ -361,8 +365,13 @@ export default function Tasks() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
+  const [projectFilter, setProjectFilter] = useState("all");
+  const [assigneeFilter, setAssigneeFilter] = useState("all");
+  const [companyFilter, setCompanyFilter] = useState("all");
+  const [viewMode, setViewMode] = useState<"table" | "kanban">("table");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [viewingTask, setViewingTask] = useState<Task | null>(null);
 
   // Fetch tasks
   const { data: tasks, isLoading, error } = useQuery<Task[]>({
@@ -377,6 +386,10 @@ export default function Tasks() {
 
   const { data: users } = useQuery<User[]>({
     queryKey: ["/api/users"],
+  });
+
+  const { data: companies } = useQuery<Company[]>({
+    queryKey: ["/api/companies"],
   });
 
   // Delete mutation
@@ -445,7 +458,23 @@ export default function Tasks() {
                          task.description?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === "all" || task.status === statusFilter;
     const matchesPriority = priorityFilter === "all" || task.priority === priorityFilter;
-    return matchesSearch && matchesStatus && matchesPriority;
+    const matchesProject = projectFilter === "all" || task.projectId === projectFilter;
+    const matchesAssignee = assigneeFilter === "all" || task.assignedTo === assigneeFilter;
+
+    // For company filtering, we need to look up the project details
+    let matchesCompany = true;
+
+    if (companyFilter !== "all") {
+      const project = projects?.find(p => p.id === task.projectId);
+      if (project) {
+        matchesCompany = companyFilter === "all" || project.companyId === companyFilter;
+      } else {
+        // If task has no project, it doesn't match specific company filters
+        matchesCompany = companyFilter === "all";
+      }
+    }
+
+    return matchesSearch && matchesStatus && matchesPriority && matchesProject && matchesAssignee && matchesCompany;
   }) || [];
 
   // Calculate stats
@@ -467,6 +496,12 @@ export default function Tasks() {
     if (!assigneeId) return "Unassigned";
     const user = users?.find(u => u.id === assigneeId);
     return user ? `${user.firstName} ${user.lastName}` : "Unknown User";
+  };
+
+  const getCompanyName = (companyId: string | null) => {
+    if (!companyId) return "No Company";
+    const company = companies?.find(c => c.id === companyId);
+    return company?.name || "Unknown Company";
   };
 
   const handleCreateSuccess = () => {
@@ -578,6 +613,7 @@ export default function Tasks() {
               <SelectItem value="all">All Statuses</SelectItem>
               <SelectItem value="todo">To Do</SelectItem>
               <SelectItem value="in_progress">In Progress</SelectItem>
+              <SelectItem value="blocked">Blocked</SelectItem>
               <SelectItem value="review">Review</SelectItem>
               <SelectItem value="completed">Completed</SelectItem>
             </SelectContent>
@@ -594,130 +630,283 @@ export default function Tasks() {
               <SelectItem value="urgent">Urgent</SelectItem>
             </SelectContent>
           </Select>
+          <Select value={projectFilter} onValueChange={setProjectFilter}>
+            <SelectTrigger className="w-full sm:w-48" data-testid="select-filter-project">
+              <SelectValue placeholder="Filter by project" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Projects</SelectItem>
+              {projects?.map((project) => (
+                <SelectItem key={project.id} value={project.id}>
+                  {project.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
+            <SelectTrigger className="w-full sm:w-48" data-testid="select-filter-assignee">
+              <SelectValue placeholder="Filter by assignee" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Assignees</SelectItem>
+              {users?.map((user) => (
+                <SelectItem key={user.id} value={user.id}>
+                  {user.firstName} {user.lastName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={companyFilter} onValueChange={setCompanyFilter}>
+            <SelectTrigger className="w-full sm:w-48" data-testid="select-filter-company">
+              <SelectValue placeholder="Filter by company" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Companies</SelectItem>
+              {companies?.map((company) => (
+                <SelectItem key={company.id} value={company.id}>
+                  {company.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
-        {/* Tasks Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-          {filteredTasks.map((task) => (
-            <Card key={task.id} className={`relative ${isOverdue(task.dueDate) && task.status !== "completed" ? "border-red-200 dark:border-red-800" : ""}`} data-testid={`card-task-${task.id}`}>
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
+        {/* View Toggle */}
+        <div className="flex justify-end gap-2">
+          <Button
+            variant={viewMode === "table" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setViewMode("table")}
+            className="gap-2"
+          >
+            <Table className="h-4 w-4" />
+            Table
+          </Button>
+          <Button
+            variant={viewMode === "kanban" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setViewMode("kanban")}
+            className="gap-2"
+          >
+            <LayoutGrid className="h-4 w-4" />
+            Board
+          </Button>
+        </div>
+
+        {/* Tasks Views */}
+        {viewMode === "table" ? (
+          <div className="border rounded-lg">
+            <TableComponent>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Task</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Priority</TableHead>
+                  <TableHead>Project</TableHead>
+                  <TableHead>Assignee</TableHead>
+                  <TableHead>Due Date</TableHead>
+                  <TableHead>Hours</TableHead>
+                  <TableHead className="w-[50px]">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredTasks.map((task) => (
+                  <TableRow key={task.id} className={isOverdue(task.dueDate) && task.status !== "completed" ? "bg-red-50 dark:bg-red-950" : ""}>
+                    <TableCell>
+                      <div>
+                        <div
+                          className="font-medium cursor-pointer hover:text-blue-600 hover:underline"
+                          data-testid={`text-task-title-${task.id}`}
+                          onClick={() => setViewingTask(task)}
+                        >
+                          {task.title}
+                        </div>
+                        {task.description && (
+                          <div className="text-sm text-gray-600 dark:text-gray-400 line-clamp-1" data-testid={`text-task-description-${task.id}`}>
+                            {task.description}
+                          </div>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
                       <Badge className={getStatusBadge(task.status || "todo")} data-testid={`badge-status-${task.id}`}>
                         {getStatusIcon(task.status || "todo")}
                         <span className="ml-1 capitalize">{task.status?.replace("_", " ")}</span>
                       </Badge>
+                    </TableCell>
+                    <TableCell>
                       <Badge className={getPriorityBadge(task.priority || "medium")} data-testid={`badge-priority-${task.id}`}>
                         {task.priority}
                       </Badge>
-                      {isOverdue(task.dueDate) && task.status !== "completed" && (
-                        <Badge className="bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300" data-testid={`badge-overdue-${task.id}`}>
-                          <AlertTriangle className="h-3 w-3 mr-1" />
-                          Overdue
-                        </Badge>
+                    </TableCell>
+                    <TableCell data-testid={`text-task-project-${task.id}`}>{getProjectName(task.projectId)}</TableCell>
+                    <TableCell data-testid={`text-task-assignee-${task.id}`}>{getAssigneeName(task.assignedTo)}</TableCell>
+                    <TableCell>
+                      {task.dueDate && (
+                        <div className={`${isOverdue(task.dueDate) && task.status !== "completed" ? "text-red-600 dark:text-red-400 font-medium" : ""}`} data-testid={`text-task-due-date-${task.id}`}>
+                          {new Date(task.dueDate).toLocaleDateString()}
+                        </div>
                       )}
-                    </div>
-                    <CardTitle className="text-lg font-semibold" data-testid={`text-task-title-${task.id}`}>{task.title}</CardTitle>
-                    {task.description && (
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 line-clamp-2" data-testid={`text-task-description-${task.id}`}>
-                        {task.description}
-                      </p>
-                    )}
-                  </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm" data-testid={`button-task-menu-${task.id}`}>
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => setEditingTask(task)} data-testid={`button-edit-task-${task.id}`}>
-                        <Edit className="h-4 w-4 mr-2" />
-                        Edit
-                      </DropdownMenuItem>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <DropdownMenuItem onSelect={(e) => e.preventDefault()} data-testid={`button-delete-task-${task.id}`}>
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete
+                    </TableCell>
+                    <TableCell data-testid={`text-task-hours-${task.id}`}>
+                      {(task.estimatedHours || task.actualHours) && (
+                        <span>{task.actualHours || 0}h / {task.estimatedHours || 0}h</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" data-testid={`button-task-menu-${task.id}`}>
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => setEditingTask(task)} data-testid={`button-edit-task-${task.id}`}>
+                            <Edit className="h-4 w-4 mr-2" />
+                            Edit
                           </DropdownMenuItem>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete Task</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Are you sure you want to delete "{task.title}"? This action cannot be undone.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel data-testid={`button-cancel-delete-${task.id}`}>Cancel</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => deleteMutation.mutate(task.id)}
-                              className="bg-red-600 hover:bg-red-700"
-                              data-testid={`button-confirm-delete-${task.id}`}
-                            >
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <div className="flex items-center text-gray-600 dark:text-gray-400">
-                      <FolderOpen className="h-4 w-4 mr-1" />
-                      Project
-                    </div>
-                    <div className="font-medium" data-testid={`text-task-project-${task.id}`}>{getProjectName(task.projectId)}</div>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <DropdownMenuItem onSelect={(e) => e.preventDefault()} data-testid={`button-delete-task-${task.id}`}>
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete Task</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to delete "{task.title}"? This action cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel data-testid={`button-cancel-delete-${task.id}`}>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => deleteMutation.mutate(task.id)}
+                                  className="bg-red-600 hover:bg-red-700"
+                                  data-testid={`button-confirm-delete-${task.id}`}
+                                >
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </TableComponent>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {["todo", "in_progress", "blocked", "review", "completed"].map((status) => {
+              const statusTasks = filteredTasks.filter(task => task.status === status);
+              return (
+                <div key={status} className="flex flex-col">
+                  <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <h3 className="font-semibold capitalize text-center">
+                      {status.replace("_", " ")} ({statusTasks.length})
+                    </h3>
                   </div>
-                  <div>
-                    <div className="flex items-center text-gray-600 dark:text-gray-400">
-                      <UserIcon className="h-4 w-4 mr-1" />
-                      Assignee
-                    </div>
-                    <div className="font-medium" data-testid={`text-task-assignee-${task.id}`}>{getAssigneeName(task.assignedTo)}</div>
-                  </div>
-                  {task.dueDate && (
-                    <div>
-                      <div className="flex items-center text-gray-600 dark:text-gray-400">
-                        <Calendar className="h-4 w-4 mr-1" />
-                        Due Date
-                      </div>
-                      <div className={`font-medium ${isOverdue(task.dueDate) && task.status !== "completed" ? "text-red-600 dark:text-red-400" : ""}`} data-testid={`text-task-due-date-${task.id}`}>
-                        {new Date(task.dueDate).toLocaleDateString()}
-                      </div>
-                    </div>
-                  )}
-                  {(task.estimatedHours || task.actualHours) && (
-                    <div>
-                      <div className="flex items-center text-gray-600 dark:text-gray-400">
-                        <Timer className="h-4 w-4 mr-1" />
-                        Hours
-                      </div>
-                      <div className="font-medium" data-testid={`text-task-hours-${task.id}`}>
-                        {task.actualHours || 0}h / {task.estimatedHours || 0}h
-                      </div>
-                    </div>
-                  )}
-                </div>
-                {task.tags && task.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {task.tags.map((tag, index) => (
-                      <Badge key={index} variant="outline" className="text-xs" data-testid={`tag-${task.id}-${index}`}>
-                        {tag}
-                      </Badge>
+                  <div className="space-y-3 flex-1">
+                    {statusTasks.map((task) => (
+                      <Card key={task.id} className={`${isOverdue(task.dueDate) && task.status !== "completed" ? "border-red-200 dark:border-red-800" : ""}`} data-testid={`card-task-${task.id}`}>
+                        <CardHeader className="pb-2">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <CardTitle
+                                className="text-sm font-semibold cursor-pointer hover:text-blue-600 hover:underline"
+                                data-testid={`text-task-title-${task.id}`}
+                                onClick={() => setViewingTask(task)}
+                              >
+                                {task.title}
+                              </CardTitle>
+                              {task.description && (
+                                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 line-clamp-2" data-testid={`text-task-description-${task.id}`}>
+                                  {task.description}
+                                </p>
+                              )}
+                            </div>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm" data-testid={`button-task-menu-${task.id}`}>
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => setEditingTask(task)} data-testid={`button-edit-task-${task.id}`}>
+                                  <Edit className="h-4 w-4 mr-2" />
+                                  Edit
+                                </DropdownMenuItem>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <DropdownMenuItem onSelect={(e) => e.preventDefault()} data-testid={`button-delete-task-${task.id}`}>
+                                      <Trash2 className="h-4 w-4 mr-2" />
+                                      Delete
+                                    </DropdownMenuItem>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Delete Task</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Are you sure you want to delete "{task.title}"? This action cannot be undone.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel data-testid={`button-cancel-delete-${task.id}`}>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction
+                                        onClick={() => deleteMutation.mutate(task.id)}
+                                        className="bg-red-600 hover:bg-red-700"
+                                        data-testid={`button-confirm-delete-${task.id}`}
+                                      >
+                                        Delete
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="pt-0 space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Badge className={getPriorityBadge(task.priority || "medium")} data-testid={`badge-priority-${task.id}`}>
+                              {task.priority}
+                            </Badge>
+                            {isOverdue(task.dueDate) && task.status !== "completed" && (
+                              <Badge className="bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300" data-testid={`badge-overdue-${task.id}`}>
+                                <AlertTriangle className="h-3 w-3 mr-1" />
+                                Overdue
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="text-xs space-y-1">
+                            <div className="flex items-center text-gray-600 dark:text-gray-400">
+                              <FolderOpen className="h-3 w-3 mr-1" />
+                              <span className="truncate" data-testid={`text-task-project-${task.id}`}>{getProjectName(task.projectId)}</span>
+                            </div>
+                            <div className="flex items-center text-gray-600 dark:text-gray-400">
+                              <UserIcon className="h-3 w-3 mr-1" />
+                              <span className="truncate" data-testid={`text-task-assignee-${task.id}`}>{getAssigneeName(task.assignedTo)}</span>
+                            </div>
+                            {task.dueDate && (
+                              <div className={`flex items-center ${isOverdue(task.dueDate) && task.status !== "completed" ? "text-red-600 dark:text-red-400" : "text-gray-600 dark:text-gray-400"}`}>
+                                <Calendar className="h-3 w-3 mr-1" />
+                                <span data-testid={`text-task-due-date-${task.id}`}>{new Date(task.dueDate).toLocaleDateString()}</span>
+                              </div>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
                     ))}
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {filteredTasks.length === 0 && (
           <div className="text-center py-12">
@@ -726,11 +915,11 @@ export default function Tasks() {
               No tasks found
             </h3>
             <p className="text-gray-600 dark:text-gray-400 mb-4">
-              {searchTerm || statusFilter !== "all" || priorityFilter !== "all"
+              {searchTerm || statusFilter !== "all" || priorityFilter !== "all" || projectFilter !== "all" || assigneeFilter !== "all" || companyFilter !== "all"
                 ? "Try adjusting your search criteria or filters."
                 : "Get started by creating your first task."}
             </p>
-            {!searchTerm && statusFilter === "all" && priorityFilter === "all" && (
+            {!searchTerm && statusFilter === "all" && priorityFilter === "all" && projectFilter === "all" && assigneeFilter === "all" && companyFilter === "all" && (
               <Button onClick={() => setIsCreateDialogOpen(true)} data-testid="button-create-first-task">
                 <Plus className="h-4 w-4 mr-2" />
                 Create Your First Task
@@ -738,6 +927,131 @@ export default function Tasks() {
             )}
           </div>
         )}
+
+        {/* View Task Dialog */}
+        <Dialog open={!!viewingTask} onOpenChange={() => setViewingTask(null)}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>{viewingTask?.title}</DialogTitle>
+            </DialogHeader>
+            {viewingTask && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Status</label>
+                    <Badge className={`mt-1 ${getStatusBadge(viewingTask.status || 'todo')}`}>
+                      {viewingTask.status?.charAt(0).toUpperCase() + viewingTask.status?.slice(1) || 'To Do'}
+                    </Badge>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Priority</label>
+                    <Badge className={`mt-1 ${getPriorityBadge(viewingTask.priority || 'medium')}`}>
+                      {viewingTask.priority?.charAt(0).toUpperCase() + viewingTask.priority?.slice(1) || 'Medium'}
+                    </Badge>
+                  </div>
+                </div>
+
+                {viewingTask.description && (
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Description</label>
+                    <p className="text-sm mt-1">{viewingTask.description}</p>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Due Date</label>
+                    <div className="flex items-center text-sm mt-1">
+                      <Calendar className="w-4 h-4 mr-2" />
+                      {viewingTask.dueDate
+                        ? new Date(viewingTask.dueDate).toLocaleDateString()
+                        : 'No due date'
+                      }
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Assigned To</label>
+                    <div className="flex items-center text-sm mt-1">
+                      <UserIcon className="w-4 h-4 mr-2" />
+                      {getAssigneeName(viewingTask.assignedTo) || 'Unassigned'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Project</label>
+                    <div className="flex items-center text-sm mt-1">
+                      <FolderOpen className="w-4 h-4 mr-2" />
+                      {getProjectName(viewingTask.projectId) || 'No project'}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Company</label>
+                    <div className="text-sm mt-1">
+                      {getCompanyName(viewingTask.companyId) || 'No company'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 text-xs text-gray-500">
+                  <div>
+                    <label className="font-medium">Created</label>
+                    <div>{viewingTask.createdAt ? new Date(viewingTask.createdAt).toLocaleDateString() : 'Unknown'}</div>
+                  </div>
+                  <div>
+                    <label className="font-medium">Last Updated</label>
+                    <div>{viewingTask.updatedAt ? new Date(viewingTask.updatedAt).toLocaleDateString() : 'Unknown'}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setViewingTask(null)}>
+                Close
+              </Button>
+              <div className="flex space-x-2">
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    if (viewingTask) {
+                      setViewingTask(null);
+                      // Use the existing delete mutation
+                      const deleteTask = async () => {
+                        try {
+                          const response = await fetch(`/api/tasks/${viewingTask.id}`, {
+                            method: 'DELETE'
+                          });
+                          if (response.ok) {
+                            window.location.reload();
+                          }
+                        } catch (error) {
+                          console.error('Failed to delete task:', error);
+                        }
+                      };
+
+                      if (confirm(`Are you sure you want to delete "${viewingTask.title}"? This action cannot be undone.`)) {
+                        deleteTask();
+                      }
+                    }
+                  }}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete
+                </Button>
+                <Button onClick={() => {
+                  if (viewingTask) {
+                    setViewingTask(null);
+                    setEditingTask(viewingTask);
+                  }
+                }}>
+                  <Edit className="w-4 h-4 mr-2" />
+                  Edit
+                </Button>
+              </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Edit Task Dialog */}
         <Dialog open={!!editingTask} onOpenChange={() => setEditingTask(null)}>

@@ -217,7 +217,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting user:", error);
-      res.status(400).json({ message: "Failed to delete user" });
+      const errorMessage = error instanceof Error ? error.message : "Failed to delete user";
+      res.status(400).json({ message: errorMessage });
     }
   });
 

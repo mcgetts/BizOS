@@ -20,7 +20,16 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertClientSchema } from "@shared/schema";
-import type { Client, InsertClient } from "@shared/schema";
+import type { Client as BaseClient, InsertClient } from "@shared/schema";
+
+// Extended Client type that includes company information
+type Client = BaseClient & {
+  company?: {
+    id: string;
+    name: string;
+    industry: string | null;
+  };
+};
 import { z } from "zod";
 import {
   Plus,
@@ -92,7 +101,7 @@ const initialCompanyFormData: CompanyFormData = {
 };
 
 // Client Form Component
-function ClientForm({ client, onSuccess }: { client?: Client; onSuccess: () => void }) {
+function ClientForm({ client, onSuccess, companies }: { client?: Client; onSuccess: () => void; companies?: Company[]; }) {
   const { toast } = useToast();
   
   const form = useForm<ClientFormData>({
@@ -191,6 +200,30 @@ function ClientForm({ client, onSuccess }: { client?: Client; onSuccess: () => v
                 <FormControl>
                   <Input placeholder="+1 (555) 123-4567" {...field} data-testid="input-client-phone" />
                 </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="companyId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Company</FormLabel>
+                <Select onValueChange={field.onChange} defaultValue={field.value ?? undefined}>
+                  <FormControl>
+                    <SelectTrigger data-testid="select-client-company">
+                      <SelectValue placeholder="Select company" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {companies?.map((company) => (
+                      <SelectItem key={company.id} value={company.id}>
+                        {company.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <FormMessage />
               </FormItem>
             )}
@@ -595,7 +628,9 @@ export default function Clients() {
     client.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     client.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     client.position?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    client.department?.toLowerCase().includes(searchTerm.toLowerCase())
+    client.department?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    client.company?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    client.company?.industry?.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
 
   return (
@@ -620,7 +655,7 @@ export default function Clients() {
               <DialogHeader>
                 <DialogTitle>Add New Contact</DialogTitle>
               </DialogHeader>
-              <ClientForm onSuccess={() => setIsAddDialogOpen(false)} />
+              <ClientForm onSuccess={() => setIsAddDialogOpen(false)} companies={companies} />
             </DialogContent>
           </Dialog>
         </div>
@@ -630,7 +665,7 @@ export default function Clients() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              placeholder="Search contacts..."
+              placeholder="Search contacts, companies, positions..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10 w-80"
@@ -876,7 +911,7 @@ export default function Clients() {
                       <DialogHeader>
                         <DialogTitle>Add Your First Contact</DialogTitle>
                       </DialogHeader>
-                      <ClientForm onSuccess={() => setIsAddDialogOpen(false)} />
+                      <ClientForm onSuccess={() => setIsAddDialogOpen(false)} companies={companies} />
                     </DialogContent>
                   </Dialog>
                 )}
@@ -888,9 +923,9 @@ export default function Clients() {
                     <thead>
                       <tr className="border-b border-border">
                         <th className="text-left text-sm font-medium text-muted-foreground py-3">Contact</th>
+                        <th className="text-left text-sm font-medium text-muted-foreground py-3">Company</th>
                         <th className="text-left text-sm font-medium text-muted-foreground py-3">Position</th>
                         <th className="text-left text-sm font-medium text-muted-foreground py-3">Contact Info</th>
-                        <th className="text-left text-sm font-medium text-muted-foreground py-3">Department</th>
                         <th className="text-left text-sm font-medium text-muted-foreground py-3">Last Contact</th>
                         <th className="text-left text-sm font-medium text-muted-foreground py-3">Actions</th>
                       </tr>
@@ -903,7 +938,25 @@ export default function Clients() {
                           <div className="text-sm text-muted-foreground">{client.source || 'Unknown source'}</div>
                         </td>
                         <td className="py-4">
-                          <div className="text-sm text-foreground font-medium">{client.position || 'Contact'}</div>
+                          <div className="flex items-center space-x-2">
+                            <Building2 className="w-4 h-4 text-blue-600" />
+                            <div>
+                              <div className="text-sm text-foreground font-medium">
+                                {client.company?.name || 'No company'}
+                              </div>
+                              {client.company?.industry && (
+                                <div className="text-xs text-muted-foreground">{client.company.industry}</div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-4">
+                          <div className="text-sm text-foreground">
+                            {client.position || 'Contact'}
+                            {client.department && (
+                              <div className="text-xs text-muted-foreground">{client.department}</div>
+                            )}
+                          </div>
                         </td>
                         <td className="py-4">
                           <div className="space-y-1">
@@ -919,11 +972,6 @@ export default function Clients() {
                                 {client.phone}
                               </div>
                             )}
-                          </div>
-                        </td>
-                        <td className="py-4">
-                          <div className="text-sm text-foreground">
-                            {client.department || 'No department'}
                           </div>
                         </td>
                         <td className="py-4">
@@ -979,9 +1027,10 @@ export default function Clients() {
               <DialogHeader>
                 <DialogTitle>Edit Contact: {editingClient.name}</DialogTitle>
               </DialogHeader>
-              <ClientForm 
-                client={editingClient} 
-                onSuccess={() => setEditingClient(null)} 
+              <ClientForm
+                client={editingClient}
+                onSuccess={() => setEditingClient(null)}
+                companies={companies}
               />
             </DialogContent>
           </Dialog>

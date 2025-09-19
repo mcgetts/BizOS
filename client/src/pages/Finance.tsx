@@ -21,10 +21,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { insertInvoiceSchema, insertExpenseSchema } from "@shared/schema";
 import type { Invoice, Expense, InsertInvoice, InsertExpense, Client, Project, User } from "@shared/schema";
 import { z } from "zod";
-import { 
-  Plus, 
-  Search, 
-  DollarSign, 
+import {
+  Plus,
+  Search,
+  DollarSign,
   FileText,
   CreditCard,
   TrendingUp,
@@ -41,7 +41,9 @@ import {
   XCircle,
   Receipt,
   Building2,
-  User as UserIcon
+  User as UserIcon,
+  Table,
+  LayoutGrid
 } from "lucide-react";
 
 // Utility functions for precise decimal math (to avoid floating-point issues)
@@ -101,9 +103,18 @@ type InvoiceFormData = z.infer<typeof invoiceFormSchema>;
 type ExpenseFormData = z.infer<typeof expenseFormSchema>;
 
 // Invoice Form Component
-function InvoiceForm({ invoice, onSuccess }: { invoice?: Invoice; onSuccess: () => void }) {
+function InvoiceForm({
+  invoice,
+  onSuccess,
+  isOpen = false,
+  onOpenChange
+}: {
+  invoice?: Invoice;
+  onSuccess: () => void;
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
   const { toast } = useToast();
-  const [isOpen, setIsOpen] = useState(false);
   
   const form = useForm<InvoiceFormData>({
     resolver: zodResolver(invoiceFormSchema),
@@ -148,7 +159,7 @@ function InvoiceForm({ invoice, onSuccess }: { invoice?: Invoice; onSuccess: () 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
       toast({ title: "Success", description: "Invoice created successfully" });
-      setIsOpen(false);
+      onOpenChange?.(false);
       onSuccess();
     },
     onError: () => {
@@ -164,7 +175,7 @@ function InvoiceForm({ invoice, onSuccess }: { invoice?: Invoice; onSuccess: () 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
       toast({ title: "Success", description: "Invoice updated successfully" });
-      setIsOpen(false);
+      onOpenChange?.(false);
       onSuccess();
     },
     onError: () => {
@@ -197,13 +208,15 @@ function InvoiceForm({ invoice, onSuccess }: { invoice?: Invoice; onSuccess: () 
   const isLoading = createMutation.isPending || updateMutation.isPending;
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button data-testid={invoice ? "button-edit-invoice" : "button-create-invoice"}>
-          <FileText className="w-4 h-4 mr-2" />
-          {invoice ? "Edit Invoice" : "Create Invoice"}
-        </Button>
-      </DialogTrigger>
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      {!invoice && (
+        <DialogTrigger asChild>
+          <Button data-testid="button-create-invoice">
+            <FileText className="w-4 h-4 mr-2" />
+            Create Invoice
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{invoice ? "Edit Invoice" : "Create New Invoice"}</DialogTitle>
@@ -378,7 +391,7 @@ function InvoiceForm({ invoice, onSuccess }: { invoice?: Invoice; onSuccess: () 
               )}
             />
             <div className="flex justify-end space-x-2 pt-4">
-              <Button type="button" variant="outline" onClick={() => setIsOpen(false)} data-testid="button-cancel-invoice">
+              <Button type="button" variant="outline" onClick={() => onOpenChange?.(false)} data-testid="button-cancel-invoice">
                 Cancel
               </Button>
               <Button type="submit" disabled={isLoading} data-testid="button-save-invoice">
@@ -393,9 +406,18 @@ function InvoiceForm({ invoice, onSuccess }: { invoice?: Invoice; onSuccess: () 
 }
 
 // Expense Form Component
-function ExpenseForm({ expense, onSuccess }: { expense?: Expense; onSuccess: () => void }) {
+function ExpenseForm({
+  expense,
+  onSuccess,
+  isOpen = false,
+  onOpenChange
+}: {
+  expense?: Expense;
+  onSuccess: () => void;
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
   const { toast } = useToast();
-  const [isOpen, setIsOpen] = useState(false);
   
   const form = useForm<ExpenseFormData>({
     resolver: zodResolver(expenseFormSchema),
@@ -430,7 +452,7 @@ function ExpenseForm({ expense, onSuccess }: { expense?: Expense; onSuccess: () 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
       toast({ title: "Success", description: "Expense created successfully" });
-      setIsOpen(false);
+      onOpenChange?.(false);
       onSuccess();
     },
     onError: () => {
@@ -446,7 +468,7 @@ function ExpenseForm({ expense, onSuccess }: { expense?: Expense; onSuccess: () 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
       toast({ title: "Success", description: "Expense updated successfully" });
-      setIsOpen(false);
+      onOpenChange?.(false);
       onSuccess();
     },
     onError: () => {
@@ -478,13 +500,15 @@ function ExpenseForm({ expense, onSuccess }: { expense?: Expense; onSuccess: () 
   const categories = ["travel", "meals", "supplies", "software", "equipment", "marketing", "training", "other"];
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" data-testid={expense ? "button-edit-expense" : "button-add-expense"}>
-          <Plus className="w-4 h-4 mr-2" />
-          {expense ? "Edit Expense" : "Add Expense"}
-        </Button>
-      </DialogTrigger>
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      {!expense && (
+        <DialogTrigger asChild>
+          <Button variant="outline" data-testid="button-add-expense">
+            <Plus className="w-4 h-4 mr-2" />
+            Add Expense
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{expense ? "Edit Expense" : "Add New Expense"}</DialogTitle>
@@ -662,7 +686,7 @@ function ExpenseForm({ expense, onSuccess }: { expense?: Expense; onSuccess: () 
               />
             </div>
             <div className="flex justify-end space-x-2 pt-4">
-              <Button type="button" variant="outline" onClick={() => setIsOpen(false)} data-testid="button-cancel-expense">
+              <Button type="button" variant="outline" onClick={() => onOpenChange?.(false)} data-testid="button-cancel-expense">
                 Cancel
               </Button>
               <Button type="submit" disabled={isLoading} data-testid="button-save-expense">
@@ -715,10 +739,132 @@ function StatusBadge({ status, type }: { status: string, type: "invoice" | "expe
   );
 }
 
+// Invoice Card Component for Board View
+function InvoiceCard({
+  invoice,
+  clients,
+  projects,
+  onEdit,
+  onDelete
+}: {
+  invoice: Invoice;
+  clients?: Client[];
+  projects?: Project[];
+  onEdit: (invoice: Invoice) => void;
+  onDelete: (invoice: Invoice) => void;
+}) {
+  const client = clients?.find(c => c.id === invoice.clientId);
+  const project = projects?.find(p => p.id === invoice.projectId);
+
+  return (
+    <Card className="mb-3 hover:shadow-md transition-shadow cursor-pointer">
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between mb-2">
+          <div>
+            <h4 className="font-medium text-sm">{invoice.invoiceNumber}</h4>
+            <p className="text-xs text-muted-foreground">{client?.name || 'No client'}</p>
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                <MoreHorizontal className="w-3 h-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => onEdit(invoice)}>
+                <Edit className="w-4 h-4 mr-2" />
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onDelete(invoice)} className="text-destructive">
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        {project && (
+          <p className="text-xs text-muted-foreground mb-2">{project.name}</p>
+        )}
+        <div className="flex items-center justify-between">
+          <span className="font-bold text-lg">£{parseFloat(invoice.total || '0').toLocaleString()}</span>
+        </div>
+        {invoice.dueDate && (
+          <div className="flex items-center space-x-1 text-xs text-muted-foreground mt-2">
+            <Calendar className="w-3 h-3" />
+            <span>Due {new Date(invoice.dueDate).toLocaleDateString()}</span>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Expense Card Component for Board View
+function ExpenseCard({
+  expense,
+  projects,
+  onEdit,
+  onDelete
+}: {
+  expense: Expense;
+  projects?: Project[];
+  onEdit: (expense: Expense) => void;
+  onDelete: (expense: Expense) => void;
+}) {
+  const project = projects?.find(p => p.id === expense.projectId);
+
+  return (
+    <Card className="mb-3 hover:shadow-md transition-shadow cursor-pointer">
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between mb-2">
+          <div className="flex-1">
+            <h4 className="font-medium text-sm line-clamp-2">{expense.description}</h4>
+            <div className="flex items-center gap-2 mt-1">
+              <Badge variant="outline" className="text-xs">{expense.category || 'Uncategorized'}</Badge>
+              {expense.reimbursed && (
+                <Badge variant="outline" className="text-xs">Reimbursed</Badge>
+              )}
+            </div>
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                <MoreHorizontal className="w-3 h-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => onEdit(expense)}>
+                <Edit className="w-4 h-4 mr-2" />
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onDelete(expense)} className="text-destructive">
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        {project && (
+          <p className="text-xs text-muted-foreground mb-2">{project.name}</p>
+        )}
+        <div className="flex items-center justify-between">
+          <span className="font-bold text-lg text-destructive">£{parseFloat(expense.amount || '0').toLocaleString()}</span>
+        </div>
+        <div className="text-xs text-muted-foreground mt-2">
+          {new Date(expense.date).toLocaleDateString()}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Finance() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
+  const [viewMode, setViewMode] = useState<"table" | "board">("table");
+  const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -934,6 +1080,28 @@ export default function Finance() {
           </Card>
         )}
 
+        {/* View Toggle */}
+        <div className="flex justify-end gap-2">
+          <Button
+            variant={viewMode === "table" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setViewMode("table")}
+            className="gap-2"
+          >
+            <Table className="h-4 w-4" />
+            Table
+          </Button>
+          <Button
+            variant={viewMode === "board" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setViewMode("board")}
+            className="gap-2"
+          >
+            <LayoutGrid className="h-4 w-4" />
+            Board
+          </Button>
+        </div>
+
         {/* Financial Data Tabs */}
         <Tabs defaultValue="invoices" className="space-y-4">
           <TabsList className="grid w-full grid-cols-2">
@@ -1031,10 +1199,9 @@ export default function Finance() {
                                     </Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end">
-                                    <DropdownMenuItem asChild>
-                                      <div className="w-full">
-                                        <InvoiceForm invoice={invoice} onSuccess={() => {}} />
-                                      </div>
+                                    <DropdownMenuItem onClick={() => setEditingInvoice(invoice)}>
+                                      <Edit className="w-4 h-4 mr-2" />
+                                      Edit
                                     </DropdownMenuItem>
                                     <DropdownMenuItem asChild>
                                       <AlertDialog>
@@ -1172,10 +1339,9 @@ export default function Finance() {
                                     </Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end">
-                                    <DropdownMenuItem asChild>
-                                      <div className="w-full">
-                                        <ExpenseForm expense={expense} onSuccess={() => {}} />
-                                      </div>
+                                    <DropdownMenuItem onClick={() => setEditingExpense(expense)}>
+                                      <Edit className="w-4 h-4 mr-2" />
+                                      Edit
                                     </DropdownMenuItem>
                                     <DropdownMenuItem asChild>
                                       <AlertDialog>
@@ -1218,6 +1384,26 @@ export default function Finance() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Edit Invoice Dialog */}
+        {editingInvoice && (
+          <InvoiceForm
+            invoice={editingInvoice}
+            isOpen={!!editingInvoice}
+            onOpenChange={(open) => !open && setEditingInvoice(null)}
+            onSuccess={() => setEditingInvoice(null)}
+          />
+        )}
+
+        {/* Edit Expense Dialog */}
+        {editingExpense && (
+          <ExpenseForm
+            expense={editingExpense}
+            isOpen={!!editingExpense}
+            onOpenChange={(open) => !open && setEditingExpense(null)}
+            onSuccess={() => setEditingExpense(null)}
+          />
+        )}
       </div>
     </Layout>
   );

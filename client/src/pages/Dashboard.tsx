@@ -410,103 +410,103 @@ export default function Dashboard() {
         <DashboardKPIs />
 
 
-        {/* Charts and Executive Alerts */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-          {/* Revenue Chart */}
-          <Card className="xl:col-span-2 glassmorphism" data-testid="card-revenue-chart">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Revenue Trends</CardTitle>
-                <div className="flex items-center space-x-2">
-                  <Button
-                    variant={selectedPeriod === 12 ? "default" : "ghost"}
-                    size="sm"
-                    onClick={() => setSelectedPeriod(12)}
-                  >
-                    12M
-                  </Button>
-                  <Button
-                    variant={selectedPeriod === 6 ? "default" : "ghost"}
-                    size="sm"
-                    onClick={() => setSelectedPeriod(6)}
-                  >
-                    6M
-                  </Button>
-                  <Button
-                    variant={selectedPeriod === 3 ? "default" : "ghost"}
-                    size="sm"
-                    onClick={() => setSelectedPeriod(3)}
-                  >
-                    3M
-                  </Button>
-                </div>
+        {/* Revenue Chart */}
+        <Card className="glassmorphism" data-testid="card-revenue-chart">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Revenue Trends</CardTitle>
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant={selectedPeriod === 12 ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setSelectedPeriod(12)}
+                >
+                  12M
+                </Button>
+                <Button
+                  variant={selectedPeriod === 6 ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setSelectedPeriod(6)}
+                >
+                  6M
+                </Button>
+                <Button
+                  variant={selectedPeriod === 3 ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setSelectedPeriod(3)}
+                >
+                  3M
+                </Button>
               </div>
-            </CardHeader>
-            <CardContent>
-              <div className="h-80">
-                {revenueTrends && revenueTrends.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={revenueTrends}
-                      margin={{
-                        top: 20,
-                        right: 30,
-                        left: 20,
-                        bottom: 5,
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="h-80">
+              {revenueTrends && revenueTrends.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={revenueTrends}
+                    margin={{
+                      top: 20,
+                      right: 30,
+                      left: 20,
+                      bottom: 5,
+                    }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                    <XAxis
+                      dataKey="month"
+                      className="text-xs"
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <YAxis
+                      className="text-xs"
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(value) => `£${(value / 1000).toFixed(0)}K`}
+                    />
+                    <Tooltip
+                      content={({ active, payload, label }) => {
+                        if (active && payload && payload.length) {
+                          return (
+                            <div className="bg-popover border rounded-lg p-3 shadow-lg">
+                              <p className="font-medium">{label}</p>
+                              <p className="text-sm text-primary">
+                                Revenue: £{payload[0].value?.toLocaleString()}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {payload[0].payload.invoiceCount} invoices
+                              </p>
+                            </div>
+                          );
+                        }
+                        return null;
                       }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                      <XAxis
-                        dataKey="month"
-                        className="text-xs"
-                        tickLine={false}
-                        axisLine={false}
-                      />
-                      <YAxis
-                        className="text-xs"
-                        tickLine={false}
-                        axisLine={false}
-                        tickFormatter={(value) => `£${(value / 1000).toFixed(0)}K`}
-                      />
-                      <Tooltip
-                        content={({ active, payload, label }) => {
-                          if (active && payload && payload.length) {
-                            return (
-                              <div className="bg-popover border rounded-lg p-3 shadow-lg">
-                                <p className="font-medium">{label}</p>
-                                <p className="text-sm text-primary">
-                                  Revenue: £{payload[0].value?.toLocaleString()}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  {payload[0].payload.invoiceCount} invoices
-                                </p>
-                              </div>
-                            );
-                          }
-                          return null;
-                        }}
-                      />
-                      <Bar
-                        dataKey="revenue"
-                        fill="hsl(var(--primary))"
-                        radius={[4, 4, 0, 0]}
-                        className="drop-shadow-sm"
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="flex items-center justify-center h-full text-muted-foreground">
-                    <div className="text-center">
-                      <TrendingUp className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                      <div className="text-sm">No revenue data available</div>
-                      <div className="text-xs">Complete some paid invoices to see trends</div>
-                    </div>
+                    />
+                    <Bar
+                      dataKey="revenue"
+                      fill="#3b82f6"
+                      radius={[4, 4, 0, 0]}
+                      className="drop-shadow-sm"
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                  <div className="text-center">
+                    <TrendingUp className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <div className="text-sm">No revenue data available</div>
+                    <div className="text-xs">Complete some paid invoices to see trends</div>
                   </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
+        {/* Executive Alerts, Upcoming Events, and Recent Activity */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Executive Alerts */}
           <Card className="glassmorphism" data-testid="card-alerts">
             <CardHeader>
@@ -566,41 +566,6 @@ export default function Dashboard() {
                     <div className="text-xs text-muted-foreground">No urgent items need your attention right now.</div>
                   </div>
                 )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Recent Activity and Events */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Recent Activity */}
-          <Card className="glassmorphism" data-testid="card-activity">
-            <CardHeader>
-              <CardTitle>Recent Activity</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {displayActivity.map((activity, index) => (
-                  <div key={index} className="flex items-start space-x-4" data-testid={`activity-${index}`}>
-                    <img
-                      src={activity.avatar}
-                      alt={activity.user}
-                      className="w-8 h-8 rounded-full object-cover"
-                    />
-                    <div className="flex-1">
-                      <div className="text-sm text-foreground">
-                        <span className="font-medium">{activity.user}</span> {activity.action}{" "}
-                        <span className="font-medium text-primary">{activity.target}</span>
-                      </div>
-                      <div className="text-xs text-muted-foreground">{activity.time}</div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Badge variant={activity.status === "Completed" ? "default" : "secondary"}>
-                        {activity.status}
-                      </Badge>
-                    </div>
-                  </div>
-                ))}
               </div>
             </CardContent>
           </Card>
@@ -690,79 +655,40 @@ export default function Dashboard() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Recent Activity */}
+          <Card className="glassmorphism" data-testid="card-activity">
+            <CardHeader>
+              <CardTitle>Recent Activity</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {displayActivity.map((activity, index) => (
+                  <div key={index} className="flex items-start space-x-4" data-testid={`activity-${index}`}>
+                    <img
+                      src={activity.avatar}
+                      alt={activity.user}
+                      className="w-8 h-8 rounded-full object-cover"
+                    />
+                    <div className="flex-1">
+                      <div className="text-sm text-foreground">
+                        <span className="font-medium">{activity.user}</span> {activity.action}{" "}
+                        <span className="font-medium text-primary">{activity.target}</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground">{activity.time}</div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Badge variant={activity.status === "Completed" ? "default" : "secondary"}>
+                        {activity.status}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
-        {/* Project Overview */}
-        <Card className="glassmorphism" data-testid="card-projects-overview">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Active Projects Overview</CardTitle>
-              <Button variant="ghost" size="sm" onClick={() => window.location.href = "/projects"}>View All Projects</Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left text-sm font-medium text-muted-foreground py-3">Project</th>
-                    <th className="text-left text-sm font-medium text-muted-foreground py-3">Client</th>
-                    <th className="text-left text-sm font-medium text-muted-foreground py-3">Progress</th>
-                    <th className="text-left text-sm font-medium text-muted-foreground py-3">Status</th>
-                    <th className="text-left text-sm font-medium text-muted-foreground py-3">Due Date</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {displayProjects.map((project, index) => (
-                    <tr key={project.id} data-testid={`project-row-${index}`}>
-                      <td className="py-4">
-                        <div className="font-medium text-foreground">{project.name}</div>
-                        <div className="text-sm text-muted-foreground">Development</div>
-                      </td>
-                      <td className="py-4">
-                        <div className="text-sm text-foreground">
-                          {project.clientId ? `Client ${project.clientId.slice(-3)}` : 'Internal Project'}
-                        </div>
-                      </td>
-                      <td className="py-4">
-                        <div className="flex items-center space-x-2">
-                          <div className="w-24 bg-muted rounded-full h-2">
-                            <div 
-                              className="bg-primary h-2 rounded-full" 
-                              style={{ width: `${project.progress}%` }}
-                            ></div>
-                          </div>
-                          <span className="text-sm text-muted-foreground">{project.progress}%</span>
-                        </div>
-                      </td>
-                      <td className="py-4">
-                        <Badge
-                          variant={
-                            project.status === "in_progress" ? "default" :
-                            project.status === "completed" ? "secondary" :
-                            project.status === "planning" ? "outline" : "destructive"
-                          }
-                          data-testid={`badge-status-${index}`}
-                        >
-                          {project.status === "in_progress" ? "In Progress" :
-                           project.status === "completed" ? "Completed" :
-                           project.status === "planning" ? "Planning" :
-                           project.status === "on_hold" ? "On Hold" :
-                           project.status ? project.status.charAt(0).toUpperCase() + project.status.slice(1) : "Unknown"}
-                        </Badge>
-                      </td>
-                      <td className="py-4">
-                        <div className="text-sm text-foreground">
-                          {project.endDate ? new Date(project.endDate).toLocaleDateString() : 'No due date'}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
 
       </div>
     </Layout>
