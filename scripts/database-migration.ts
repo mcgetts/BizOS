@@ -72,7 +72,7 @@ async function runDatabaseMigration() {
 
     for (const column of clientColumns) {
       try {
-        await db.execute(sql.raw(`ALTER TABLE clients ADD COLUMN ${column.name} ${column.type}`));
+        await db.execute(sql`ALTER TABLE clients ADD COLUMN ${sql.identifier(column.name)} ${sql.raw(column.type)}`);
         console.log(`✅ Added ${column.name} to clients table`);
       } catch (error: any) {
         if (error.message.includes('already exists')) {
