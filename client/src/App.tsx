@@ -17,6 +17,7 @@ import Knowledge from "@/pages/Knowledge";
 import Marketing from "@/pages/Marketing";
 import Support from "@/pages/Support";
 import Company from "@/pages/Company";
+import Companies from "@/pages/Companies";
 import Admin from "@/pages/Admin";
 
 function Router() {
@@ -43,6 +44,7 @@ function Router() {
           <Route path="/marketing" component={Marketing} />
           <Route path="/support" component={Support} />
           <Route path="/company" component={Company} />
+          <Route path="/companies" component={Companies} />
           <Route path="/admin" component={Admin} />
         </>
       )}

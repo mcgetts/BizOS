@@ -14,6 +14,7 @@ import {
   Settings,
   Menu,
   Building2,
+  Building,
 } from "lucide-react";
 
 const navigationItems = [
@@ -66,6 +67,11 @@ const navigationItems = [
     title: "Company",
     href: "/company",
     icon: Building2,
+  },
+  {
+    title: "Companies",
+    href: "/companies",
+    icon: Building,
   },
 ];
 
