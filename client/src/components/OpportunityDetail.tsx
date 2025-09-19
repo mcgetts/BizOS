@@ -25,7 +25,6 @@ import {
   Mail,
   FileText,
   Target,
-  PainPoint
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -325,7 +324,12 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
                           <Button variant="ghost" size="sm">
                             <Edit className="w-3 h-3" />
                           </Button>
-                          <Button variant="ghost" size="sm">
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => deleteNextStepMutation.mutate(nextStep.id)}
+                            disabled={deleteNextStepMutation.isPending}
+                          >
                             <Trash2 className="w-3 h-3" />
                           </Button>
                         </div>
@@ -387,7 +391,12 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
                             <Button variant="ghost" size="sm">
                               <Edit className="w-3 h-3" />
                             </Button>
-                            <Button variant="ghost" size="sm">
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => deleteCommunicationMutation.mutate(comm.id)}
+                              disabled={deleteCommunicationMutation.isPending}
+                            >
                               <Trash2 className="w-3 h-3" />
                             </Button>
                           </div>
@@ -455,7 +464,12 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
                             <Button variant="ghost" size="sm">
                               <Edit className="w-3 h-3" />
                             </Button>
-                            <Button variant="ghost" size="sm">
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => deleteStakeholderMutation.mutate(stakeholder.id)}
+                              disabled={deleteStakeholderMutation.isPending}
+                            >
                               <Trash2 className="w-3 h-3" />
                             </Button>
                           </div>
