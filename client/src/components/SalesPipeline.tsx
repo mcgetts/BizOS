@@ -569,9 +569,9 @@ export function SalesPipeline() {
       return;
     }
 
-    // Business logic validation: Prevent moving closed opportunities
-    if (opportunity.stage === 'closed_won' || opportunity.stage === 'closed_lost') {
-      setDragError('Closed opportunities cannot be moved to other stages.');
+    // Business logic validation: Confirm moving closed opportunities
+    if ((opportunity.stage === 'closed_won' || opportunity.stage === 'closed_lost') &&
+        !confirm(`Are you sure you want to reopen "${opportunity.title}" from ${opportunity.stage === 'closed_won' ? 'won' : 'lost'} status?`)) {
       return;
     }
 

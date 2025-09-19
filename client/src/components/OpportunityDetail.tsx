@@ -107,6 +107,17 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
   const [isAddingNextStep, setIsAddingNextStep] = useState(false);
   const [isAddingCommunication, setIsAddingCommunication] = useState(false);
   const [isAddingStakeholder, setIsAddingStakeholder] = useState(false);
+  const [isEditingStage, setIsEditingStage] = useState(false);
+
+  // Stage configuration (matching SalesPipeline)
+  const stageConfig = [
+    { key: "lead", label: "Lead", color: "bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-100" },
+    { key: "qualified", label: "Qualified", color: "bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-100" },
+    { key: "proposal", label: "Proposal", color: "bg-yellow-100 dark:bg-yellow-800 text-yellow-800 dark:text-yellow-100" },
+    { key: "negotiation", label: "Negotiation", color: "bg-orange-100 dark:bg-orange-800 text-orange-800 dark:text-orange-100" },
+    { key: "closed_won", label: "Closed Won", color: "bg-green-100 dark:bg-green-800 text-green-800 dark:text-green-100" },
+    { key: "closed_lost", label: "Closed Lost", color: "bg-red-100 dark:bg-red-800 text-red-800 dark:text-red-100" },
+  ];
 
   // Fetch next steps
   const { data: nextStepsData = [] } = useQuery({
@@ -159,6 +170,35 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
       });
     },
   });
+
+  // Stage update mutation
+  const updateStageMutation = useMutation({
+    mutationFn: (newStage: string) => apiRequest("PUT", `/api/opportunities/${opportunity.id}`, { stage: newStage }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: [`/api/opportunities`]
+      });
+      setIsEditingStage(false);
+    },
+  });
+
+  // Handle stage update
+  const handleStageUpdate = (newStage: string) => {
+    // Add confirmation for changing to/from closed stages
+    if ((opportunity.stage === 'closed_won' || opportunity.stage === 'closed_lost') &&
+        (newStage !== 'closed_won' && newStage !== 'closed_lost')) {
+      if (!confirm(`Are you sure you want to reopen this opportunity from ${opportunity.stage === 'closed_won' ? 'won' : 'lost'} status?`)) {
+        return;
+      }
+    } else if ((newStage === 'closed_won' || newStage === 'closed_lost') &&
+               (opportunity.stage !== 'closed_won' && opportunity.stage !== 'closed_lost')) {
+      if (!confirm(`Are you sure you want to mark this opportunity as ${newStage === 'closed_won' ? 'won' : 'lost'}?`)) {
+        return;
+      }
+    }
+
+    updateStageMutation.mutate(newStage);
+  };
 
   // Create mutations
   const createNextStepMutation = useMutation({
@@ -291,9 +331,39 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between">
             <span>{opportunity.title}</span>
-            <Badge variant={opportunity.priority === "high" ? "destructive" : "secondary"}>
-              {opportunity.stage}
-            </Badge>
+            <div className="flex items-center space-x-2">
+              {isEditingStage ? (
+                <div className="flex items-center space-x-2">
+                  <Select onValueChange={handleStageUpdate} defaultValue={opportunity.stage}>
+                    <SelectTrigger className="w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {stageConfig.map((stage) => (
+                        <SelectItem key={stage.key} value={stage.key}>
+                          {stage.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsEditingStage(false)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <Badge
+                  variant={opportunity.priority === "high" ? "destructive" : "secondary"}
+                  className="cursor-pointer hover:opacity-80"
+                  onClick={() => setIsEditingStage(true)}
+                >
+                  {stageConfig.find(s => s.key === opportunity.stage)?.label || opportunity.stage}
+                </Badge>
+              )}
+            </div>
           </DialogTitle>
           <DialogDescription>
             {opportunity.company?.name} • {opportunity.contact?.name || "No contact assigned"}

@@ -20,18 +20,12 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertClientSchema } from "@shared/schema";
-import type { Client as BaseClient, InsertClient } from "@shared/schema";
+import type { Client as BaseClient, ClientWithCompany, InsertClient } from "@shared/schema";
 import { useTableSort, SortConfig } from "@/hooks/useTableSort";
 import { SortableHeader, SortableTableHead } from "@/components/SortableHeader";
 
-// Extended Client type that includes company information
-type Client = BaseClient & {
-  company?: {
-    id: string;
-    name: string;
-    industry: string | null;
-  };
-};
+// Use the imported ClientWithCompany type
+type Client = ClientWithCompany;
 import { z } from "zod";
 import {
   Plus,
@@ -558,7 +552,7 @@ export default function Clients() {
     }
   }, [isAuthenticated, queryClient]);
 
-  const { data: clients, isLoading: clientsLoading, error } = useQuery<(Client & { company?: { id: string; name: string; industry: string } })[]>({
+  const { data: clients, isLoading: clientsLoading, error } = useQuery<ClientWithCompany[]>({
     queryKey: ["/api/clients"],
     enabled: isAuthenticated,
     staleTime: 0,
@@ -1480,7 +1474,9 @@ export default function Clients() {
                   </div>
                   <div className="space-y-2">
                     <label className="font-medium">Position</label>
-                    <span>{viewingClient.position || "—"}</span>
+                    <div>
+                      <span>{viewingClient.position || "—"}</span>
+                    </div>
                   </div>
                 </div>
 
@@ -1489,12 +1485,7 @@ export default function Clients() {
                     <label className="font-medium">Company</label>
                     <div className="flex items-center space-x-2">
                       <Building2 className="w-4 h-4 text-blue-600" />
-                      <div>
-                        <span className="font-medium">{viewingClient.company.name}</span>
-                        {viewingClient.company.industry && (
-                          <div className="text-sm text-muted-foreground">{viewingClient.company.industry}</div>
-                        )}
-                      </div>
+                      <span className="font-medium">{viewingClient.company.name}</span>
                     </div>
                   </div>
                 )}
@@ -1516,26 +1507,25 @@ export default function Clients() {
                   </div>
                 </div>
 
-                {viewingClient.department && (
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="font-medium">Department</label>
-                    <span>{viewingClient.department}</span>
+                    <div>
+                      <span>{viewingClient.department || "—"}</span>
+                    </div>
                   </div>
-                )}
-
-                {viewingClient.source && (
                   <div className="space-y-2">
                     <label className="font-medium">Source</label>
-                    <span className="capitalize">{viewingClient.source}</span>
+                    <div>
+                      <span className="capitalize">{viewingClient.source || "—"}</span>
+                    </div>
                   </div>
-                )}
+                </div>
 
-                {viewingClient.notes && (
-                  <div className="space-y-2">
-                    <label className="font-medium">Notes</label>
-                    <p className="text-sm text-gray-600">{viewingClient.notes}</p>
-                  </div>
-                )}
+                <div className="space-y-2">
+                  <label className="font-medium">Notes</label>
+                  <p className="text-sm text-gray-600">{viewingClient.notes || "—"}</p>
+                </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">

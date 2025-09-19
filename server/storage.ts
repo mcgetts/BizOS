@@ -22,6 +22,7 @@ import {
   type InsertUser,
   type InsertClient,
   type Client,
+  type ClientWithCompany,
   type InsertCompany,
   type Company,
   type InsertSalesOpportunity,
@@ -69,8 +70,8 @@ export interface IStorage {
   deleteUser(id: string): Promise<void>;
   
   // Client operations
-  getClients(): Promise<Client[]>;
-  getClient(id: string): Promise<Client | undefined>;
+  getClients(): Promise<ClientWithCompany[]>;
+  getClient(id: string): Promise<ClientWithCompany | undefined>;
   createClient(client: InsertClient): Promise<Client>;
   updateClient(id: string, client: Partial<InsertClient>): Promise<Client>;
   deleteClient(id: string): Promise<void>;
