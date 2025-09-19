@@ -1134,9 +1134,14 @@ export default function Clients() {
                     </thead>
                     <tbody className="divide-y divide-border">
                       {sortedClients.map((client: any, index: number) => (
-                        <tr key={client.id} data-testid={`row-client-${index}`} className="cursor-pointer hover:bg-muted/50" onClick={() => {setViewingClient(client); setIsViewClientDialogOpen(true);}}>
+                        <tr key={client.id} data-testid={`row-client-${index}`} className="hover:bg-muted/50">
                           <td className="py-4">
-                            <div className="font-medium text-foreground">{client.name}</div>
+                            <div
+                              className="font-medium text-foreground cursor-pointer hover:text-blue-600 hover:underline"
+                              onClick={() => {setViewingClient(client); setIsViewClientDialogOpen(true);}}
+                            >
+                              {client.name}
+                            </div>
                           </td>
                           <td className="py-4">
                             <div className="flex items-center space-x-2">
@@ -1182,7 +1187,7 @@ export default function Clients() {
                               <DropdownMenuContent align="end">
                                 <DropdownMenuItem onClick={() => {setViewingClient(client); setIsViewClientDialogOpen(true);}} data-testid={`button-view-${index}`}>
                                   <Users className="w-4 h-4 mr-2" />
-                                  View
+                                  View Details
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => setEditingClient(client)} data-testid={`button-edit-${index}`}>
                                   <Edit className="w-4 h-4 mr-2" />
