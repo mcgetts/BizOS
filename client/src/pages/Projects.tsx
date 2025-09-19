@@ -468,6 +468,15 @@ function ProjectForm({ project, onSuccess }: { project?: Project; onSuccess: () 
   );
 }
 
+// Status configuration with colors for kanban headers
+const projectStatusConfig = [
+  { key: "planning", label: "Planning", color: "bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-100" },
+  { key: "active", label: "Active", color: "bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-100" },
+  { key: "review", label: "Review", color: "bg-yellow-100 dark:bg-yellow-800 text-yellow-800 dark:text-yellow-100" },
+  { key: "paused", label: "Paused", color: "bg-orange-100 dark:bg-orange-800 text-orange-800 dark:text-orange-100" },
+  { key: "completed", label: "Completed", color: "bg-green-100 dark:bg-green-800 text-green-800 dark:text-green-100" },
+];
+
 export default function Projects() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading } = useAuth();
@@ -542,14 +551,16 @@ export default function Projects() {
   }
 
   const getStatusColor = (status: string) => {
+    const statusItem = projectStatusConfig.find(s => s.key === status);
+    if (statusItem) {
+      return statusItem.color;
+    }
+    // Handle statuses not in config
     switch (status) {
-      case "active":
-      case "in_progress": return "default";
-      case "planning": return "secondary";
-      case "review": return "outline";
-      case "completed": return "default";
-      case "cancelled": return "destructive";
-      default: return "secondary";
+      case "in_progress": return "bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-100";
+      case "cancelled": return "bg-red-100 dark:bg-red-800 text-red-800 dark:text-red-100";
+      case "on_hold": return "bg-orange-100 dark:bg-orange-800 text-orange-800 dark:text-orange-100";
+      default: return projectStatusConfig[0].color; // Default to planning color
     }
   };
 
@@ -637,28 +648,28 @@ export default function Projects() {
   const { sortedData: sortedProjects, sortState, handleSort } = useTableSort(filteredProjects, sortConfigs);
 
   const groupProjectsByStatus = () => {
-    // Exclude cancelled status from Kanban view
-    const statuses = ["planning", "active", "review", "paused", "completed"];
-    const grouped = statuses.reduce((acc, status) => {
-      if (status === "active") {
+    // Use the status config to create grouped projects
+    const grouped = projectStatusConfig.reduce((acc, statusItem) => {
+      if (statusItem.key === "active") {
         // Only include "active" status projects
-        acc[status] = filteredProjects.filter(project =>
+        acc[statusItem.key] = filteredProjects.filter(project =>
           project.status === "active" && project.status !== "cancelled"
         );
-      } else if (status === "paused") {
+      } else if (statusItem.key === "paused") {
         // Include both "paused" and "on_hold" in the paused column
-        acc[status] = filteredProjects.filter(project =>
+        acc[statusItem.key] = filteredProjects.filter(project =>
           (project.status === "paused" || project.status === "on_hold") && project.status !== "cancelled"
         );
       } else {
-        acc[status] = filteredProjects.filter(project => project.status === status && project.status !== "cancelled");
+        acc[statusItem.key] = filteredProjects.filter(project => project.status === statusItem.key && project.status !== "cancelled");
       }
       return acc;
     }, {} as Record<string, Project[]>);
 
     // Handle any projects with status not in our predefined list (but exclude cancelled)
+    const definedStatuses = projectStatusConfig.map(s => s.key).concat(["on_hold", "cancelled"]);
     const unhandledProjects = filteredProjects.filter(project =>
-      !["planning", "active", "review", "paused", "on_hold", "completed", "cancelled"].includes(project.status || "") &&
+      !definedStatuses.includes(project.status || "") &&
       project.status !== "cancelled"
     );
 
@@ -869,17 +880,19 @@ export default function Projects() {
         ) : viewMode === "kanban" ? (
           /* Kanban View */
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-            {Object.entries(projectsByStatus).map(([status, statusProjects]) => (
-              <Card key={status} className="glassmorphism">
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-sm font-medium flex items-center justify-between">
-                    <span className="capitalize">{status}</span>
+            {projectStatusConfig.map((statusItem) => {
+              const statusProjects = projectsByStatus[statusItem.key] || [];
+              return (
+              <Card key={statusItem.key} className="glassmorphism">
+                <div className={`${statusItem.color} p-3 rounded-t-lg border-b`}>
+                  <div className="text-sm font-medium flex items-center justify-between">
+                    <span>{statusItem.label}</span>
                     <Badge variant="secondary" className="text-xs">
                       {statusProjects.length}
                     </Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
+                  </div>
+                </div>
+                <CardContent className="space-y-3 bg-gray-50 dark:bg-gray-800 rounded-b-lg min-h-[140px]">
                   {statusProjects.map((project) => {
                     const projectTasks = getProjectTasks(project.id || '');
                     return (
@@ -974,7 +987,7 @@ export default function Projects() {
                   })}
                 </CardContent>
               </Card>
-            ))}
+            )})}
           </div>
         ) : (
           /* Table View */
@@ -1087,7 +1100,7 @@ export default function Projects() {
                           <td className="py-4">
                             <div className="flex items-center space-x-2">
                               <StatusIcon className="w-4 h-4" />
-                              <Badge variant={getStatusColor(project.status)} data-testid={`badge-status-${index}`}>
+                              <Badge className={getStatusColor(project.status)} variant="outline" data-testid={`badge-status-${index}`}>
                                 {project.status?.charAt(0).toUpperCase() + project.status?.slice(1)}
                               </Badge>
                             </div>
@@ -1208,7 +1221,7 @@ export default function Projects() {
                   </div>
                   <div>
                     <label className="text-sm font-medium text-muted-foreground">Status</label>
-                    <Badge variant={getStatusColor(viewingProject.status || '')}>
+                    <Badge className={getStatusColor(viewingProject.status || '')} variant="outline">
                       {viewingProject.status?.charAt(0).toUpperCase() + viewingProject.status?.slice(1)}
                     </Badge>
                   </div>

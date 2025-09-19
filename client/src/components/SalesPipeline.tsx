@@ -577,214 +577,11 @@ export function SalesPipeline() {
   };
 
   const header = (
-    <div className="flex items-center justify-between">
+    <div className="flex items-center justify-between relative">
       <h2 className="text-2xl font-bold">Sales Pipeline</h2>
-      <div className="flex space-x-2">
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              Add Opportunity
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[600px]">
-            <DialogHeader>
-              <DialogTitle>Create New Opportunity</DialogTitle>
-              <DialogDescription>
-                Add a new sales opportunity to your pipeline. Fill in the details below.
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleCreateSubmit}>
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="title">Title *</Label>
-                    <Input
-                      id="title"
-                      value={createForm.title}
-                      onChange={(e) => updateCreateForm("title", e.target.value)}
-                      placeholder="e.g., Website Redesign Project"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="value">Value *</Label>
-                    <Input
-                      id="value"
-                      type="number"
-                      step="0.01"
-                      value={createForm.value}
-                      onChange={(e) => updateCreateForm("value", e.target.value)}
-                      placeholder="10000"
-                    />
-                  </div>
-                </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    value={createForm.description}
-                    onChange={(e) => updateCreateForm("description", e.target.value)}
-                    placeholder="Describe the opportunity..."
-                    rows={3}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="company">Company *</Label>
-                    <Select
-                      value={createForm.companyId}
-                      onValueChange={(value) => updateCreateForm("companyId", value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select company" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {companies?.map((company) => (
-                          <SelectItem key={company.id} value={company.id}>
-                            {company.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="contact">Contact</Label>
-                    <Select
-                      value={createForm.contactId}
-                      onValueChange={(value) => updateCreateForm("contactId", value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select contact" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {clients?.map((client) => (
-                          <SelectItem key={client.id} value={client.id}>
-                            {client.name} {client.position && `- ${client.position}`} {client.company?.name && `(${client.company.name})`}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="stage">Stage</Label>
-                    <Select
-                      value={createForm.stage}
-                      onValueChange={(value) => updateCreateForm("stage", value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {stageConfig.map((stage) => (
-                          <SelectItem key={stage.key} value={stage.key}>
-                            {stage.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="priority">Priority</Label>
-                    <Select
-                      value={createForm.priority}
-                      onValueChange={(value) => updateCreateForm("priority", value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="low">Low</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="high">High</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="probability">Probability (%)</Label>
-                    <Input
-                      id="probability"
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={createForm.probability}
-                      onChange={(e) => updateCreateForm("probability", parseInt(e.target.value) || 0)}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="expectedCloseDate">Expected Close Date *</Label>
-                    <Input
-                      id="expectedCloseDate"
-                      type="date"
-                      value={createForm.expectedCloseDate}
-                      onChange={(e) => updateCreateForm("expectedCloseDate", e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="assignedTo">Assigned To</Label>
-                    <Select
-                      value={createForm.assignedTo}
-                      onValueChange={(value) => updateCreateForm("assignedTo", value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select user" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {users?.map((user) => (
-                          <SelectItem key={user.id} value={user.id}>
-                            {user.firstName} {user.lastName}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="source">Source</Label>
-                  <Select
-                    value={createForm.source}
-                    onValueChange={(value) => updateCreateForm("source", value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select source" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="referral">Referral</SelectItem>
-                      <SelectItem value="website">Website</SelectItem>
-                      <SelectItem value="marketing">Marketing</SelectItem>
-                      <SelectItem value="cold_outreach">Cold Outreach</SelectItem>
-                      <SelectItem value="social_media">Social Media</SelectItem>
-                      <SelectItem value="trade_show">Trade Show</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsCreateDialogOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={createOpportunityMutation.isPending}
-                >
-                  {createOpportunityMutation.isPending ? "Creating..." : "Create Opportunity"}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+      {/* Centered View Toggle Buttons */}
+      <div className="absolute left-1/2 transform -translate-x-1/2 flex space-x-2">
         <Button
           variant={viewMode === "table" ? "default" : "outline"}
           onClick={() => setViewMode("table")}
@@ -798,6 +595,212 @@ export function SalesPipeline() {
           Board
         </Button>
       </div>
+
+      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+        <DialogTrigger asChild>
+          <Button>
+            <Plus className="w-4 h-4 mr-2" />
+            Add Opportunity
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Create New Opportunity</DialogTitle>
+            <DialogDescription>
+              Add a new sales opportunity to your pipeline. Fill in the details below.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreateSubmit}>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="title">Title *</Label>
+                  <Input
+                    id="title"
+                    value={createForm.title}
+                    onChange={(e) => updateCreateForm("title", e.target.value)}
+                    placeholder="e.g., Website Redesign Project"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="value">Value *</Label>
+                  <Input
+                    id="value"
+                    type="number"
+                    step="0.01"
+                    value={createForm.value}
+                    onChange={(e) => updateCreateForm("value", e.target.value)}
+                    placeholder="10000"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  value={createForm.description}
+                  onChange={(e) => updateCreateForm("description", e.target.value)}
+                  placeholder="Describe the opportunity..."
+                  rows={3}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="company">Company *</Label>
+                  <Select
+                    value={createForm.companyId}
+                    onValueChange={(value) => updateCreateForm("companyId", value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select company" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {companies?.map((company) => (
+                        <SelectItem key={company.id} value={company.id}>
+                          {company.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="contact">Contact</Label>
+                  <Select
+                    value={createForm.contactId}
+                    onValueChange={(value) => updateCreateForm("contactId", value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select contact" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clients?.map((client) => (
+                        <SelectItem key={client.id} value={client.id}>
+                          {client.name} {client.position && `- ${client.position}`} {client.company?.name && `(${client.company.name})`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="stage">Stage</Label>
+                  <Select
+                    value={createForm.stage}
+                    onValueChange={(value) => updateCreateForm("stage", value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {stageConfig.map((stage) => (
+                        <SelectItem key={stage.key} value={stage.key}>
+                          {stage.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="priority">Priority</Label>
+                  <Select
+                    value={createForm.priority}
+                    onValueChange={(value) => updateCreateForm("priority", value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="probability">Probability (%)</Label>
+                  <Input
+                    id="probability"
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={createForm.probability}
+                    onChange={(e) => updateCreateForm("probability", parseInt(e.target.value) || 0)}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="expectedCloseDate">Expected Close Date *</Label>
+                  <Input
+                    id="expectedCloseDate"
+                    type="date"
+                    value={createForm.expectedCloseDate}
+                    onChange={(e) => updateCreateForm("expectedCloseDate", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="assignedTo">Assigned To</Label>
+                  <Select
+                    value={createForm.assignedTo}
+                    onValueChange={(value) => updateCreateForm("assignedTo", value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select user" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {users?.map((user) => (
+                        <SelectItem key={user.id} value={user.id}>
+                          {user.firstName} {user.lastName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="source">Source</Label>
+                <Select
+                  value={createForm.source}
+                  onValueChange={(value) => updateCreateForm("source", value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select source" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="referral">Referral</SelectItem>
+                    <SelectItem value="website">Website</SelectItem>
+                    <SelectItem value="marketing">Marketing</SelectItem>
+                    <SelectItem value="cold_outreach">Cold Outreach</SelectItem>
+                    <SelectItem value="social_media">Social Media</SelectItem>
+                    <SelectItem value="trade_show">Trade Show</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsCreateDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={createOpportunityMutation.isPending}
+              >
+                {createOpportunityMutation.isPending ? "Creating..." : "Create Opportunity"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 

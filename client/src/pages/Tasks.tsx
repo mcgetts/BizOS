@@ -62,15 +62,26 @@ const taskFormSchema = z.object({
 
 type TaskFormData = z.infer<typeof taskFormSchema>;
 
+// Status configuration with colors for kanban headers
+const statusConfig = [
+  { key: "todo", label: "To Do", color: "bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100" },
+  { key: "in_progress", label: "In Progress", color: "bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-100" },
+  { key: "blocked", label: "Blocked", color: "bg-red-100 dark:bg-red-800 text-red-800 dark:text-red-100" },
+  { key: "review", label: "Review", color: "bg-yellow-100 dark:bg-yellow-800 text-yellow-800 dark:text-yellow-100" },
+  { key: "completed", label: "Completed", color: "bg-green-100 dark:bg-green-800 text-green-800 dark:text-green-100" },
+];
+
 // Helper functions for status and priority styling
 const getStatusBadge = (status: string) => {
+  const statusItem = statusConfig.find(s => s.key === status);
+  if (statusItem) {
+    return statusItem.color;
+  }
+  // Fallback for any status not in statusConfig
   const styles = {
-    todo: "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300",
-    in_progress: "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300",
-    review: "bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300",
-    completed: "bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300",
+    blocked: "bg-red-100 dark:bg-red-800 text-red-800 dark:text-red-100",
   };
-  return styles[status as keyof typeof styles] || styles.todo;
+  return styles[status as keyof typeof styles] || statusConfig[0].color; // Default to todo color
 };
 
 const getPriorityBadge = (priority: string) => {
@@ -887,17 +898,17 @@ export default function Tasks() {
             </TableComponent>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {["todo", "in_progress", "blocked", "review", "completed"].map((status) => {
-              const statusTasks = filteredTasks.filter(task => task.status === status);
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+            {statusConfig.map((statusItem) => {
+              const statusTasks = filteredTasks.filter(task => task.status === statusItem.key);
               return (
-                <div key={status} className="flex flex-col">
-                  <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                    <h3 className="font-semibold capitalize text-center">
-                      {status.replace("_", " ")} ({statusTasks.length})
+                <div key={statusItem.key} className="flex flex-col">
+                  <div className={`${statusItem.color} p-3 rounded-t-lg border-b mb-4`}>
+                    <h3 className="font-semibold text-center">
+                      {statusItem.label} ({statusTasks.length})
                     </h3>
                   </div>
-                  <div className="space-y-3 flex-1">
+                  <div className="space-y-3 flex-1 bg-gray-50 dark:bg-gray-800 rounded-b-lg p-2 min-h-[140px]">
                     {statusTasks.map((task) => (
                       <Card key={task.id} className={`${isOverdue(task.dueDate) && task.status !== "completed" ? "border-red-200 dark:border-red-800" : ""}`} data-testid={`card-task-${task.id}`}>
                         <CardHeader className="pb-2">
@@ -1026,7 +1037,7 @@ export default function Tasks() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="text-sm font-medium text-muted-foreground">Status</label>
-                    <Badge className={`mt-1 ${getStatusBadge(viewingTask.status || 'todo')}`}>
+                    <Badge className={getStatusBadge(viewingTask.status || 'todo')} variant="outline">
                       {viewingTask.status?.charAt(0).toUpperCase() + viewingTask.status?.slice(1) || 'To Do'}
                     </Badge>
                   </div>

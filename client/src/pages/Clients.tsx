@@ -21,6 +21,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertClientSchema } from "@shared/schema";
 import type { Client as BaseClient, InsertClient } from "@shared/schema";
+import { useTableSort, SortConfig } from "@/hooks/useTableSort";
+import { SortableHeader, SortableTableHead } from "@/components/SortableHeader";
 
 // Extended Client type that includes company information
 type Client = BaseClient & {
@@ -524,11 +526,15 @@ export default function Clients() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [deletingClient, setDeletingClient] = useState<Client | null>(null);
+  const [viewingClient, setViewingClient] = useState<Client | null>(null);
+  const [isViewClientDialogOpen, setIsViewClientDialogOpen] = useState(false);
 
   // Company state
   const [isAddCompanyDialogOpen, setIsAddCompanyDialogOpen] = useState(false);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
   const [deletingCompany, setDeletingCompany] = useState<Company | null>(null);
+  const [viewingCompany, setViewingCompany] = useState<Company | null>(null);
+  const [isViewCompanyDialogOpen, setIsViewCompanyDialogOpen] = useState(false);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -553,6 +559,18 @@ export default function Clients() {
   // Companies query
   const { data: companies, isLoading: companiesLoading } = useQuery<Company[]>({
     queryKey: ["/api/companies"],
+    enabled: isAuthenticated,
+  });
+
+  // Opportunities query
+  const { data: opportunities } = useQuery({
+    queryKey: ["/api/opportunities"],
+    enabled: isAuthenticated,
+  });
+
+  // Projects query
+  const { data: projects } = useQuery({
+    queryKey: ["/api/projects"],
     enabled: isAuthenticated,
   });
 
@@ -598,6 +616,62 @@ export default function Clients() {
     setDeletingCompany(null);
   };
 
+  const handleViewCompany = (company: Company) => {
+    setViewingCompany(company);
+    setIsViewCompanyDialogOpen(true);
+  };
+
+  const handleEditCompanyFromView = (company: Company) => {
+    setIsViewCompanyDialogOpen(false);
+    setEditingCompany(company);
+  };
+
+  const handleDeleteCompanyFromView = (company: Company) => {
+    setIsViewCompanyDialogOpen(false);
+    setDeletingCompany(company);
+  };
+
+  // Helper functions to count active opportunities, projects, and contacts
+  const getContactCount = (companyId: string) => {
+    if (!clients) return 0;
+    return clients.filter((client: Client) => client.companyId === companyId).length;
+  };
+
+  const getActiveOpportunityCount = (companyId: string) => {
+    if (!opportunities) return 0;
+    return opportunities.filter((opp: any) =>
+      opp.companyId === companyId &&
+      opp.stage !== 'closed_won' &&
+      opp.stage !== 'closed_lost'
+    ).length;
+  };
+
+  const getActiveProjectCount = (companyId: string) => {
+    if (!projects) return 0;
+    return projects.filter((project: any) =>
+      project.companyId === companyId &&
+      project.status === 'active'
+    ).length;
+  };
+
+  // Helper functions for client-specific opportunities and projects
+  const getClientActiveOpportunityCount = (clientId: string) => {
+    if (!opportunities) return 0;
+    return opportunities.filter((opp: any) =>
+      opp.clientId === clientId &&
+      opp.stage !== 'closed_won' &&
+      opp.stage !== 'closed_lost'
+    ).length;
+  };
+
+  const getClientActiveProjectCount = (clientId: string) => {
+    if (!projects) return 0;
+    return projects.filter((project: any) =>
+      project.clientId === clientId &&
+      project.status === 'active'
+    ).length;
+  };
+
   if (isLoading || !isAuthenticated) {
     return (
       <div className="h-screen flex items-center justify-center">
@@ -625,6 +699,60 @@ export default function Clients() {
     client.company?.industry?.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
 
+  // Filter companies based on search term
+  const filteredCompanies = companies?.filter((company) =>
+    company.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    company.industry?.toLowerCase().includes(searchTerm.toLowerCase())
+  ) || [];
+
+  // Companies sorting configuration
+  const companySortConfigs: SortConfig[] = [
+    { key: 'name', type: 'string' },
+    { key: 'industry', type: 'string' },
+    {
+      key: 'contacts',
+      type: 'number',
+      accessor: (company: any) => getContactCount(company.id)
+    },
+    {
+      key: 'opportunities',
+      type: 'number',
+      accessor: (company: any) => getActiveOpportunityCount(company.id)
+    },
+    {
+      key: 'projects',
+      type: 'number',
+      accessor: (company: any) => getActiveProjectCount(company.id)
+    },
+    { key: 'size', type: 'string' }
+  ];
+
+  // Clients sorting configuration
+  const clientSortConfigs: SortConfig[] = [
+    { key: 'name', type: 'string' },
+    {
+      key: 'company',
+      type: 'string',
+      accessor: (client: Client) => client.company?.name || ''
+    },
+    { key: 'position', type: 'string' },
+    { key: 'email', type: 'string' },
+    { key: 'phone', type: 'string' },
+    {
+      key: 'opportunities',
+      type: 'number',
+      accessor: (client: Client) => getClientActiveOpportunityCount(client.id)
+    },
+    {
+      key: 'projects',
+      type: 'number',
+      accessor: (client: Client) => getClientActiveProjectCount(client.id)
+    }
+  ];
+
+  const { sortedData: sortedCompanies, sortState: companySortState, handleSort: handleCompanySort } = useTableSort(filteredCompanies, companySortConfigs);
+  const { sortedData: sortedClients, sortState: clientSortState, handleSort: handleClientSort } = useTableSort(filteredClients, clientSortConfigs);
+
   return (
     <Layout title="CRM - Customer Relationship Management" breadcrumbs={["CRM"]}>
       <div className="space-y-6">
@@ -635,39 +763,6 @@ export default function Clients() {
             <p className="text-muted-foreground">
               Manage customer contacts and relationships
             </p>
-          </div>
-          <div className="flex space-x-3">
-            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-              <DialogTrigger asChild>
-                <Button data-testid="button-add-client">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Contact
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>Add New Contact</DialogTitle>
-                </DialogHeader>
-                <ClientForm onSuccess={() => setIsAddDialogOpen(false)} companies={companies} />
-              </DialogContent>
-            </Dialog>
-            <Dialog open={isAddCompanyDialogOpen} onOpenChange={setIsAddCompanyDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" data-testid="button-add-company">
-                  <Building2 className="w-4 h-4 mr-2" />
-                  Add Company
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>Add New Company</DialogTitle>
-                  <DialogDescription>
-                    Add a new company to your CRM system.
-                  </DialogDescription>
-                </DialogHeader>
-                <CompanyForm onSuccess={() => setIsAddCompanyDialogOpen(false)} />
-              </DialogContent>
-            </Dialog>
           </div>
         </div>
 
@@ -782,15 +877,59 @@ export default function Clients() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Company</TableHead>
-                      <TableHead>Industry</TableHead>
-                      <TableHead>Contact</TableHead>
-                      <TableHead>Size</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+                      <SortableTableHead
+                        column="name"
+                        currentSort={companySortState.column}
+                        direction={companySortState.direction}
+                        onSort={handleCompanySort}
+                      >
+                        Company
+                      </SortableTableHead>
+                      <SortableTableHead
+                        column="industry"
+                        currentSort={companySortState.column}
+                        direction={companySortState.direction}
+                        onSort={handleCompanySort}
+                      >
+                        Industry
+                      </SortableTableHead>
+                      <SortableTableHead
+                        column="contacts"
+                        currentSort={companySortState.column}
+                        direction={companySortState.direction}
+                        onSort={handleCompanySort}
+                      >
+                        Contacts
+                      </SortableTableHead>
+                      <SortableTableHead
+                        column="opportunities"
+                        currentSort={companySortState.column}
+                        direction={companySortState.direction}
+                        onSort={handleCompanySort}
+                      >
+                        Opportunities
+                      </SortableTableHead>
+                      <SortableTableHead
+                        column="projects"
+                        currentSort={companySortState.column}
+                        direction={companySortState.direction}
+                        onSort={handleCompanySort}
+                      >
+                        Projects
+                      </SortableTableHead>
+                      <SortableTableHead
+                        column="size"
+                        currentSort={companySortState.column}
+                        direction={companySortState.direction}
+                        onSort={handleCompanySort}
+                      >
+                        Size
+                      </SortableTableHead>
+                      <th className="text-right p-2">Actions</th>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {companies.slice(0, 10).map((company) => (
+                    {sortedCompanies.map((company) => (
                       <TableRow key={company.id}>
                         <TableCell>
                           <div className="flex items-center space-x-3">
@@ -798,18 +937,12 @@ export default function Clients() {
                               <Building2 className="w-4 h-4 text-blue-600" />
                             </div>
                             <div>
-                              <div className="font-medium">{company.name}</div>
-                              {company.website && (
-                                <a
-                                  href={company.website}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-xs text-blue-600 hover:underline flex items-center"
-                                >
-                                  <Globe className="w-3 h-3 mr-1" />
-                                  Website
-                                </a>
-                              )}
+                              <div
+                                className="font-medium cursor-pointer hover:text-blue-600 hover:underline"
+                                onClick={() => handleViewCompany(company)}
+                              >
+                                {company.name}
+                              </div>
                             </div>
                           </div>
                         </TableCell>
@@ -817,20 +950,13 @@ export default function Clients() {
                           <span className="text-sm">{company.industry || "—"}</span>
                         </TableCell>
                         <TableCell>
-                          <div className="space-y-1">
-                            {company.email && (
-                              <div className="flex items-center text-xs text-muted-foreground">
-                                <Mail className="w-3 h-3 mr-1" />
-                                {company.email}
-                              </div>
-                            )}
-                            {company.phone && (
-                              <div className="flex items-center text-xs text-muted-foreground">
-                                <Phone className="w-3 h-3 mr-1" />
-                                {company.phone}
-                              </div>
-                            )}
-                          </div>
+                          <span className="text-sm font-medium">{getContactCount(company.id)}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm font-medium">{getActiveOpportunityCount(company.id)}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm font-medium">{getActiveProjectCount(company.id)}</span>
                         </TableCell>
                         <TableCell>
                           <span className="text-sm capitalize">{company.size || "—"}</span>
@@ -861,9 +987,9 @@ export default function Clients() {
                     ))}
                   </TableBody>
                 </Table>
-                {companies.length > 10 && (
+                {sortedCompanies.length > 0 && (
                   <div className="text-center text-sm text-muted-foreground mt-2">
-                    Showing 10 of {companies.length} companies. Scroll to see more.
+                    {sortedCompanies.length} {sortedCompanies.length === 1 ? 'company' : 'companies'} total
                   </div>
                 )}
               </div>
@@ -892,8 +1018,22 @@ export default function Clients() {
 
         {/* Contacts Table */}
         <Card className="glassmorphism">
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
             <CardTitle>Clients</CardTitle>
+            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+              <DialogTrigger asChild>
+                <Button data-testid="button-add-client">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Contact
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Add New Contact</DialogTitle>
+                </DialogHeader>
+                <ClientForm onSuccess={() => setIsAddDialogOpen(false)} companies={companies} />
+              </DialogContent>
+            </Dialog>
           </CardHeader>
           <CardContent>
             {clientsLoading ? (
@@ -933,20 +1073,70 @@ export default function Clients() {
                   <table className="w-full" data-testid="table-clients">
                     <thead>
                       <tr className="border-b border-border">
-                        <th className="text-left text-sm font-medium text-muted-foreground py-3">Contact</th>
-                        <th className="text-left text-sm font-medium text-muted-foreground py-3">Company</th>
-                        <th className="text-left text-sm font-medium text-muted-foreground py-3">Position</th>
-                        <th className="text-left text-sm font-medium text-muted-foreground py-3">Contact Info</th>
-                        <th className="text-left text-sm font-medium text-muted-foreground py-3">Last Contact</th>
+                        <SortableHeader
+                          column="name"
+                          currentSort={clientSortState.column}
+                          direction={clientSortState.direction}
+                          onSort={handleClientSort}
+                        >
+                          Contact
+                        </SortableHeader>
+                        <SortableHeader
+                          column="company"
+                          currentSort={clientSortState.column}
+                          direction={clientSortState.direction}
+                          onSort={handleClientSort}
+                        >
+                          Company
+                        </SortableHeader>
+                        <SortableHeader
+                          column="position"
+                          currentSort={clientSortState.column}
+                          direction={clientSortState.direction}
+                          onSort={handleClientSort}
+                        >
+                          Position
+                        </SortableHeader>
+                        <SortableHeader
+                          column="email"
+                          currentSort={clientSortState.column}
+                          direction={clientSortState.direction}
+                          onSort={handleClientSort}
+                        >
+                          Email
+                        </SortableHeader>
+                        <SortableHeader
+                          column="phone"
+                          currentSort={clientSortState.column}
+                          direction={clientSortState.direction}
+                          onSort={handleClientSort}
+                        >
+                          Phone
+                        </SortableHeader>
+                        <SortableHeader
+                          column="opportunities"
+                          currentSort={clientSortState.column}
+                          direction={clientSortState.direction}
+                          onSort={handleClientSort}
+                        >
+                          Opportunities
+                        </SortableHeader>
+                        <SortableHeader
+                          column="projects"
+                          currentSort={clientSortState.column}
+                          direction={clientSortState.direction}
+                          onSort={handleClientSort}
+                        >
+                          Projects
+                        </SortableHeader>
                         <th className="text-left text-sm font-medium text-muted-foreground py-3">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                      {filteredClients.slice(0, 10).map((client: any, index: number) => (
-                      <tr key={client.id} data-testid={`row-client-${index}`}>
+                      {sortedClients.map((client: any, index: number) => (
+                      <tr key={client.id} data-testid={`row-client-${index}`} className="cursor-pointer hover:bg-muted/50" onClick={() => {setViewingClient(client); setIsViewClientDialogOpen(true);}}>
                         <td className="py-4">
                           <div className="font-medium text-foreground">{client.name}</div>
-                          <div className="text-sm text-muted-foreground">{client.source || 'Unknown source'}</div>
                         </td>
                         <td className="py-4">
                           <div className="flex items-center space-x-2">
@@ -955,9 +1145,6 @@ export default function Clients() {
                               <div className="text-sm text-foreground font-medium">
                                 {client.company?.name || 'No company'}
                               </div>
-                              {client.company?.industry && (
-                                <div className="text-xs text-muted-foreground">{client.company.industry}</div>
-                              )}
                             </div>
                           </div>
                         </td>
@@ -970,30 +1157,22 @@ export default function Clients() {
                           </div>
                         </td>
                         <td className="py-4">
-                          <div className="space-y-1">
-                            {client.email && (
-                              <div className="flex items-center text-sm text-muted-foreground">
-                                <Mail className="w-3 h-3 mr-1" />
-                                {client.email}
-                              </div>
-                            )}
-                            {client.phone && (
-                              <div className="flex items-center text-sm text-muted-foreground">
-                                <Phone className="w-3 h-3 mr-1" />
-                                {client.phone}
-                              </div>
-                            )}
+                          <div className="text-sm text-foreground">
+                            {client.email || '—'}
                           </div>
                         </td>
                         <td className="py-4">
-                          <div className="text-sm text-muted-foreground">
-                            {client.lastContactDate
-                              ? new Date(client.lastContactDate).toLocaleDateString()
-                              : 'Never'
-                            }
+                          <div className="text-sm text-foreground">
+                            {client.phone || '—'}
                           </div>
                         </td>
                         <td className="py-4">
+                          <span className="text-sm font-medium">{getClientActiveOpportunityCount(client.id)}</span>
+                        </td>
+                        <td className="py-4">
+                          <span className="text-sm font-medium">{getClientActiveProjectCount(client.id)}</span>
+                        </td>
+                        <td className="py-4" onClick={(e) => e.stopPropagation()}>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="sm" data-testid={`button-actions-${index}`}>
@@ -1001,13 +1180,17 @@ export default function Clients() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => {setViewingClient(client); setIsViewClientDialogOpen(true);}} data-testid={`button-view-${index}`}>
+                                <Users className="w-4 h-4 mr-2" />
+                                View
+                              </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => setEditingClient(client)} data-testid={`button-edit-${index}`}>
                                 <Edit className="w-4 h-4 mr-2" />
                                 Edit
                               </DropdownMenuItem>
-                              <DropdownMenuItem 
-                                onClick={() => setDeletingClient(client)} 
-                                data-testid={`button-delete-${index}`} 
+                              <DropdownMenuItem
+                                onClick={() => setDeletingClient(client)}
+                                data-testid={`button-delete-${index}`}
                                 className="text-destructive"
                               >
                                 <Trash2 className="w-4 h-4 mr-2" />
@@ -1017,13 +1200,13 @@ export default function Clients() {
                           </DropdownMenu>
                         </td>
                       </tr>
-                    ))}
+                    ))
                     </tbody>
                   </table>
                 </div>
-                {filteredClients.length > 10 && (
+                {sortedClients.length > 0 && (
                   <div className="text-center text-sm text-muted-foreground mt-2">
-                    Showing 10 of {filteredClients.length} clients. Scroll to see more.
+                    {sortedClients.length} {sortedClients.length === 1 ? 'client' : 'clients'} total
                   </div>
                 )}
               </div>
@@ -1070,6 +1253,168 @@ export default function Clients() {
           </AlertDialog>
         )}
 
+        {/* View Company Details Dialog */}
+        {viewingCompany && (
+          <Dialog open={isViewCompanyDialogOpen} onOpenChange={setIsViewCompanyDialogOpen}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>{viewingCompany.name}</DialogTitle>
+                <DialogDescription>
+                  Company details and information
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="font-medium">Company Name</label>
+                    <div className="flex items-center space-x-2">
+                      <Building2 className="w-4 h-4 text-blue-600" />
+                      <span>{viewingCompany.name}</span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="font-medium">Industry</label>
+                    <span>{viewingCompany.industry || "—"}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="font-medium">Company Size</label>
+                    <span className="capitalize">{viewingCompany.size || "—"}</span>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="font-medium">Founded Year</label>
+                    <span>{viewingCompany.foundedYear || "—"}</span>
+                  </div>
+                </div>
+
+                {viewingCompany.website && (
+                  <div className="space-y-2">
+                    <label className="font-medium">Website</label>
+                    <a
+                      href={viewingCompany.website}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline flex items-center"
+                    >
+                      <Globe className="w-4 h-4 mr-2" />
+                      {viewingCompany.website}
+                    </a>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="font-medium">Phone</label>
+                    <div className="flex items-center space-x-2">
+                      <Phone className="w-4 h-4 text-gray-400" />
+                      <span>{viewingCompany.phone || "—"}</span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="font-medium">Email</label>
+                    <div className="flex items-center space-x-2">
+                      <Mail className="w-4 h-4 text-gray-400" />
+                      <span>{viewingCompany.email || "—"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {viewingCompany.address && (
+                  <div className="space-y-2">
+                    <label className="font-medium">Address</label>
+                    <div className="flex items-center space-x-2">
+                      <MapPin className="w-4 h-4 text-gray-400" />
+                      <span>{viewingCompany.address}</span>
+                    </div>
+                  </div>
+                )}
+
+                {viewingCompany.description && (
+                  <div className="space-y-2">
+                    <label className="font-medium">Description</label>
+                    <p className="text-sm text-gray-600">{viewingCompany.description}</p>
+                  </div>
+                )}
+
+                {viewingCompany.revenue && (
+                  <div className="space-y-2">
+                    <label className="font-medium">Annual Revenue</label>
+                    <div className="mt-1">
+                      <span>${parseInt(viewingCompany.revenue).toLocaleString()}</span>
+                    </div>
+                  </div>
+                )}
+
+                {viewingCompany.tags && viewingCompany.tags.length > 0 && (
+                  <div className="space-y-2">
+                    <label className="font-medium">Tags</label>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {viewingCompany.tags.map((tag) => (
+                        <Badge key={tag} variant="secondary">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Business Activity - moved below tags */}
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <label className="font-medium">Contacts</label>
+                    <div className="mt-2">
+                      <span className="text-lg font-semibold">{getContactCount(viewingCompany.id)}</span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="font-medium">Active Opportunities</label>
+                    <div className="mt-2">
+                      <span className="text-lg font-semibold">{getActiveOpportunityCount(viewingCompany.id)}</span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="font-medium">Active Projects</label>
+                    <div className="mt-2">
+                      <span className="text-lg font-semibold">{getActiveProjectCount(viewingCompany.id)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 text-xs text-gray-500">
+                  <div>
+                    <label className="font-medium">Created</label>
+                    <div className="mt-1">{new Date(viewingCompany.createdAt).toLocaleDateString()}</div>
+                  </div>
+                  <div>
+                    <label className="font-medium">Last Updated</label>
+                    <div className="mt-1">{new Date(viewingCompany.updatedAt).toLocaleDateString()}</div>
+                  </div>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsViewCompanyDialogOpen(false)}>
+                  Close
+                </Button>
+                <div className="flex space-x-2">
+                  <Button
+                    variant="destructive"
+                    onClick={() => handleDeleteCompanyFromView(viewingCompany)}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete
+                  </Button>
+                  <Button onClick={() => handleEditCompanyFromView(viewingCompany)}>
+                    <Edit className="w-4 h-4 mr-2" />
+                    Edit
+                  </Button>
+                </div>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
+
         {/* Edit Company Dialog */}
         {editingCompany && (
           <Dialog open={!!editingCompany} onOpenChange={() => setEditingCompany(null)}>
@@ -1109,6 +1454,120 @@ export default function Clients() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+        )}
+
+        {/* View Client Details Dialog */}
+        {viewingClient && (
+          <Dialog open={isViewClientDialogOpen} onOpenChange={setIsViewClientDialogOpen}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>{viewingClient.name}</DialogTitle>
+                <DialogDescription>
+                  Contact details and information
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="font-medium">Full Name</label>
+                    <div className="flex items-center space-x-2">
+                      <Users className="w-4 h-4 text-blue-600" />
+                      <span>{viewingClient.name}</span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="font-medium">Position</label>
+                    <span>{viewingClient.position || "—"}</span>
+                  </div>
+                </div>
+
+                {viewingClient.company && (
+                  <div className="space-y-2">
+                    <label className="font-medium">Company</label>
+                    <div className="flex items-center space-x-2">
+                      <Building2 className="w-4 h-4 text-blue-600" />
+                      <span>{viewingClient.company.name}</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="font-medium">Email</label>
+                    <div className="flex items-center space-x-2">
+                      <Mail className="w-4 h-4 text-gray-400" />
+                      <span>{viewingClient.email || "—"}</span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="font-medium">Phone</label>
+                    <div className="flex items-center space-x-2">
+                      <Phone className="w-4 h-4 text-gray-400" />
+                      <span>{viewingClient.phone || "—"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {viewingClient.department && (
+                  <div className="space-y-2">
+                    <label className="font-medium">Department</label>
+                    <span>{viewingClient.department}</span>
+                  </div>
+                )}
+
+                {viewingClient.notes && (
+                  <div className="space-y-2">
+                    <label className="font-medium">Notes</label>
+                    <p className="text-sm text-gray-600">{viewingClient.notes}</p>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="font-medium">Active Opportunities</label>
+                    <div className="mt-2">
+                      <span className="text-lg font-semibold">{getClientActiveOpportunityCount(viewingClient.id)}</span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="font-medium">Active Projects</label>
+                    <div className="mt-2">
+                      <span className="text-lg font-semibold">{getClientActiveProjectCount(viewingClient.id)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 text-xs text-gray-500">
+                  <div>
+                    <label className="font-medium">Primary Contact</label>
+                    <div className="mt-1">{viewingClient.isPrimaryContact ? 'Yes' : 'No'}</div>
+                  </div>
+                  <div>
+                    <label className="font-medium">Status</label>
+                    <div className="mt-1">{viewingClient.isActive ? 'Active' : 'Inactive'}</div>
+                  </div>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsViewClientDialogOpen(false)}>
+                  Close
+                </Button>
+                <div className="flex space-x-2">
+                  <Button
+                    variant="destructive"
+                    onClick={() => {setIsViewClientDialogOpen(false); setDeletingClient(viewingClient);}}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete
+                  </Button>
+                  <Button onClick={() => {setIsViewClientDialogOpen(false); setEditingClient(viewingClient);}}>
+                    <Edit className="w-4 h-4 mr-2" />
+                    Edit
+                  </Button>
+                </div>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         )}
       </div>
     </Layout>
