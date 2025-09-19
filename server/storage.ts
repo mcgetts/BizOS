@@ -209,7 +209,7 @@ export class DatabaseStorage implements IStorage {
     // Check for foreign key references
     const [clientRefs, projectRefs, taskRefs, opportunityRefs] = await Promise.all([
       db.select({ count: count() }).from(clients).where(eq(clients.assignedTo, id)),
-      db.select({ count: count() }).from(projects).where(eq(projects.assignedTo, id)),
+      db.select({ count: count() }).from(projects).where(eq(projects.managerId, id)),
       db.select({ count: count() }).from(tasks).where(eq(tasks.assignedTo, id)),
       db.select({ count: count() }).from(salesOpportunities).where(eq(salesOpportunities.assignedTo, id))
     ]);

@@ -8,6 +8,7 @@ import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
 import { storage } from "./storage";
 import { BUSINESS_LIMITS } from "./config/constants";
+import { ensureFirstUserIsAdmin } from "./seed";
 
 if (!process.env.REPLIT_DOMAINS) {
   throw new Error("Environment variable REPLIT_DOMAINS not provided");
@@ -87,6 +88,9 @@ async function upsertUser(
     lastName: claims["last_name"],
     profileImageUrl: claims["profile_image_url"],
   });
+
+  // Ensure the first user gets admin privileges
+  await ensureFirstUserIsAdmin(claims["sub"]);
 }
 
 export async function setupAuth(app: Express) {
