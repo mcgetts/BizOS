@@ -14,6 +14,11 @@ if (!process.env.REPLIT_DOMAINS) {
   throw new Error("Environment variable REPLIT_DOMAINS not provided");
 }
 
+// Normalize domains and track registered dynamic strategies
+const configuredDomains = process.env.REPLIT_DOMAINS.split(",").map(d => d.trim()).filter(Boolean);
+const dynamicStrategies = new Set<string>(); // Track dynamically registered strategies
+const MAX_DYNAMIC_STRATEGIES = 10; // Prevent memory abuse
+
 const getOidcConfig = memoize(
   async () => {
     return await client.discovery(
@@ -130,8 +135,8 @@ export async function setupAuth(app: Express) {
     verified(null, user);
   };
 
-  for (const domain of process.env
-    .REPLIT_DOMAINS!.split(",")) {
+  // Register strategies for all configured domains  
+  for (const domain of configuredDomains) {
     const strategy = new Strategy(
       {
         name: `replitauth:${domain}`,
@@ -148,14 +153,57 @@ export async function setupAuth(app: Express) {
   passport.deserializeUser((user: Express.User, cb) => cb(null, user));
 
   app.get("/api/login", (req, res, next) => {
-    passport.authenticate(`replitauth:${req.hostname}`, {
+    const currentDomain = req.hostname;
+    const strategyName = `replitauth:${currentDomain}`;
+    
+    // Check if strategy exists, if not register dynamically with security guards
+    if (!passport._strategy || !passport._strategy[strategyName]) {
+      // Security check: only allow configured domains or reasonable dynamic registration
+      if (!configuredDomains.includes(currentDomain)) {
+        // Allow dynamic registration only if we haven't hit the limit
+        if (dynamicStrategies.size >= MAX_DYNAMIC_STRATEGIES) {
+          console.error(`❌ Too many dynamic strategies registered. Add '${currentDomain}' to REPLIT_DOMAINS.`);
+          return res.status(500).json({ 
+            error: "Authentication configuration error", 
+            message: `Domain '${currentDomain}' not configured. Contact administrator.`
+          });
+        }
+        
+        console.warn(`⚠️  Domain '${currentDomain}' not in REPLIT_DOMAINS. Registering dynamic strategy.`);
+        console.warn(`⚠️  Add '${currentDomain}' to REPLIT_DOMAINS in deployment secrets for better security`);
+        dynamicStrategies.add(currentDomain);
+      }
+      
+      // Register strategy for this domain
+      const strategy = new Strategy(
+        {
+          name: strategyName,
+          config,
+          scope: "openid email profile offline_access",
+          callbackURL: `https://${currentDomain}/api/callback`,
+        },
+        verify,
+      );
+      passport.use(strategy);
+    }
+    
+    passport.authenticate(strategyName, {
       prompt: "login consent",
       scope: ["openid", "email", "profile", "offline_access"],
     })(req, res, next);
   });
 
   app.get("/api/callback", (req, res, next) => {
-    passport.authenticate(`replitauth:${req.hostname}`, {
+    const currentDomain = req.hostname;
+    const strategyName = `replitauth:${currentDomain}`;
+    
+    // Ensure strategy exists (should rarely happen if /api/login was called first)
+    if (!passport._strategy || !passport._strategy[strategyName]) {
+      console.error(`❌ Strategy '${strategyName}' not found during callback. This should not happen.`);
+      return res.redirect("/api/login");
+    }
+    
+    passport.authenticate(strategyName, {
       successReturnToOrRedirect: "/",
       failureRedirect: "/api/login",
     })(req, res, next);
