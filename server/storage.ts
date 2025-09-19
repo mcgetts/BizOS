@@ -3,6 +3,9 @@ import {
   clients,
   companies,
   salesOpportunities,
+  opportunityNextSteps,
+  opportunityCommunications,
+  opportunityStakeholders,
   projects,
   tasks,
   invoices,
@@ -23,6 +26,12 @@ import {
   type Company,
   type InsertSalesOpportunity,
   type SalesOpportunity,
+  type InsertOpportunityNextStep,
+  type OpportunityNextStep,
+  type InsertOpportunityCommunication,
+  type OpportunityCommunication,
+  type InsertOpportunityStakeholder,
+  type OpportunityStakeholder,
   type InsertProject,
   type Project,
   type InsertTask,
@@ -80,6 +89,27 @@ export interface IStorage {
   createSalesOpportunity(opportunity: InsertSalesOpportunity): Promise<SalesOpportunity>;
   updateSalesOpportunity(id: string, opportunity: Partial<InsertSalesOpportunity>): Promise<SalesOpportunity>;
   deleteSalesOpportunity(id: string): Promise<void>;
+
+  // Opportunity next steps operations
+  getOpportunityNextSteps(opportunityId: string): Promise<OpportunityNextStep[]>;
+  getOpportunityNextStep(id: string): Promise<OpportunityNextStep | undefined>;
+  createOpportunityNextStep(nextStep: InsertOpportunityNextStep): Promise<OpportunityNextStep>;
+  updateOpportunityNextStep(id: string, nextStep: Partial<InsertOpportunityNextStep>): Promise<OpportunityNextStep>;
+  deleteOpportunityNextStep(id: string): Promise<void>;
+
+  // Opportunity communications operations
+  getOpportunityCommunications(opportunityId: string): Promise<OpportunityCommunication[]>;
+  getOpportunityCommunication(id: string): Promise<OpportunityCommunication | undefined>;
+  createOpportunityCommunication(communication: InsertOpportunityCommunication): Promise<OpportunityCommunication>;
+  updateOpportunityCommunication(id: string, communication: Partial<InsertOpportunityCommunication>): Promise<OpportunityCommunication>;
+  deleteOpportunityCommunication(id: string): Promise<void>;
+
+  // Opportunity stakeholders operations
+  getOpportunityStakeholders(opportunityId: string): Promise<OpportunityStakeholder[]>;
+  getOpportunityStakeholder(id: string): Promise<OpportunityStakeholder | undefined>;
+  createOpportunityStakeholder(stakeholder: InsertOpportunityStakeholder): Promise<OpportunityStakeholder>;
+  updateOpportunityStakeholder(id: string, stakeholder: Partial<InsertOpportunityStakeholder>): Promise<OpportunityStakeholder>;
+  deleteOpportunityStakeholder(id: string): Promise<void>;
   
   // Project operations
   getProjects(): Promise<Project[]>;
@@ -241,16 +271,17 @@ export class DatabaseStorage implements IStorage {
         notes: clients.notes,
         tags: clients.tags,
         isActive: clients.isActive,
+        // Legacy fields
+        company: clients.company,
+        industry: clients.industry,
+        website: clients.website,
+        address: clients.address,
+        status: clients.status,
+        totalValue: clients.totalValue,
         createdAt: clients.createdAt,
         updatedAt: clients.updatedAt,
-        company: {
-          id: companies.id,
-          name: companies.name,
-          industry: companies.industry,
-        }
       })
       .from(clients)
-      .leftJoin(companies, eq(clients.companyId, companies.id))
       .orderBy(desc(clients.createdAt));
   }
 
@@ -271,16 +302,17 @@ export class DatabaseStorage implements IStorage {
         notes: clients.notes,
         tags: clients.tags,
         isActive: clients.isActive,
+        // Legacy fields
+        company: clients.company,
+        industry: clients.industry,
+        website: clients.website,
+        address: clients.address,
+        status: clients.status,
+        totalValue: clients.totalValue,
         createdAt: clients.createdAt,
         updatedAt: clients.updatedAt,
-        company: {
-          id: companies.id,
-          name: companies.name,
-          industry: companies.industry,
-        }
       })
       .from(clients)
-      .leftJoin(companies, eq(clients.companyId, companies.id))
       .where(eq(clients.id, id));
     return client;
   }
@@ -350,6 +382,12 @@ export class DatabaseStorage implements IStorage {
         priority: salesOpportunities.priority,
         tags: salesOpportunities.tags,
         notes: salesOpportunities.notes,
+        painPoints: salesOpportunities.painPoints,
+        successCriteria: salesOpportunities.successCriteria,
+        decisionProcess: salesOpportunities.decisionProcess,
+        budget: salesOpportunities.budget,
+        budgetStatus: salesOpportunities.budgetStatus,
+        competitorInfo: salesOpportunities.competitorInfo,
         lastActivityDate: salesOpportunities.lastActivityDate,
         createdAt: salesOpportunities.createdAt,
         updatedAt: salesOpportunities.updatedAt,
@@ -376,7 +414,7 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(companies, eq(salesOpportunities.companyId, companies.id))
       .leftJoin(clients, eq(salesOpportunities.contactId, clients.id))
       .leftJoin(users, eq(salesOpportunities.assignedTo, users.id))
-      .orderBy(desc(salesOpportunities.createdAt));
+      .orderBy(desc(salesOpportunities.lastActivityDate));
   }
 
   async getSalesOpportunity(id: string): Promise<SalesOpportunity | undefined> {
@@ -397,6 +435,12 @@ export class DatabaseStorage implements IStorage {
         priority: salesOpportunities.priority,
         tags: salesOpportunities.tags,
         notes: salesOpportunities.notes,
+        painPoints: salesOpportunities.painPoints,
+        successCriteria: salesOpportunities.successCriteria,
+        decisionProcess: salesOpportunities.decisionProcess,
+        budget: salesOpportunities.budget,
+        budgetStatus: salesOpportunities.budgetStatus,
+        competitorInfo: salesOpportunities.competitorInfo,
         lastActivityDate: salesOpportunities.lastActivityDate,
         createdAt: salesOpportunities.createdAt,
         updatedAt: salesOpportunities.updatedAt,
@@ -445,6 +489,12 @@ export class DatabaseStorage implements IStorage {
         priority: salesOpportunities.priority,
         tags: salesOpportunities.tags,
         notes: salesOpportunities.notes,
+        painPoints: salesOpportunities.painPoints,
+        successCriteria: salesOpportunities.successCriteria,
+        decisionProcess: salesOpportunities.decisionProcess,
+        budget: salesOpportunities.budget,
+        budgetStatus: salesOpportunities.budgetStatus,
+        competitorInfo: salesOpportunities.competitorInfo,
         lastActivityDate: salesOpportunities.lastActivityDate,
         createdAt: salesOpportunities.createdAt,
         updatedAt: salesOpportunities.updatedAt,
@@ -496,8 +546,306 @@ export class DatabaseStorage implements IStorage {
     return updatedOpportunity;
   }
 
+  // Helper function to recompute lastActivityDate based on remaining activities
+  private async recomputeLastActivityDate(opportunityId: string, tx: any): Promise<void> {
+    const result = await tx
+      .select({
+        maxDate: sql<Date>`GREATEST(
+          COALESCE(MAX(${opportunityCommunications.communicationDate}), '1970-01-01'::timestamp),
+          COALESCE(MAX(${opportunityNextSteps.completedAt}), '1970-01-01'::timestamp),
+          COALESCE(MAX(${opportunityNextSteps.updatedAt}), '1970-01-01'::timestamp),
+          COALESCE(MAX(${opportunityNextSteps.createdAt}), '1970-01-01'::timestamp),
+          COALESCE((SELECT ${salesOpportunities.updatedAt} FROM ${salesOpportunities} WHERE ${salesOpportunities.id} = ${opportunityId}), '1970-01-01'::timestamp)
+        )`
+      })
+      .from(salesOpportunities)
+      .leftJoin(opportunityCommunications, eq(opportunityCommunications.opportunityId, opportunityId))
+      .leftJoin(opportunityNextSteps, eq(opportunityNextSteps.opportunityId, opportunityId))
+      .where(eq(salesOpportunities.id, opportunityId));
+    
+    if (result[0]?.maxDate) {
+      await tx.update(salesOpportunities)
+        .set({ lastActivityDate: result[0].maxDate })
+        .where(eq(salesOpportunities.id, opportunityId));
+    }
+  }
+
   async deleteSalesOpportunity(id: string): Promise<void> {
-    await db.delete(salesOpportunities).where(eq(salesOpportunities.id, id));
+    // Transactionally delete all related records first to maintain referential integrity
+    await db.transaction(async (tx) => {
+      // Delete related next steps
+      await tx.delete(opportunityNextSteps).where(eq(opportunityNextSteps.opportunityId, id));
+      
+      // Delete related communications
+      await tx.delete(opportunityCommunications).where(eq(opportunityCommunications.opportunityId, id));
+      
+      // Delete related stakeholders
+      await tx.delete(opportunityStakeholders).where(eq(opportunityStakeholders.opportunityId, id));
+      
+      // Finally delete the opportunity itself
+      await tx.delete(salesOpportunities).where(eq(salesOpportunities.id, id));
+    });
+  }
+
+  // Opportunity next steps operations
+  async getOpportunityNextSteps(opportunityId: string): Promise<OpportunityNextStep[]> {
+    return await db
+      .select({
+        id: opportunityNextSteps.id,
+        opportunityId: opportunityNextSteps.opportunityId,
+        title: opportunityNextSteps.title,
+        description: opportunityNextSteps.description,
+        assignedTo: opportunityNextSteps.assignedTo,
+        dueDate: opportunityNextSteps.dueDate,
+        priority: opportunityNextSteps.priority,
+        status: opportunityNextSteps.status,
+        completedAt: opportunityNextSteps.completedAt,
+        completedBy: opportunityNextSteps.completedBy,
+        createdBy: opportunityNextSteps.createdBy,
+        createdAt: opportunityNextSteps.createdAt,
+        updatedAt: opportunityNextSteps.updatedAt,
+        assignedUser: {
+          id: users.id,
+          firstName: users.firstName,
+          lastName: users.lastName,
+        }
+      })
+      .from(opportunityNextSteps)
+      .leftJoin(users, eq(opportunityNextSteps.assignedTo, users.id))
+      .where(eq(opportunityNextSteps.opportunityId, opportunityId))
+      .orderBy(desc(opportunityNextSteps.createdAt));
+  }
+
+  async getOpportunityNextStep(id: string): Promise<OpportunityNextStep | undefined> {
+    const [nextStep] = await db
+      .select()
+      .from(opportunityNextSteps)
+      .where(eq(opportunityNextSteps.id, id));
+    return nextStep;
+  }
+
+  async createOpportunityNextStep(nextStep: InsertOpportunityNextStep): Promise<OpportunityNextStep> {
+    return await db.transaction(async (tx) => {
+      const [result] = await tx.insert(opportunityNextSteps).values(nextStep).returning();
+      
+      // Update parent opportunity's last activity date to the step creation time
+      if (nextStep.opportunityId) {
+        await tx.update(salesOpportunities)
+          .set({ lastActivityDate: result.createdAt })
+          .where(eq(salesOpportunities.id, nextStep.opportunityId));
+      }
+      
+      return result;
+    });
+  }
+
+  async updateOpportunityNextStep(id: string, nextStep: Partial<InsertOpportunityNextStep>): Promise<OpportunityNextStep> {
+    return await db.transaction(async (tx) => {
+      const [result] = await tx
+        .update(opportunityNextSteps)
+        .set({ ...nextStep, updatedAt: new Date() })
+        .where(eq(opportunityNextSteps.id, id))
+        .returning();
+      
+      // Update parent opportunity's last activity date to the step's updated time
+      if (result.opportunityId) {
+        await tx.update(salesOpportunities)
+          .set({ lastActivityDate: result.updatedAt })
+          .where(eq(salesOpportunities.id, result.opportunityId));
+      }
+      
+      return result;
+    });
+  }
+
+  async deleteOpportunityNextStep(id: string): Promise<void> {
+    await db.transaction(async (tx) => {
+      // Get the opportunity ID before deleting the next step
+      const [nextStep] = await tx.select({ opportunityId: opportunityNextSteps.opportunityId })
+        .from(opportunityNextSteps)
+        .where(eq(opportunityNextSteps.id, id));
+      
+      if (nextStep) {
+        await tx.delete(opportunityNextSteps).where(eq(opportunityNextSteps.id, id));
+        
+        // Update parent opportunity's last activity date
+        await this.recomputeLastActivityDate(nextStep.opportunityId!, tx);
+      }
+    });
+  }
+
+  // Opportunity communications operations
+  async getOpportunityCommunications(opportunityId: string): Promise<OpportunityCommunication[]> {
+    return await db
+      .select({
+        id: opportunityCommunications.id,
+        opportunityId: opportunityCommunications.opportunityId,
+        type: opportunityCommunications.type,
+        subject: opportunityCommunications.subject,
+        summary: opportunityCommunications.summary,
+        outcome: opportunityCommunications.outcome,
+        attendees: opportunityCommunications.attendees,
+        followUpRequired: opportunityCommunications.followUpRequired,
+        followUpDate: opportunityCommunications.followUpDate,
+        attachments: opportunityCommunications.attachments,
+        recordedBy: opportunityCommunications.recordedBy,
+        communicationDate: opportunityCommunications.communicationDate,
+        createdAt: opportunityCommunications.createdAt,
+        updatedAt: opportunityCommunications.updatedAt,
+        recordedByUser: {
+          id: users.id,
+          firstName: users.firstName,
+          lastName: users.lastName,
+        }
+      })
+      .from(opportunityCommunications)
+      .leftJoin(users, eq(opportunityCommunications.recordedBy, users.id))
+      .where(eq(opportunityCommunications.opportunityId, opportunityId))
+      .orderBy(desc(opportunityCommunications.communicationDate));
+  }
+
+  async getOpportunityCommunication(id: string): Promise<OpportunityCommunication | undefined> {
+    const [communication] = await db
+      .select()
+      .from(opportunityCommunications)
+      .where(eq(opportunityCommunications.id, id));
+    return communication;
+  }
+
+  async createOpportunityCommunication(communication: InsertOpportunityCommunication): Promise<OpportunityCommunication> {
+    return await db.transaction(async (tx) => {
+      const [result] = await tx.insert(opportunityCommunications).values(communication).returning();
+      
+      // Update parent opportunity's last activity date to the communication date
+      if (communication.opportunityId) {
+        await tx.update(salesOpportunities)
+          .set({ lastActivityDate: result.communicationDate })
+          .where(eq(salesOpportunities.id, communication.opportunityId));
+      }
+      
+      return result;
+    });
+  }
+
+  async updateOpportunityCommunication(id: string, communication: Partial<InsertOpportunityCommunication>): Promise<OpportunityCommunication> {
+    return await db.transaction(async (tx) => {
+      const [result] = await tx
+        .update(opportunityCommunications)
+        .set({ ...communication, updatedAt: new Date() })
+        .where(eq(opportunityCommunications.id, id))
+        .returning();
+      
+      // Update parent opportunity's last activity date to the communication date or updated time
+      if (result.opportunityId) {
+        await tx.update(salesOpportunities)
+          .set({ lastActivityDate: result.communicationDate || result.updatedAt })
+          .where(eq(salesOpportunities.id, result.opportunityId));
+      }
+      
+      return result;
+    });
+  }
+
+  async deleteOpportunityCommunication(id: string): Promise<void> {
+    await db.transaction(async (tx) => {
+      // Get the opportunity ID before deleting the communication
+      const [communication] = await tx.select({ opportunityId: opportunityCommunications.opportunityId })
+        .from(opportunityCommunications)
+        .where(eq(opportunityCommunications.id, id));
+      
+      if (communication) {
+        await tx.delete(opportunityCommunications).where(eq(opportunityCommunications.id, id));
+        
+        // Update parent opportunity's last activity date
+        await this.recomputeLastActivityDate(communication.opportunityId!, tx);
+      }
+    });
+  }
+
+  // Opportunity stakeholders operations
+  async getOpportunityStakeholders(opportunityId: string): Promise<OpportunityStakeholder[]> {
+    return await db
+      .select({
+        id: opportunityStakeholders.id,
+        opportunityId: opportunityStakeholders.opportunityId,
+        name: opportunityStakeholders.name,
+        role: opportunityStakeholders.role,
+        email: opportunityStakeholders.email,
+        phone: opportunityStakeholders.phone,
+        influence: opportunityStakeholders.influence,
+        relationshipStrength: opportunityStakeholders.relationshipStrength,
+        notes: opportunityStakeholders.notes,
+        createdBy: opportunityStakeholders.createdBy,
+        createdAt: opportunityStakeholders.createdAt,
+        updatedAt: opportunityStakeholders.updatedAt,
+        createdByUser: {
+          id: users.id,
+          firstName: users.firstName,
+          lastName: users.lastName,
+        }
+      })
+      .from(opportunityStakeholders)
+      .leftJoin(users, eq(opportunityStakeholders.createdBy, users.id))
+      .where(eq(opportunityStakeholders.opportunityId, opportunityId))
+      .orderBy(opportunityStakeholders.name);
+  }
+
+  async getOpportunityStakeholder(id: string): Promise<OpportunityStakeholder | undefined> {
+    const [stakeholder] = await db
+      .select()
+      .from(opportunityStakeholders)
+      .where(eq(opportunityStakeholders.id, id));
+    return stakeholder;
+  }
+
+  async createOpportunityStakeholder(stakeholder: InsertOpportunityStakeholder): Promise<OpportunityStakeholder> {
+    return await db.transaction(async (tx) => {
+      const [result] = await tx.insert(opportunityStakeholders).values(stakeholder).returning();
+      
+      // Update parent opportunity's last activity date
+      if (stakeholder.opportunityId) {
+        await tx.update(salesOpportunities)
+          .set({ lastActivityDate: new Date() })
+          .where(eq(salesOpportunities.id, stakeholder.opportunityId));
+      }
+      
+      return result;
+    });
+  }
+
+  async updateOpportunityStakeholder(id: string, stakeholder: Partial<InsertOpportunityStakeholder>): Promise<OpportunityStakeholder> {
+    return await db.transaction(async (tx) => {
+      const [result] = await tx
+        .update(opportunityStakeholders)
+        .set({ ...stakeholder, updatedAt: new Date() })
+        .where(eq(opportunityStakeholders.id, id))
+        .returning();
+      
+      // Update parent opportunity's last activity date
+      if (result.opportunityId) {
+        await tx.update(salesOpportunities)
+          .set({ lastActivityDate: new Date() })
+          .where(eq(salesOpportunities.id, result.opportunityId));
+      }
+      
+      return result;
+    });
+  }
+
+  async deleteOpportunityStakeholder(id: string): Promise<void> {
+    await db.transaction(async (tx) => {
+      // Get the opportunity ID before deleting the stakeholder
+      const [stakeholder] = await tx.select({ opportunityId: opportunityStakeholders.opportunityId })
+        .from(opportunityStakeholders)
+        .where(eq(opportunityStakeholders.id, id));
+      
+      if (stakeholder) {
+        await tx.delete(opportunityStakeholders).where(eq(opportunityStakeholders.id, id));
+        
+        // Update parent opportunity's last activity date
+        await this.recomputeLastActivityDate(stakeholder.opportunityId!, tx);
+      }
+    });
   }
 
   // Project operations
