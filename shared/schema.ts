@@ -662,6 +662,23 @@ export const insertOpportunityStakeholderSchema = createInsertSchema(opportunity
   updatedAt: true,
 });
 
+// Update schemas that omit ownership fields for security
+export const updateOpportunityNextStepSchema = insertOpportunityNextStepSchema.partial().omit({
+  opportunityId: true,
+  createdBy: true,
+  completedBy: true,
+});
+
+export const updateOpportunityCommunicationSchema = insertOpportunityCommunicationSchema.partial().omit({
+  opportunityId: true,
+  recordedBy: true,
+});
+
+export const updateOpportunityStakeholderSchema = insertOpportunityStakeholderSchema.partial().omit({
+  opportunityId: true,
+  createdBy: true,
+});
+
 // New relations
 export const opportunityNextStepRelations = relations(opportunityNextSteps, ({ one }) => ({
   opportunity: one(salesOpportunities, {

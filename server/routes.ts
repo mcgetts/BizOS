@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { setupAuth, isAuthenticated, requireRole } from "./replitAuth";
 import {
   insertUserSchema,
@@ -37,6 +37,9 @@ import {
   insertOpportunityNextStepSchema,
   insertOpportunityCommunicationSchema,
   insertOpportunityStakeholderSchema,
+  updateOpportunityNextStepSchema,
+  updateOpportunityCommunicationSchema,
+  updateOpportunityStakeholderSchema,
 } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -280,7 +283,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const variable = await storage.createSystemVariable({
         ...req.body,
-        updatedBy: req.user.id,
+        updatedBy: req.user.claims.sub,
       });
       res.status(201).json(variable);
     } catch (error) {
@@ -293,7 +296,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const variable = await storage.updateSystemVariable(req.params.key, {
         ...req.body,
-        updatedBy: req.user.id,
+        updatedBy: req.user.claims.sub,
       });
       res.json(variable);
     } catch (error) {
@@ -520,11 +523,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put('/api/opportunities/:opportunityId/next-steps/:id', isAuthenticated, async (req, res) => {
     try {
-      const validatedData = insertOpportunityNextStepSchema.partial().parse(req.body);
+      const validatedData = updateOpportunityNextStepSchema.parse(req.body);
       const nextStep = await db.update(opportunityNextSteps)
         .set(validatedData)
-        .where(eq(opportunityNextSteps.id, req.params.id))
+        .where(and(
+          eq(opportunityNextSteps.id, req.params.id),
+          eq(opportunityNextSteps.opportunityId, req.params.opportunityId)
+        ))
         .returning();
+      
+      if (!nextStep.length) {
+        return res.status(404).json({ message: "Next step not found or does not belong to this opportunity" });
+      }
       res.json(nextStep[0]);
     } catch (error) {
       console.error("Error updating next step:", error);
@@ -534,8 +544,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete('/api/opportunities/:opportunityId/next-steps/:id', isAuthenticated, async (req, res) => {
     try {
-      await db.delete(opportunityNextSteps)
-        .where(eq(opportunityNextSteps.id, req.params.id));
+      const result = await db.delete(opportunityNextSteps)
+        .where(and(
+          eq(opportunityNextSteps.id, req.params.id),
+          eq(opportunityNextSteps.opportunityId, req.params.opportunityId)
+        ))
+        .returning();
+      
+      if (!result.length) {
+        return res.status(404).json({ message: "Next step not found or does not belong to this opportunity" });
+      }
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting next step:", error);
@@ -574,11 +592,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put('/api/opportunities/:opportunityId/communications/:id', isAuthenticated, async (req, res) => {
     try {
-      const validatedData = insertOpportunityCommunicationSchema.partial().parse(req.body);
+      const validatedData = updateOpportunityCommunicationSchema.parse(req.body);
       const communication = await db.update(opportunityCommunications)
         .set(validatedData)
-        .where(eq(opportunityCommunications.id, req.params.id))
+        .where(and(
+          eq(opportunityCommunications.id, req.params.id),
+          eq(opportunityCommunications.opportunityId, req.params.opportunityId)
+        ))
         .returning();
+      
+      if (!communication.length) {
+        return res.status(404).json({ message: "Communication not found or does not belong to this opportunity" });
+      }
       res.json(communication[0]);
     } catch (error) {
       console.error("Error updating communication:", error);
@@ -588,8 +613,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete('/api/opportunities/:opportunityId/communications/:id', isAuthenticated, async (req, res) => {
     try {
-      await db.delete(opportunityCommunications)
-        .where(eq(opportunityCommunications.id, req.params.id));
+      const result = await db.delete(opportunityCommunications)
+        .where(and(
+          eq(opportunityCommunications.id, req.params.id),
+          eq(opportunityCommunications.opportunityId, req.params.opportunityId)
+        ))
+        .returning();
+      
+      if (!result.length) {
+        return res.status(404).json({ message: "Communication not found or does not belong to this opportunity" });
+      }
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting communication:", error);
@@ -627,11 +660,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put('/api/opportunities/:opportunityId/stakeholders/:id', isAuthenticated, async (req, res) => {
     try {
-      const validatedData = insertOpportunityStakeholderSchema.partial().parse(req.body);
+      const validatedData = updateOpportunityStakeholderSchema.parse(req.body);
       const stakeholder = await db.update(opportunityStakeholders)
         .set(validatedData)
-        .where(eq(opportunityStakeholders.id, req.params.id))
+        .where(and(
+          eq(opportunityStakeholders.id, req.params.id),
+          eq(opportunityStakeholders.opportunityId, req.params.opportunityId)
+        ))
         .returning();
+      
+      if (!stakeholder.length) {
+        return res.status(404).json({ message: "Stakeholder not found or does not belong to this opportunity" });
+      }
       res.json(stakeholder[0]);
     } catch (error) {
       console.error("Error updating stakeholder:", error);
@@ -641,8 +681,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete('/api/opportunities/:opportunityId/stakeholders/:id', isAuthenticated, async (req, res) => {
     try {
-      await db.delete(opportunityStakeholders)
-        .where(eq(opportunityStakeholders.id, req.params.id));
+      const result = await db.delete(opportunityStakeholders)
+        .where(and(
+          eq(opportunityStakeholders.id, req.params.id),
+          eq(opportunityStakeholders.opportunityId, req.params.opportunityId)
+        ))
+        .returning();
+      
+      if (!result.length) {
+        return res.status(404).json({ message: "Stakeholder not found or does not belong to this opportunity" });
+      }
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting stakeholder:", error);
