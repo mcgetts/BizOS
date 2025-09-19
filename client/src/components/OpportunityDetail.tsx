@@ -28,31 +28,9 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 
-type SalesOpportunity = {
-  id: string;
-  title: string;
-  description: string | null;
-  companyId: string;
-  contactId: string | null;
-  assignedTo: string | null;
-  stage: string;
-  value: string;
-  probability: number;
-  source: string | null;
-  priority: string;
-  expectedCloseDate: string;
-  lastActivityDate: string;
-  tags: string[];
-  painPoints?: string[];
-  successCriteria?: string[];
-  budget?: string;
-  budgetStatus?: string;
-  decisionProcess?: string;
-  createdAt: string;
-  company?: { id: string; name: string; };
-  contact?: { id: string; name: string; email?: string | null; phone?: string | null; position?: string | null; };
-  assignedUser?: { id: string; firstName: string; lastName: string; };
-};
+import { SalesOpportunityWithRelations } from "@shared/schema";
+
+type SalesOpportunity = SalesOpportunityWithRelations;
 
 type NextStep = {
   id: string;
@@ -94,6 +72,16 @@ type Stakeholder = {
   notes?: string;
 };
 
+type ActivityHistory = {
+  id: string;
+  opportunityId: string;
+  action: string;
+  details?: string;
+  performedBy: string;
+  performedAt: string;
+  performedByUser?: { id: string; firstName: string; lastName: string; };
+};
+
 interface OpportunityDetailProps {
   opportunity: SalesOpportunity;
   isOpen: boolean;
@@ -122,7 +110,6 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
   // Fetch next steps
   const { data: nextStepsData = [] } = useQuery({
     queryKey: [`/api/opportunities/${opportunity.id}/next-steps`],
-    queryFn: () => apiRequest("GET", `/api/opportunities/${opportunity.id}/next-steps`),
     enabled: isOpen,
   });
   const nextSteps = Array.isArray(nextStepsData) ? nextStepsData : [];
@@ -130,7 +117,6 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
   // Fetch communications
   const { data: communicationsData = [] } = useQuery({
     queryKey: [`/api/opportunities/${opportunity.id}/communications`],
-    queryFn: () => apiRequest("GET", `/api/opportunities/${opportunity.id}/communications`),
     enabled: isOpen,
   });
   const communications = Array.isArray(communicationsData) ? communicationsData : [];
@@ -138,10 +124,16 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
   // Fetch stakeholders
   const { data: stakeholdersData = [] } = useQuery({
     queryKey: [`/api/opportunities/${opportunity.id}/stakeholders`],
-    queryFn: () => apiRequest("GET", `/api/opportunities/${opportunity.id}/stakeholders`),
     enabled: isOpen,
   });
   const stakeholders = Array.isArray(stakeholdersData) ? stakeholdersData : [];
+
+  // Fetch activity history
+  const { data: activityHistoryData = [] } = useQuery({
+    queryKey: [`/api/opportunities/${opportunity.id}/activity-history`],
+    enabled: isOpen,
+  });
+  const activityHistory = Array.isArray(activityHistoryData) ? activityHistoryData : [];
 
   // Create mutations for deletions
   const deleteNextStepMutation = useMutation({
@@ -371,7 +363,7 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="next-steps">
               Next Steps
@@ -389,6 +381,10 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
               Stakeholders
               <Badge variant="secondary" className="ml-1">{stakeholders.length}</Badge>
             </TabsTrigger>
+            <TabsTrigger value="activity">
+              Activity
+              <Badge variant="secondary" className="ml-1">{activityHistory.length}</Badge>
+            </TabsTrigger>
             <TabsTrigger value="strategy">Strategy</TabsTrigger>
           </TabsList>
 
@@ -402,7 +398,7 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
                   <CardContent className="space-y-2">
                     <div className="flex justify-between">
                       <span className="text-sm text-gray-600">Value:</span>
-                      <span className="font-medium">${parseFloat(opportunity.value || "0").toLocaleString()}</span>
+                      <span className="font-medium">£{parseFloat(opportunity.value || "0").toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm text-gray-600">Probability:</span>
@@ -892,9 +888,107 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
               </div>
             </TabsContent>
 
+            <TabsContent value="activity" className="space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-medium">Activity History</h3>
+                <p className="text-sm text-gray-500">All updates and changes to this opportunity</p>
+              </div>
+
+              <div className="space-y-3">
+                {activityHistory.map((activity: any) => {
+                  // Handle both direct activity data and joined data structure
+                  const user = activity.performedByUser;
+                  const performedByName = user ? `${user.firstName} ${user.lastName}` : activity.performedBy || 'Unknown User';
+
+                  // Determine icon and color based on activity type
+                  const getActivityIcon = (action: string) => {
+                    switch (action) {
+                      case 'opportunity_created':
+                        return { icon: Plus, color: 'bg-green-500' };
+                      case 'stage_changed':
+                        return { icon: Target, color: 'bg-blue-500' };
+                      case 'value_changed':
+                      case 'probability_changed':
+                      case 'close_date_changed':
+                      case 'priority_changed':
+                      case 'assigned_to_changed':
+                      case 'opportunity_updated':
+                        return { icon: Edit, color: 'bg-orange-500' };
+                      case 'next_step_added':
+                      case 'next_step_updated':
+                      case 'next_step_deleted':
+                        return { icon: CheckCircle2, color: 'bg-purple-500' };
+                      case 'communication_logged':
+                      case 'communication_updated':
+                      case 'communication_deleted':
+                        return { icon: MessageSquare, color: 'bg-indigo-500' };
+                      case 'stakeholder_added':
+                      case 'stakeholder_updated':
+                      case 'stakeholder_deleted':
+                        return { icon: Users, color: 'bg-teal-500' };
+                      default:
+                        return { icon: Clock, color: 'bg-gray-500' };
+                    }
+                  };
+
+                  const { icon: ActivityIcon, color } = getActivityIcon(activity.action);
+
+                  return (
+                    <Card key={activity.id}>
+                      <CardContent className="pt-4">
+                        <div className="flex items-start space-x-3">
+                          <div className="flex-shrink-0">
+                            <div className={`w-8 h-8 ${color} rounded-full flex items-center justify-center`}>
+                              <ActivityIcon className="w-4 h-4 text-white" />
+                            </div>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between">
+                              <h4 className="text-sm font-medium text-gray-900">
+                                {activity.action.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
+                              </h4>
+                              <time className="text-xs text-gray-500">
+                                {format(new Date(activity.performedAt || activity.createdAt), "MMM dd, yyyy 'at' h:mm a")}
+                              </time>
+                            </div>
+                            {activity.details && (
+                              <p className="text-sm text-gray-600 mt-1">{activity.details}</p>
+                            )}
+                            {(activity.oldValue || activity.newValue) && (
+                              <div className="mt-2 text-xs text-gray-500 bg-gray-50 p-2 rounded">
+                                {activity.oldValue && (
+                                  <div>
+                                    <span className="font-medium">From:</span> {activity.oldValue}
+                                  </div>
+                                )}
+                                {activity.newValue && (
+                                  <div>
+                                    <span className="font-medium">To:</span> {activity.newValue}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            <div className="flex items-center mt-2 text-xs text-gray-500">
+                              <User className="w-3 h-3 mr-1" />
+                              {performedByName}
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+                {activityHistory.length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    No activity history yet. Changes to this opportunity will appear here.
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+
             <TabsContent value="strategy" className="space-y-4">
               <div className="grid gap-4">
-                {opportunity.painPoints && opportunity.painPoints.length > 0 && (
+                {Array.isArray(opportunity.painPoints) && opportunity.painPoints.length > 0 && (
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-sm flex items-center gap-2">
@@ -915,7 +1009,7 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
                   </Card>
                 )}
 
-                {opportunity.successCriteria && opportunity.successCriteria.length > 0 && (
+                {Array.isArray(opportunity.successCriteria) && opportunity.successCriteria.length > 0 && (
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-sm flex items-center gap-2">
@@ -944,7 +1038,7 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
                     <CardContent className="space-y-2">
                       <div className="flex justify-between">
                         <span className="text-sm text-gray-600">Budget:</span>
-                        <span className="font-medium">${parseFloat(opportunity.budget).toLocaleString()}</span>
+                        <span className="font-medium">£{parseFloat(opportunity.budget || "0").toLocaleString()}</span>
                       </div>
                       {opportunity.budgetStatus && (
                         <div className="flex justify-between">

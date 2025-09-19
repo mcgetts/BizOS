@@ -27,6 +27,7 @@ import {
   type Company,
   type InsertSalesOpportunity,
   type SalesOpportunity,
+  type SalesOpportunityWithRelations,
   type InsertOpportunityNextStep,
   type OpportunityNextStep,
   type InsertOpportunityCommunication,
@@ -84,9 +85,9 @@ export interface IStorage {
   deleteCompany(id: string): Promise<void>;
 
   // Sales opportunity operations
-  getSalesOpportunities(): Promise<SalesOpportunity[]>;
-  getSalesOpportunity(id: string): Promise<SalesOpportunity | undefined>;
-  getSalesOpportunitiesByStage(stage: string): Promise<SalesOpportunity[]>;
+  getSalesOpportunities(): Promise<SalesOpportunityWithRelations[]>;
+  getSalesOpportunity(id: string): Promise<SalesOpportunityWithRelations | undefined>;
+  getSalesOpportunitiesByStage(stage: string): Promise<SalesOpportunityWithRelations[]>;
   createSalesOpportunity(opportunity: InsertSalesOpportunity): Promise<SalesOpportunity>;
   updateSalesOpportunity(id: string, opportunity: Partial<InsertSalesOpportunity>): Promise<SalesOpportunity>;
   deleteSalesOpportunity(id: string): Promise<void>;
@@ -375,7 +376,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Sales opportunity operations
-  async getSalesOpportunities(): Promise<SalesOpportunity[]> {
+  async getSalesOpportunities(): Promise<SalesOpportunityWithRelations[]> {
     return await db
       .select({
         id: salesOpportunities.id,
@@ -428,7 +429,7 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(salesOpportunities.lastActivityDate));
   }
 
-  async getSalesOpportunity(id: string): Promise<SalesOpportunity | undefined> {
+  async getSalesOpportunity(id: string): Promise<SalesOpportunityWithRelations | undefined> {
     const [opportunity] = await db
       .select({
         id: salesOpportunities.id,
@@ -482,7 +483,7 @@ export class DatabaseStorage implements IStorage {
     return opportunity;
   }
 
-  async getSalesOpportunitiesByStage(stage: string): Promise<SalesOpportunity[]> {
+  async getSalesOpportunitiesByStage(stage: string): Promise<SalesOpportunityWithRelations[]> {
     return await db
       .select({
         id: salesOpportunities.id,

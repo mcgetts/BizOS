@@ -36,7 +36,9 @@
       "Bash(npm run:*)",
       "Bash(npx tsc:*)",
       "Bash(PORT=3001 npm run db:push)",
-      "Bash(npx tsx:*)"
+      "Bash(npx tsx:*)",
+      "Bash(xargs -r kill -9)",
+      "Bash(rm:*)"
     ],
     "deny": [],
     "ask": []

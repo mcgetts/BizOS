@@ -33,41 +33,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { OpportunityDetail } from "./OpportunityDetail";
 
-type SalesOpportunity = {
-  id: string;
-  title: string;
-  description: string | null;
-  companyId: string;
-  contactId: string | null;
-  assignedTo: string | null;
-  stage: string;
-  value: string;
-  probability: number;
-  source: string | null;
-  priority: string;
-  expectedCloseDate: string;
-  lastActivityDate: string;
-  tags: string[];
-  createdAt: string;
-  updatedAt: string;
-  company?: {
-    id: string;
-    name: string;
-    industry: string | null;
-  };
-  contact?: {
-    id: string;
-    name: string;
-    email: string | null;
-    phone: string | null;
-    position: string | null;
-  };
-  assignedUser?: {
-    id: string;
-    firstName: string;
-    lastName: string;
-  };
-};
+import { SalesOpportunityWithRelations } from "@shared/schema";
+
+type SalesOpportunity = SalesOpportunityWithRelations;
 
 type Company = {
   id: string;
@@ -146,6 +114,23 @@ export function SalesPipeline() {
   const [isOptimisticUpdate, setIsOptimisticUpdate] = useState(false);
   const [sortColumn, setSortColumn] = useState<SortColumn | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
+  const [isCreateCompanyDialogOpen, setIsCreateCompanyDialogOpen] = useState(false);
+  const [isCreateContactDialogOpen, setIsCreateContactDialogOpen] = useState(false);
+  const [filteredClients, setFilteredClients] = useState<Client[]>([]);
+  const [newCompanyForm, setNewCompanyForm] = useState({
+    name: "",
+    industry: "",
+    website: "",
+    description: ""
+  });
+  const [newContactForm, setNewContactForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    position: "",
+    department: "",
+    companyId: ""
+  });
   const [editForm, setEditForm] = useState<CreateOpportunityForm>({
     title: "",
     description: "",
@@ -208,6 +193,16 @@ export function SalesPipeline() {
     }
   }, [opportunities]);
 
+  // Filter clients by selected company
+  useEffect(() => {
+    if (clients && createForm.companyId) {
+      const filtered = clients.filter(client => client.companyId === createForm.companyId);
+      setFilteredClients(filtered);
+    } else {
+      setFilteredClients(clients || []);
+    }
+  }, [clients, createForm.companyId]);
+
   const updateOpportunityMutation = useMutation({
     mutationFn: async ({ id, stage, originalStage }: { id: string; stage: string; originalStage?: string }) => {
       return apiRequest("PUT", `/api/opportunities/${id}`, { stage });
@@ -250,9 +245,42 @@ export function SalesPipeline() {
 
   const createOpportunityMutation = useMutation({
     mutationFn: async (data: CreateOpportunityForm) => {
-      return apiRequest("POST", "/api/opportunities", data);
+      console.log('Creating opportunity with data:', data);
+
+      // Transform data to match backend schema expectations
+      const transformedData = {
+        ...data,
+        // Ensure empty strings become null for optional fields
+        description: data.description || null,
+        contactId: data.contactId || null,
+        assignedTo: data.assignedTo || null,
+        source: data.source || null,
+        // Handle date field properly
+        expectedCloseDate: data.expectedCloseDate ? new Date(data.expectedCloseDate).toISOString() : null,
+        // Ensure arrays are properly formatted
+        tags: data.tags || [],
+        painPoints: data.painPoints || [],
+        successCriteria: data.successCriteria || [],
+        // Handle optional fields
+        budget: data.budget || null,
+        budgetStatus: data.budgetStatus || null,
+        decisionProcess: data.decisionProcess || null,
+      };
+
+      console.log('Transformed data for API:', transformedData);
+
+      try {
+        const response = await apiRequest("POST", "/api/opportunities", transformedData);
+        const result = await response.json();
+        console.log('API response:', result);
+        return result;
+      } catch (error) {
+        console.error('API request failed:', error);
+        throw error;
+      }
     },
-    onSuccess: () => {
+    onSuccess: (newOpportunity) => {
+      console.log('Opportunity created successfully:', newOpportunity);
       queryClient.invalidateQueries({ queryKey: ['/api/opportunities'] });
       setIsCreateDialogOpen(false);
       setCreateForm({
@@ -276,7 +304,54 @@ export function SalesPipeline() {
       });
     },
     onError: (error) => {
-      console.error('Failed to create opportunity:', error);
+      console.error('Failed to create opportunity - Full error:', error);
+
+      // Extract more detailed error information
+      let errorMessage = 'Failed to create opportunity. Please try again.';
+
+      if (error instanceof Error) {
+        // Try to parse JSON error response for detailed server errors
+        try {
+          const errorMatch = error.message.match(/\d+:\s*(.+)/);
+          if (errorMatch) {
+            const responseText = errorMatch[1];
+            const errorData = JSON.parse(responseText);
+
+            if (errorData.message && errorData.details) {
+              errorMessage = `${errorData.message}: ${errorData.details}`;
+            } else if (errorData.message) {
+              errorMessage = errorData.message;
+            }
+
+            // Log validation errors if present
+            if (errorData.errors && Array.isArray(errorData.errors)) {
+              console.error('Validation errors:', errorData.errors);
+              const fieldErrors = errorData.errors.map((err: any) =>
+                `${err.path?.join('.') || 'Unknown field'}: ${err.message}`
+              ).join(', ');
+              errorMessage += `\nField errors: ${fieldErrors}`;
+            }
+          } else {
+            // Fallback to status code-based messages
+            if (error.message.includes('400')) {
+              errorMessage = 'Invalid data provided. Please check all required fields.';
+            } else if (error.message.includes('401')) {
+              errorMessage = 'Authentication required. Please refresh the page and try again.';
+            } else if (error.message.includes('403')) {
+              errorMessage = 'Permission denied. You may not have access to create opportunities.';
+            } else if (error.message.includes('500')) {
+              errorMessage = 'Server error. Please try again later.';
+            } else {
+              errorMessage = `Error: ${error.message}`;
+            }
+          }
+        } catch (parseError) {
+          // If JSON parsing fails, use the original error message
+          errorMessage = `Error: ${error.message}`;
+        }
+      }
+
+      alert(errorMessage);
     },
   });
 
@@ -306,6 +381,70 @@ export function SalesPipeline() {
     },
   });
 
+  const createCompanyMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const response = await apiRequest("POST", "/api/companies", data);
+      return await response.json();
+    },
+    onSuccess: (newCompany) => {
+      // Update the companies cache directly with the new company
+      queryClient.setQueryData(['/api/companies'], (oldCompanies: Company[] | undefined) => {
+        return oldCompanies ? [...oldCompanies, newCompany] : [newCompany];
+      });
+
+      // Update form state with the new company ID
+      setCreateForm(prev => ({ ...prev, companyId: newCompany.id }));
+
+      // Close dialog and reset form
+      setIsCreateCompanyDialogOpen(false);
+      setNewCompanyForm({
+        name: "",
+        industry: "",
+        website: "",
+        description: ""
+      });
+
+      // Invalidate queries to ensure consistency
+      queryClient.invalidateQueries({ queryKey: ['/api/companies'] });
+    },
+    onError: (error) => {
+      console.error('Failed to create company:', error);
+    },
+  });
+
+  const createContactMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const response = await apiRequest("POST", "/api/clients", data);
+      return await response.json();
+    },
+    onSuccess: (newContact) => {
+      // Update the clients cache directly with the new contact
+      queryClient.setQueryData(['/api/clients'], (oldClients: Client[] | undefined) => {
+        return oldClients ? [...oldClients, newContact] : [newContact];
+      });
+
+      // Update form state with the new contact ID
+      setCreateForm(prev => ({ ...prev, contactId: newContact.id }));
+
+      // Close dialog and reset form
+      setIsCreateContactDialogOpen(false);
+      setNewContactForm({
+        name: "",
+        email: "",
+        phone: "",
+        position: "",
+        department: "",
+        companyId: ""
+      });
+
+      // Invalidate queries to ensure consistency
+      queryClient.invalidateQueries({ queryKey: ['/api/clients'] });
+    },
+    onError: (error) => {
+      console.error('Failed to create contact:', error);
+    },
+  });
+
   const organizeByStage = (opportunities: SalesOpportunity[]) => {
     const organized: Record<string, SalesOpportunity[]> = {};
 
@@ -321,9 +460,9 @@ export function SalesPipeline() {
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-GB', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'GBP',
       minimumFractionDigits: 0,
     }).format(amount);
   };
@@ -435,6 +574,28 @@ export function SalesPipeline() {
       id: selectedOpportunity.id,
       data: editForm,
     });
+  };
+
+  const handleCreateCompany = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCompanyForm.name.trim()) {
+      alert("Company name is required");
+      return;
+    }
+    createCompanyMutation.mutate(newCompanyForm);
+  };
+
+  const handleCreateContact = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newContactForm.name.trim()) {
+      alert("Contact name is required");
+      return;
+    }
+    if (!newContactForm.companyId) {
+      alert("Please select a company for this contact");
+      return;
+    }
+    createContactMutation.mutate(newContactForm);
   };
 
   if (isLoading) {
@@ -674,7 +835,18 @@ export function SalesPipeline() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="company">Company *</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="company">Company *</Label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsCreateCompanyDialogOpen(true)}
+                    >
+                      <Plus className="w-3 h-3 mr-1" />
+                      New
+                    </Button>
+                  </div>
                   <Select
                     value={createForm.companyId}
                     onValueChange={(value) => updateCreateForm("companyId", value)}
@@ -692,7 +864,22 @@ export function SalesPipeline() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="contact">Contact</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="contact">Contact</Label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setNewContactForm(prev => ({ ...prev, companyId: createForm.companyId }));
+                        setIsCreateContactDialogOpen(true);
+                      }}
+                      disabled={!createForm.companyId}
+                    >
+                      <Plus className="w-3 h-3 mr-1" />
+                      New
+                    </Button>
+                  </div>
                   <Select
                     value={createForm.contactId}
                     onValueChange={(value) => updateCreateForm("contactId", value)}
@@ -701,11 +888,16 @@ export function SalesPipeline() {
                       <SelectValue placeholder="Select contact" />
                     </SelectTrigger>
                     <SelectContent>
-                      {clients?.map((client) => (
+                      {filteredClients.map((client) => (
                         <SelectItem key={client.id} value={client.id}>
-                          {client.name} {client.position && `- ${client.position}`} {client.company?.name && `(${client.company.name})`}
+                          {client.name} {client.position && `- ${client.position}`}
                         </SelectItem>
                       ))}
+                      {filteredClients.length === 0 && createForm.companyId && (
+                        <div className="px-2 py-1 text-sm text-gray-500">
+                          No contacts found for this company
+                        </div>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -915,7 +1107,7 @@ export function SalesPipeline() {
                       <td className="p-4 font-medium">
                         {formatCurrency(parseFloat(opportunity.value || "0"))}
                       </td>
-                      <td className="p-4">{opportunity.probability}%</td>
+                      <td className="p-4">{opportunity.probability || 0}%</td>
                       <td className="p-4">{formatDate(opportunity.expectedCloseDate)}</td>
                       <td className="p-4">
                         <Badge
@@ -1430,16 +1622,16 @@ export function SalesPipeline() {
                               <CardContent className="p-3 pt-0 space-y-2">
                                 <div className="flex items-center text-xs text-gray-600">
                                   <Building2 className="w-3 h-3 mr-1" />
-                                  <span className="truncate">{opportunity.company?.name}</span>
+                                  <span className="truncate">{opportunity.company?.name || "No Company"}</span>
                                 </div>
 
                                 <div className="flex items-center justify-between text-xs">
                                   <div className="flex items-center text-green-600 font-medium">
                                     <DollarSign className="w-3 h-3 mr-1" />
-                                    {formatCurrency(parseFloat(opportunity.value))}
+                                    {formatCurrency(parseFloat(opportunity.value || "0"))}
                                   </div>
                                   <div className="text-gray-500">
-                                    {opportunity.probability}%
+                                    {opportunity.probability || 0}%
                                   </div>
                                 </div>
 
@@ -1688,6 +1880,151 @@ export function SalesPipeline() {
                 disabled={editOpportunityMutation.isPending}
               >
                 {editOpportunityMutation.isPending ? "Updating..." : "Update Opportunity"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Company Dialog */}
+      <Dialog open={isCreateCompanyDialogOpen} onOpenChange={setIsCreateCompanyDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Create New Company</DialogTitle>
+            <DialogDescription>
+              Add a new company to the system.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreateCompany}>
+            <div className="grid gap-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="company-name">Company Name *</Label>
+                <Input
+                  id="company-name"
+                  value={newCompanyForm.name}
+                  onChange={(e) => setNewCompanyForm(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="e.g., Acme Corporation"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="company-industry">Industry</Label>
+                <Input
+                  id="company-industry"
+                  value={newCompanyForm.industry}
+                  onChange={(e) => setNewCompanyForm(prev => ({ ...prev, industry: e.target.value }))}
+                  placeholder="e.g., Technology"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="company-website">Website</Label>
+                <Input
+                  id="company-website"
+                  value={newCompanyForm.website}
+                  onChange={(e) => setNewCompanyForm(prev => ({ ...prev, website: e.target.value }))}
+                  placeholder="e.g., https://example.com"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="company-description">Description</Label>
+                <Textarea
+                  id="company-description"
+                  value={newCompanyForm.description}
+                  onChange={(e) => setNewCompanyForm(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Brief description of the company..."
+                  rows={3}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsCreateCompanyDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={createCompanyMutation.isPending}
+              >
+                {createCompanyMutation.isPending ? "Creating..." : "Create Company"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Contact Dialog */}
+      <Dialog open={isCreateContactDialogOpen} onOpenChange={setIsCreateContactDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Create New Contact</DialogTitle>
+            <DialogDescription>
+              Add a new contact for the selected company.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreateContact}>
+            <div className="grid gap-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="contact-name">Contact Name *</Label>
+                <Input
+                  id="contact-name"
+                  value={newContactForm.name}
+                  onChange={(e) => setNewContactForm(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="e.g., John Smith"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="contact-email">Email</Label>
+                <Input
+                  id="contact-email"
+                  type="email"
+                  value={newContactForm.email}
+                  onChange={(e) => setNewContactForm(prev => ({ ...prev, email: e.target.value }))}
+                  placeholder="e.g., john@company.com"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="contact-phone">Phone</Label>
+                <Input
+                  id="contact-phone"
+                  value={newContactForm.phone}
+                  onChange={(e) => setNewContactForm(prev => ({ ...prev, phone: e.target.value }))}
+                  placeholder="e.g., +44 20 1234 5678"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="contact-position">Position</Label>
+                <Input
+                  id="contact-position"
+                  value={newContactForm.position}
+                  onChange={(e) => setNewContactForm(prev => ({ ...prev, position: e.target.value }))}
+                  placeholder="e.g., Marketing Director"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="contact-department">Department</Label>
+                <Input
+                  id="contact-department"
+                  value={newContactForm.department}
+                  onChange={(e) => setNewContactForm(prev => ({ ...prev, department: e.target.value }))}
+                  placeholder="e.g., Marketing"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsCreateContactDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={createContactMutation.isPending}
+              >
+                {createContactMutation.isPending ? "Creating..." : "Create Contact"}
               </Button>
             </DialogFooter>
           </form>

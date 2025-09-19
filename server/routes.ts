@@ -34,6 +34,7 @@ import {
   opportunityNextSteps,
   opportunityCommunications,
   opportunityStakeholders,
+  opportunityActivityHistory,
   insertOpportunityNextStepSchema,
   insertOpportunityCommunicationSchema,
   insertOpportunityStakeholderSchema,
@@ -41,6 +42,30 @@ import {
   updateOpportunityCommunicationSchema,
   updateOpportunityStakeholderSchema,
 } from "@shared/schema";
+
+// Helper function to log activity history
+async function logActivityHistory(
+  opportunityId: string,
+  action: string,
+  details: string,
+  performedBy: string,
+  oldValue?: string,
+  newValue?: string
+) {
+  try {
+    await db.insert(opportunityActivityHistory).values({
+      opportunityId,
+      action,
+      details,
+      oldValue,
+      newValue,
+      performedBy,
+    });
+  } catch (error) {
+    console.error("Error logging activity history:", error);
+    // Don't throw - activity logging should not break the main operation
+  }
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Test reset endpoint - must be BEFORE auth setup to bypass authentication
@@ -463,19 +488,198 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/opportunities', isAuthenticated, async (req, res) => {
     try {
+      console.log('Creating opportunity - Request body:', JSON.stringify(req.body, null, 2));
+
       const validatedData = insertSalesOpportunitySchema.parse(req.body);
+      console.log('Validated data:', JSON.stringify(validatedData, null, 2));
+
       const opportunity = await storage.createSalesOpportunity(validatedData);
+      console.log('Created opportunity:', JSON.stringify(opportunity, null, 2));
+
+      // Log activity history
+      await logActivityHistory(
+        opportunity.id,
+        'opportunity_created',
+        `Opportunity "${opportunity.title}" was created`,
+        (req as any).user.claims.sub
+      );
+
       res.status(201).json(opportunity);
     } catch (error) {
       console.error("Error creating opportunity:", error);
-      res.status(400).json({ message: "Failed to create opportunity" });
+
+      // Handle different types of errors
+      if (error instanceof Error) {
+        // Zod validation error
+        if (error.name === 'ZodError' || error.message.includes('validation')) {
+          const zodError = error as any;
+          const validationErrors = zodError.errors || [];
+
+          console.error('Validation errors:', validationErrors);
+
+          return res.status(400).json({
+            message: "Validation failed",
+            errors: validationErrors,
+            details: "Please check that all required fields are filled correctly"
+          });
+        }
+
+        // Database constraint errors
+        if (error.message.includes('foreign key') || error.message.includes('constraint')) {
+          console.error('Database constraint error:', error.message);
+          return res.status(400).json({
+            message: "Invalid reference data",
+            details: "One or more selected items (company, contact, user) may not exist"
+          });
+        }
+
+        // Other known errors
+        return res.status(500).json({
+          message: "Server error",
+          details: error.message
+        });
+      }
+
+      // Generic fallback
+      res.status(500).json({
+        message: "Failed to create opportunity",
+        details: "An unexpected error occurred"
+      });
     }
   });
 
   app.put('/api/opportunities/:id', isAuthenticated, async (req, res) => {
     try {
       const validatedData = insertSalesOpportunitySchema.partial().parse(req.body);
+
+      // Get the current opportunity to track changes
+      const currentOpportunity = await db.select()
+        .from(salesOpportunities)
+        .where(eq(salesOpportunities.id, req.params.id))
+        .limit(1);
+
+      if (!currentOpportunity.length) {
+        return res.status(404).json({ message: "Opportunity not found" });
+      }
+
+      const current = currentOpportunity[0];
       const opportunity = await storage.updateSalesOpportunity(req.params.id, validatedData);
+
+      // Log activity for changed fields
+      const changes: string[] = [];
+      const userId = (req as any).user.claims.sub;
+
+      if (validatedData.stage && validatedData.stage !== current.stage) {
+        const stageLabels: Record<string, string> = {
+          lead: "Lead",
+          qualified: "Qualified",
+          proposal: "Proposal",
+          negotiation: "Negotiation",
+          closed_won: "Closed Won",
+          closed_lost: "Closed Lost"
+        };
+
+        await logActivityHistory(
+          req.params.id,
+          'stage_changed',
+          `Stage changed from "${stageLabels[current.stage || ''] || current.stage}" to "${stageLabels[validatedData.stage] || validatedData.stage}"`,
+          userId,
+          current.stage,
+          validatedData.stage
+        );
+        changes.push('stage');
+      }
+
+      if (validatedData.value !== undefined && validatedData.value !== current.value) {
+        await logActivityHistory(
+          req.params.id,
+          'value_changed',
+          `Deal value changed from £${current.value || '0'} to £${validatedData.value || '0'}`,
+          userId,
+          current.value,
+          validatedData.value
+        );
+        changes.push('value');
+      }
+
+      if (validatedData.probability !== undefined && validatedData.probability !== current.probability) {
+        await logActivityHistory(
+          req.params.id,
+          'probability_changed',
+          `Probability changed from ${current.probability}% to ${validatedData.probability}%`,
+          userId,
+          current.probability?.toString(),
+          validatedData.probability?.toString()
+        );
+        changes.push('probability');
+      }
+
+      if (validatedData.expectedCloseDate !== undefined) {
+        const newDate = validatedData.expectedCloseDate ? new Date(validatedData.expectedCloseDate).toISOString() : null;
+        const currentDate = current.expectedCloseDate ? new Date(current.expectedCloseDate).toISOString() : null;
+
+        if (newDate !== currentDate) {
+          const formatDate = (date: string | null) => date ? new Date(date).toLocaleDateString() : 'Not set';
+          await logActivityHistory(
+            req.params.id,
+            'close_date_changed',
+            `Expected close date changed from ${formatDate(currentDate)} to ${formatDate(newDate)}`,
+            userId,
+            currentDate,
+            newDate
+          );
+          changes.push('expectedCloseDate');
+        }
+      }
+
+      if (validatedData.priority && validatedData.priority !== current.priority) {
+        await logActivityHistory(
+          req.params.id,
+          'priority_changed',
+          `Priority changed from "${current.priority}" to "${validatedData.priority}"`,
+          userId,
+          current.priority,
+          validatedData.priority
+        );
+        changes.push('priority');
+      }
+
+      if (validatedData.assignedTo !== undefined && validatedData.assignedTo !== current.assignedTo) {
+        // Get user names for better logging
+        const allUsers = await db.select({
+          id: users.id,
+          firstName: users.firstName,
+          lastName: users.lastName
+        }).from(users);
+
+        const currentUser = allUsers.find(u => u.id === current.assignedTo);
+        const newUser = allUsers.find(u => u.id === validatedData.assignedTo);
+
+        const currentName = currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : 'Unassigned';
+        const newName = newUser ? `${newUser.firstName} ${newUser.lastName}` : 'Unassigned';
+
+        await logActivityHistory(
+          req.params.id,
+          'assigned_to_changed',
+          `Assignment changed from "${currentName}" to "${newName}"`,
+          userId,
+          current.assignedTo,
+          validatedData.assignedTo
+        );
+        changes.push('assignedTo');
+      }
+
+      // Log general update if other fields changed
+      const otherChanges = Object.keys(validatedData).filter(key => !changes.includes(key));
+      if (otherChanges.length > 0) {
+        await logActivityHistory(
+          req.params.id,
+          'opportunity_updated',
+          `Updated opportunity details: ${otherChanges.join(', ')}`,
+          userId
+        );
+      }
+
       res.json(opportunity);
     } catch (error) {
       console.error("Error updating opportunity:", error);
@@ -485,6 +689,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete('/api/opportunities/:id', isAuthenticated, async (req, res) => {
     try {
+      // Get opportunity details before deletion for logging
+      const opportunity = await db.select()
+        .from(salesOpportunities)
+        .where(eq(salesOpportunities.id, req.params.id))
+        .limit(1);
+
+      if (opportunity.length > 0) {
+        // Log activity history before deletion
+        await logActivityHistory(
+          req.params.id,
+          'opportunity_deleted',
+          `Opportunity "${opportunity[0].title}" was deleted`,
+          (req as any).user.claims.sub
+        );
+      }
+
       await storage.deleteSalesOpportunity(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -496,7 +716,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Opportunity Next Steps routes
   app.get('/api/opportunities/:opportunityId/next-steps', isAuthenticated, async (req, res) => {
     try {
-      const nextSteps = await db.select().from(opportunityNextSteps)
+      const nextSteps = await db.select({
+        id: opportunityNextSteps.id,
+        opportunityId: opportunityNextSteps.opportunityId,
+        title: opportunityNextSteps.title,
+        description: opportunityNextSteps.description,
+        assignedTo: opportunityNextSteps.assignedTo,
+        dueDate: opportunityNextSteps.dueDate,
+        priority: opportunityNextSteps.priority,
+        status: opportunityNextSteps.status,
+        completedAt: opportunityNextSteps.completedAt,
+        completedBy: opportunityNextSteps.completedBy,
+        createdBy: opportunityNextSteps.createdBy,
+        createdAt: opportunityNextSteps.createdAt,
+        updatedAt: opportunityNextSteps.updatedAt,
+        assignedUser: users ? {
+          id: users.id,
+          firstName: users.firstName,
+          lastName: users.lastName,
+        } : null,
+      }).from(opportunityNextSteps)
         .where(eq(opportunityNextSteps.opportunityId, req.params.opportunityId))
         .leftJoin(users, eq(opportunityNextSteps.assignedTo, users.id));
       res.json(nextSteps);
@@ -514,6 +753,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         createdBy: req.user.claims.sub,
       });
       const nextStep = await db.insert(opportunityNextSteps).values(validatedData).returning();
+
+      // Log activity history
+      await logActivityHistory(
+        req.params.opportunityId,
+        'next_step_added',
+        `Added next step: "${nextStep[0].title}"`,
+        (req as any).user.claims.sub
+      );
+
       res.status(201).json(nextStep[0]);
     } catch (error) {
       console.error("Error creating next step:", error);
@@ -531,10 +779,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           eq(opportunityNextSteps.opportunityId, req.params.opportunityId)
         ))
         .returning();
-      
+
       if (!nextStep.length) {
         return res.status(404).json({ message: "Next step not found or does not belong to this opportunity" });
       }
+
+      // Log activity history
+      await logActivityHistory(
+        req.params.opportunityId,
+        'next_step_updated',
+        `Updated next step: "${nextStep[0].title}"`,
+        (req as any).user.claims.sub
+      );
+
       res.json(nextStep[0]);
     } catch (error) {
       console.error("Error updating next step:", error);
@@ -554,6 +811,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!result.length) {
         return res.status(404).json({ message: "Next step not found or does not belong to this opportunity" });
       }
+
+      // Log activity history
+      await logActivityHistory(
+        req.params.opportunityId,
+        'next_step_deleted',
+        `Deleted next step: "${result[0].title}"`,
+        (req as any).user.claims.sub
+      );
+
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting next step:", error);
@@ -564,7 +830,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Opportunity Communications routes
   app.get('/api/opportunities/:opportunityId/communications', isAuthenticated, async (req, res) => {
     try {
-      const communications = await db.select().from(opportunityCommunications)
+      const communications = await db.select({
+        id: opportunityCommunications.id,
+        opportunityId: opportunityCommunications.opportunityId,
+        type: opportunityCommunications.type,
+        subject: opportunityCommunications.subject,
+        summary: opportunityCommunications.summary,
+        outcome: opportunityCommunications.outcome,
+        attendees: opportunityCommunications.attendees,
+        followUpRequired: opportunityCommunications.followUpRequired,
+        followUpDate: opportunityCommunications.followUpDate,
+        attachments: opportunityCommunications.attachments,
+        recordedBy: opportunityCommunications.recordedBy,
+        communicationDate: opportunityCommunications.communicationDate,
+        createdAt: opportunityCommunications.createdAt,
+        updatedAt: opportunityCommunications.updatedAt,
+        recordedByUser: users ? {
+          id: users.id,
+          firstName: users.firstName,
+          lastName: users.lastName,
+        } : null,
+      }).from(opportunityCommunications)
         .where(eq(opportunityCommunications.opportunityId, req.params.opportunityId))
         .leftJoin(users, eq(opportunityCommunications.recordedBy, users.id))
         .orderBy(desc(opportunityCommunications.communicationDate));
@@ -583,6 +869,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         recordedBy: req.user.claims.sub,
       });
       const communication = await db.insert(opportunityCommunications).values(validatedData).returning();
+
+      // Log activity history
+      await logActivityHistory(
+        req.params.opportunityId,
+        'communication_logged',
+        `Logged ${communication[0].type}: "${communication[0].subject || 'Communication'}"`,
+        (req as any).user.claims.sub
+      );
+
       res.status(201).json(communication[0]);
     } catch (error) {
       console.error("Error creating communication:", error);
@@ -600,10 +895,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           eq(opportunityCommunications.opportunityId, req.params.opportunityId)
         ))
         .returning();
-      
+
       if (!communication.length) {
         return res.status(404).json({ message: "Communication not found or does not belong to this opportunity" });
       }
+
+      // Log activity history
+      await logActivityHistory(
+        req.params.opportunityId,
+        'communication_updated',
+        `Updated ${communication[0].type}: "${communication[0].subject || 'Communication'}"`,
+        (req as any).user.claims.sub
+      );
+
       res.json(communication[0]);
     } catch (error) {
       console.error("Error updating communication:", error);
@@ -623,6 +927,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!result.length) {
         return res.status(404).json({ message: "Communication not found or does not belong to this opportunity" });
       }
+
+      // Log activity history
+      await logActivityHistory(
+        req.params.opportunityId,
+        'communication_deleted',
+        `Deleted ${result[0].type}: "${result[0].subject || 'Communication'}"`,
+        (req as any).user.claims.sub
+      );
+
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting communication:", error);
@@ -633,7 +946,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Opportunity Stakeholders routes
   app.get('/api/opportunities/:opportunityId/stakeholders', isAuthenticated, async (req, res) => {
     try {
-      const stakeholders = await db.select().from(opportunityStakeholders)
+      const stakeholders = await db.select({
+        id: opportunityStakeholders.id,
+        opportunityId: opportunityStakeholders.opportunityId,
+        name: opportunityStakeholders.name,
+        role: opportunityStakeholders.role,
+        email: opportunityStakeholders.email,
+        phone: opportunityStakeholders.phone,
+        influence: opportunityStakeholders.influence,
+        relationshipStrength: opportunityStakeholders.relationshipStrength,
+        notes: opportunityStakeholders.notes,
+        createdBy: opportunityStakeholders.createdBy,
+        createdAt: opportunityStakeholders.createdAt,
+        updatedAt: opportunityStakeholders.updatedAt,
+        createdByUser: users ? {
+          id: users.id,
+          firstName: users.firstName,
+          lastName: users.lastName,
+        } : null,
+      }).from(opportunityStakeholders)
         .where(eq(opportunityStakeholders.opportunityId, req.params.opportunityId))
         .leftJoin(users, eq(opportunityStakeholders.createdBy, users.id));
       res.json(stakeholders);
@@ -651,6 +982,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         createdBy: req.user.claims.sub,
       });
       const stakeholder = await db.insert(opportunityStakeholders).values(validatedData).returning();
+
+      // Log activity history
+      await logActivityHistory(
+        req.params.opportunityId,
+        'stakeholder_added',
+        `Added stakeholder: "${stakeholder[0].name}" (${stakeholder[0].role || 'Unknown role'})`,
+        (req as any).user.claims.sub
+      );
+
       res.status(201).json(stakeholder[0]);
     } catch (error) {
       console.error("Error creating stakeholder:", error);
@@ -668,10 +1008,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           eq(opportunityStakeholders.opportunityId, req.params.opportunityId)
         ))
         .returning();
-      
+
       if (!stakeholder.length) {
         return res.status(404).json({ message: "Stakeholder not found or does not belong to this opportunity" });
       }
+
+      // Log activity history
+      await logActivityHistory(
+        req.params.opportunityId,
+        'stakeholder_updated',
+        `Updated stakeholder: "${stakeholder[0].name}" (${stakeholder[0].role || 'Unknown role'})`,
+        (req as any).user.claims.sub
+      );
+
       res.json(stakeholder[0]);
     } catch (error) {
       console.error("Error updating stakeholder:", error);
@@ -687,14 +1036,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
           eq(opportunityStakeholders.opportunityId, req.params.opportunityId)
         ))
         .returning();
-      
+
       if (!result.length) {
         return res.status(404).json({ message: "Stakeholder not found or does not belong to this opportunity" });
       }
+
+      // Log activity history
+      await logActivityHistory(
+        req.params.opportunityId,
+        'stakeholder_deleted',
+        `Deleted stakeholder: "${result[0].name}" (${result[0].role || 'Unknown role'})`,
+        (req as any).user.claims.sub
+      );
+
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting stakeholder:", error);
       res.status(500).json({ message: "Failed to delete stakeholder" });
+    }
+  });
+
+  // Opportunity Activity History routes
+  app.get('/api/opportunities/:opportunityId/activity-history', isAuthenticated, async (req, res) => {
+    try {
+      const activityHistory = await db.select({
+        id: opportunityActivityHistory.id,
+        opportunityId: opportunityActivityHistory.opportunityId,
+        action: opportunityActivityHistory.action,
+        details: opportunityActivityHistory.details,
+        oldValue: opportunityActivityHistory.oldValue,
+        newValue: opportunityActivityHistory.newValue,
+        performedBy: opportunityActivityHistory.performedBy,
+        performedAt: opportunityActivityHistory.performedAt,
+        createdAt: opportunityActivityHistory.createdAt,
+        performedByUser: users ? {
+          id: users.id,
+          firstName: users.firstName,
+          lastName: users.lastName,
+        } : null,
+      }).from(opportunityActivityHistory)
+        .where(eq(opportunityActivityHistory.opportunityId, req.params.opportunityId))
+        .leftJoin(users, eq(opportunityActivityHistory.performedBy, users.id))
+        .orderBy(desc(opportunityActivityHistory.performedAt));
+      res.json(activityHistory);
+    } catch (error) {
+      console.error("Error fetching activity history:", error);
+      res.status(500).json({ message: "Failed to fetch activity history" });
     }
   });
 

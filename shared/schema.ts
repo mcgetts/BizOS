@@ -372,6 +372,19 @@ export const opportunityStakeholders = pgTable("opportunity_stakeholders", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Opportunity activity history table
+export const opportunityActivityHistory = pgTable("opportunity_activity_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  opportunityId: varchar("opportunity_id").references(() => salesOpportunities.id, { onDelete: "cascade" }),
+  action: varchar("action").notNull(), // e.g., "stage_changed", "next_step_added", "communication_logged"
+  details: text("details"), // Human-readable description of what happened
+  oldValue: text("old_value"), // Previous value (for updates)
+  newValue: text("new_value"), // New value (for updates)
+  performedBy: varchar("performed_by").references(() => users.id),
+  performedAt: timestamp("performed_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Relations
 export const userRelations = relations(users, ({ many }) => ({
   managedProjects: many(projects, { relationName: "manager" }),
@@ -432,6 +445,7 @@ export const salesOpportunityRelations = relations(salesOpportunities, ({ one, m
   nextSteps: many(opportunityNextSteps),
   communications: many(opportunityCommunications),
   stakeholders: many(opportunityStakeholders),
+  activityHistory: many(opportunityActivityHistory),
 }));
 
 export const projectRelations = relations(projects, ({ one, many }) => ({
@@ -721,6 +735,17 @@ export const opportunityStakeholderRelations = relations(opportunityStakeholders
   }),
 }));
 
+export const opportunityActivityHistoryRelations = relations(opportunityActivityHistory, ({ one }) => ({
+  opportunity: one(salesOpportunities, {
+    fields: [opportunityActivityHistory.opportunityId],
+    references: [salesOpportunities.id],
+  }),
+  performedByUser: one(users, {
+    fields: [opportunityActivityHistory.performedBy],
+    references: [users.id],
+  }),
+}));
+
 // Types
 export type UpsertUser = z.infer<typeof upsertUserSchema>;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -763,9 +788,35 @@ export type InsertCompany = z.infer<typeof insertCompanySchema>;
 export type Company = typeof companies.$inferSelect;
 export type InsertSalesOpportunity = z.infer<typeof insertSalesOpportunitySchema>;
 export type SalesOpportunity = typeof salesOpportunities.$inferSelect;
+
+// Enhanced type for API responses with joined data
+export type SalesOpportunityWithRelations = Omit<SalesOpportunity, 'painPoints' | 'successCriteria' | 'competitorInfo'> & {
+  painPoints?: string[] | null;
+  successCriteria?: string[] | null;
+  competitorInfo?: any | null;
+  company?: {
+    id: string;
+    name: string;
+    industry: string | null;
+    website?: string | null;
+  } | null;
+  contact?: {
+    id: string;
+    name: string;
+    email: string | null;
+    phone: string | null;
+    position: string | null;
+  } | null;
+  assignedUser?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+  } | null;
+};
 export type InsertOpportunityNextStep = z.infer<typeof insertOpportunityNextStepSchema>;
 export type OpportunityNextStep = typeof opportunityNextSteps.$inferSelect;
 export type InsertOpportunityCommunication = z.infer<typeof insertOpportunityCommunicationSchema>;
 export type OpportunityCommunication = typeof opportunityCommunications.$inferSelect;
 export type InsertOpportunityStakeholder = z.infer<typeof insertOpportunityStakeholderSchema>;
 export type OpportunityStakeholder = typeof opportunityStakeholders.$inferSelect;
+export type OpportunityActivityHistory = typeof opportunityActivityHistory.$inferSelect;
