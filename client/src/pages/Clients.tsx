@@ -638,7 +638,7 @@ export default function Clients() {
   };
 
   const getActiveOpportunityCount = (companyId: string) => {
-    if (!opportunities) return 0;
+    if (!opportunities || !Array.isArray(opportunities)) return 0;
     return opportunities.filter((opp: any) =>
       opp.companyId === companyId &&
       opp.stage !== 'closed_won' &&
@@ -647,7 +647,7 @@ export default function Clients() {
   };
 
   const getActiveProjectCount = (companyId: string) => {
-    if (!projects) return 0;
+    if (!projects || !Array.isArray(projects)) return 0;
     return projects.filter((project: any) =>
       project.companyId === companyId &&
       project.status === 'active'
@@ -656,7 +656,7 @@ export default function Clients() {
 
   // Helper functions for client-specific opportunities and projects
   const getClientActiveOpportunityCount = (clientId: string) => {
-    if (!opportunities) return 0;
+    if (!opportunities || !Array.isArray(opportunities)) return 0;
     return opportunities.filter((opp: any) =>
       opp.clientId === clientId &&
       opp.stage !== 'closed_won' &&
@@ -665,7 +665,7 @@ export default function Clients() {
   };
 
   const getClientActiveProjectCount = (clientId: string) => {
-    if (!projects) return 0;
+    if (!projects || !Array.isArray(projects)) return 0;
     return projects.filter((project: any) =>
       project.clientId === clientId &&
       project.status === 'active'
@@ -1134,73 +1134,73 @@ export default function Clients() {
                     </thead>
                     <tbody className="divide-y divide-border">
                       {sortedClients.map((client: any, index: number) => (
-                      <tr key={client.id} data-testid={`row-client-${index}`} className="cursor-pointer hover:bg-muted/50" onClick={() => {setViewingClient(client); setIsViewClientDialogOpen(true);}}>
-                        <td className="py-4">
-                          <div className="font-medium text-foreground">{client.name}</div>
-                        </td>
-                        <td className="py-4">
-                          <div className="flex items-center space-x-2">
-                            <Building2 className="w-4 h-4 text-blue-600" />
-                            <div>
-                              <div className="text-sm text-foreground font-medium">
-                                {client.company?.name || 'No company'}
+                        <tr key={client.id} data-testid={`row-client-${index}`} className="cursor-pointer hover:bg-muted/50" onClick={() => {setViewingClient(client); setIsViewClientDialogOpen(true);}}>
+                          <td className="py-4">
+                            <div className="font-medium text-foreground">{client.name}</div>
+                          </td>
+                          <td className="py-4">
+                            <div className="flex items-center space-x-2">
+                              <Building2 className="w-4 h-4 text-blue-600" />
+                              <div>
+                                <div className="text-sm text-foreground font-medium">
+                                  {client.company?.name || 'No company'}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </td>
-                        <td className="py-4">
-                          <div className="text-sm text-foreground">
-                            {client.position || 'Contact'}
-                            {client.department && (
-                              <div className="text-xs text-muted-foreground">{client.department}</div>
-                            )}
-                          </div>
-                        </td>
-                        <td className="py-4">
-                          <div className="text-sm text-foreground">
-                            {client.email || '—'}
-                          </div>
-                        </td>
-                        <td className="py-4">
-                          <div className="text-sm text-foreground">
-                            {client.phone || '—'}
-                          </div>
-                        </td>
-                        <td className="py-4">
-                          <span className="text-sm font-medium">{getClientActiveOpportunityCount(client.id)}</span>
-                        </td>
-                        <td className="py-4">
-                          <span className="text-sm font-medium">{getClientActiveProjectCount(client.id)}</span>
-                        </td>
-                        <td className="py-4" onClick={(e) => e.stopPropagation()}>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm" data-testid={`button-actions-${index}`}>
-                                <MoreHorizontal className="w-4 h-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => {setViewingClient(client); setIsViewClientDialogOpen(true);}} data-testid={`button-view-${index}`}>
-                                <Users className="w-4 h-4 mr-2" />
-                                View
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => setEditingClient(client)} data-testid={`button-edit-${index}`}>
-                                <Edit className="w-4 h-4 mr-2" />
-                                Edit
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => setDeletingClient(client)}
-                                data-testid={`button-delete-${index}`}
-                                className="text-destructive"
-                              >
-                                <Trash2 className="w-4 h-4 mr-2" />
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </td>
-                      </tr>
-                    ))
+                          </td>
+                          <td className="py-4">
+                            <div className="text-sm text-foreground">
+                              {client.position || 'Contact'}
+                              {client.department && (
+                                <div className="text-xs text-muted-foreground">{client.department}</div>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-4">
+                            <div className="text-sm text-foreground">
+                              {client.email || '—'}
+                            </div>
+                          </td>
+                          <td className="py-4">
+                            <div className="text-sm text-foreground">
+                              {client.phone || '—'}
+                            </div>
+                          </td>
+                          <td className="py-4">
+                            <span className="text-sm font-medium">{getClientActiveOpportunityCount(client.id)}</span>
+                          </td>
+                          <td className="py-4">
+                            <span className="text-sm font-medium">{getClientActiveProjectCount(client.id)}</span>
+                          </td>
+                          <td className="py-4" onClick={(e) => e.stopPropagation()}>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm" data-testid={`button-actions-${index}`}>
+                                  <MoreHorizontal className="w-4 h-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => {setViewingClient(client); setIsViewClientDialogOpen(true);}} data-testid={`button-view-${index}`}>
+                                  <Users className="w-4 h-4 mr-2" />
+                                  View
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => setEditingClient(client)} data-testid={`button-edit-${index}`}>
+                                  <Edit className="w-4 h-4 mr-2" />
+                                  Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => setDeletingClient(client)}
+                                  data-testid={`button-delete-${index}`}
+                                  className="text-destructive"
+                                >
+                                  <Trash2 className="w-4 h-4 mr-2" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
