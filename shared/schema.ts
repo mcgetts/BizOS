@@ -13,6 +13,22 @@ import {
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import {
+  INDUSTRIES,
+  PRIORITIES,
+  PROJECT_STATUSES,
+  TASK_STATUSES,
+  TEMPLATE_CATEGORIES,
+  COMPANY_SIZES,
+  USER_ROLES,
+  type Industry,
+  type Priority,
+  type ProjectStatus,
+  type TaskStatus,
+  type TemplateCategory,
+  type CompanySize,
+  type UserRole
+} from './constants';
 
 // Session storage table (mandatory for Replit Auth)
 export const sessions = pgTable(
@@ -32,7 +48,7 @@ export const users = pgTable("users", {
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
-  role: varchar("role").default("employee"), // admin, manager, employee, client
+  role: varchar("role").default("employee").$type<UserRole>(),
   department: varchar("department"),
   position: varchar("position"),
   phone: varchar("phone"),
@@ -78,8 +94,8 @@ export const projects = pgTable("projects", {
   companyId: varchar("company_id").references(() => companies.id),
   clientId: varchar("client_id").references(() => clients.id), // Secondary link to primary contact
   managerId: varchar("manager_id").references(() => users.id),
-  status: varchar("status").default("planning"), // planning, active, review, completed, cancelled
-  priority: varchar("priority").default("medium"), // low, medium, high, urgent
+  status: varchar("status").default("planning").$type<ProjectStatus>(),
+  priority: varchar("priority").default("medium").$type<Priority>(),
   budget: decimal("budget", { precision: 10, scale: 2 }),
   actualCost: decimal("actual_cost", { precision: 10, scale: 2 }).default("0"),
   progress: integer("progress").default(0), // 0-100
@@ -100,8 +116,8 @@ export const tasks = pgTable("tasks", {
   projectId: varchar("project_id").references(() => projects.id),
   assignedTo: varchar("assigned_to").references(() => users.id),
   createdBy: varchar("created_by").references(() => users.id),
-  status: varchar("status").default("todo"), // todo, in_progress, review, completed
-  priority: varchar("priority").default("medium"),
+  status: varchar("status").default("todo").$type<TaskStatus>(),
+  priority: varchar("priority").default("medium").$type<Priority>(),
   estimatedHours: decimal("estimated_hours", { precision: 5, scale: 2 }),
   actualHours: decimal("actual_hours", { precision: 5, scale: 2 }).default("0"),
   dueDate: timestamp("due_date"),
@@ -275,13 +291,13 @@ export const clientInteractions = pgTable("client_interactions", {
 export const companies = pgTable("companies", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: varchar("name").notNull(),
-  industry: varchar("industry"),
+  industry: varchar("industry").$type<Industry>(),
   website: varchar("website"),
   address: text("address"),
   phone: varchar("phone"),
   email: varchar("email"),
   description: text("description"),
-  size: varchar("size"), // small, medium, large, enterprise
+  size: varchar("size").$type<CompanySize>(),
   revenue: decimal("revenue", { precision: 12, scale: 2 }),
   foundedYear: integer("founded_year"),
   linkedinUrl: varchar("linkedin_url"),
@@ -385,6 +401,73 @@ export const opportunityActivityHistory = pgTable("opportunity_activity_history"
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Project templates table
+export const projectTemplates = pgTable("project_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name").notNull(),
+  description: text("description"),
+  industry: varchar("industry").$type<Industry>(),
+  category: varchar("category").$type<TemplateCategory>(),
+  estimatedDuration: integer("estimated_duration"), // days
+  defaultBudget: decimal("default_budget", { precision: 10, scale: 2 }),
+  defaultPriority: varchar("default_priority").default("medium").$type<Priority>(),
+  tags: text("tags").array(),
+  isActive: boolean("is_active").default(true),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Task templates for project templates
+export const taskTemplates = pgTable("task_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectTemplateId: varchar("project_template_id").references(() => projectTemplates.id, { onDelete: "cascade" }),
+  title: varchar("title").notNull(),
+  description: text("description"),
+  estimatedHours: decimal("estimated_hours", { precision: 5, scale: 2 }),
+  priority: varchar("priority").default("medium").$type<Priority>(),
+  phase: varchar("phase"), // planning, design, development, testing, launch
+  orderIndex: integer("order_index").default(0),
+  dependsOnPhase: varchar("depends_on_phase"), // previous phase dependency
+  tags: text("tags").array(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Task dependencies table
+export const taskDependencies = pgTable("task_dependencies", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  taskId: varchar("task_id").references(() => tasks.id, { onDelete: "cascade" }),
+  dependsOnTaskId: varchar("depends_on_task_id").references(() => tasks.id, { onDelete: "cascade" }),
+  dependencyType: varchar("dependency_type").default("finish_to_start"), // finish_to_start, start_to_start, finish_to_finish, start_to_finish
+  lag: integer("lag").default(0), // lag time in days
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Project comments and activity feed
+export const projectComments = pgTable("project_comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").references(() => projects.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").references(() => users.id),
+  content: text("content").notNull(),
+  type: varchar("type").default("comment"), // comment, status_update, milestone, file_upload
+  mentionedUsers: text("mentioned_users").array(), // array of user IDs
+  attachments: jsonb("attachments"), // file references
+  editedAt: timestamp("edited_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Project activity log for automatic system updates
+export const projectActivity = pgTable("project_activity", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").references(() => projects.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").references(() => users.id),
+  action: varchar("action").notNull(), // created, updated, task_added, file_uploaded, etc.
+  entityType: varchar("entity_type"), // project, task, comment, file
+  entityId: varchar("entity_id"),
+  details: jsonb("details"), // structured data about the change
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Relations
 export const userRelations = relations(users, ({ many }) => ({
   managedProjects: many(projects, { relationName: "manager" }),
@@ -466,6 +549,8 @@ export const projectRelations = relations(projects, ({ one, many }) => ({
   invoices: many(invoices),
   expenses: many(expenses),
   documents: many(documents),
+  comments: many(projectComments),
+  activities: many(projectActivity),
 }));
 
 export const taskRelations = relations(tasks, ({ one, many }) => ({
@@ -484,6 +569,8 @@ export const taskRelations = relations(tasks, ({ one, many }) => ({
     relationName: "creator",
   }),
   timeEntries: many(timeEntries),
+  dependencies: many(taskDependencies, { relationName: "dependencies" }),
+  dependents: many(taskDependencies, { relationName: "dependents" }),
 }));
 
 // Insert schemas
@@ -525,6 +612,15 @@ export const insertProjectSchema = createInsertSchema(projects).omit({
   startDate: z.coerce.date().nullable().optional(),
   endDate: z.coerce.date().nullable().optional(),
   completedAt: z.coerce.date().nullable().optional(),
+}).refine((data) => {
+  // Validate that end date is not before start date
+  if (data.startDate && data.endDate) {
+    return data.endDate >= data.startDate;
+  }
+  return true;
+}, {
+  message: "End date cannot be before start date",
+  path: ["endDate"],
 });
 
 export const insertTaskSchema = createInsertSchema(tasks).omit({
@@ -693,6 +789,46 @@ export const updateOpportunityStakeholderSchema = insertOpportunityStakeholderSc
   createdBy: true,
 });
 
+// New project template schemas
+export const insertProjectTemplateSchema = createInsertSchema(projectTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  tags: z.array(z.string()).optional(),
+});
+
+export const insertTaskTemplateSchema = createInsertSchema(taskTemplates).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  tags: z.array(z.string()).optional(),
+});
+
+export const insertTaskDependencySchema = createInsertSchema(taskDependencies).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertProjectCommentSchema = createInsertSchema(projectComments).omit({
+  id: true,
+  createdAt: true,
+  editedAt: true,
+}).extend({
+  mentionedUsers: z.array(z.string()).optional(),
+  attachments: z.array(z.object({
+    name: z.string(),
+    url: z.string(),
+    type: z.string(),
+    size: z.number().optional(),
+  })).optional(),
+});
+
+export const insertProjectActivitySchema = createInsertSchema(projectActivity).omit({
+  id: true,
+  createdAt: true,
+});
+
 // New relations
 export const opportunityNextStepRelations = relations(opportunityNextSteps, ({ one }) => ({
   opportunity: one(salesOpportunities, {
@@ -742,6 +878,57 @@ export const opportunityActivityHistoryRelations = relations(opportunityActivity
   }),
   performedByUser: one(users, {
     fields: [opportunityActivityHistory.performedBy],
+    references: [users.id],
+  }),
+}));
+
+// Project template relations
+export const projectTemplateRelations = relations(projectTemplates, ({ one, many }) => ({
+  createdByUser: one(users, {
+    fields: [projectTemplates.createdBy],
+    references: [users.id],
+  }),
+  taskTemplates: many(taskTemplates),
+}));
+
+export const taskTemplateRelations = relations(taskTemplates, ({ one }) => ({
+  projectTemplate: one(projectTemplates, {
+    fields: [taskTemplates.projectTemplateId],
+    references: [projectTemplates.id],
+  }),
+}));
+
+// Task dependency relations
+export const taskDependencyRelations = relations(taskDependencies, ({ one }) => ({
+  task: one(tasks, {
+    fields: [taskDependencies.taskId],
+    references: [tasks.id],
+  }),
+  dependsOnTask: one(tasks, {
+    fields: [taskDependencies.dependsOnTaskId],
+    references: [tasks.id],
+  }),
+}));
+
+// Project communication relations
+export const projectCommentRelations = relations(projectComments, ({ one }) => ({
+  project: one(projects, {
+    fields: [projectComments.projectId],
+    references: [projects.id],
+  }),
+  user: one(users, {
+    fields: [projectComments.userId],
+    references: [users.id],
+  }),
+}));
+
+export const projectActivityRelations = relations(projectActivity, ({ one }) => ({
+  project: one(projects, {
+    fields: [projectActivity.projectId],
+    references: [projects.id],
+  }),
+  user: one(users, {
+    fields: [projectActivity.userId],
     references: [users.id],
   }),
 }));
@@ -820,3 +1007,30 @@ export type OpportunityCommunication = typeof opportunityCommunications.$inferSe
 export type InsertOpportunityStakeholder = z.infer<typeof insertOpportunityStakeholderSchema>;
 export type OpportunityStakeholder = typeof opportunityStakeholders.$inferSelect;
 export type OpportunityActivityHistory = typeof opportunityActivityHistory.$inferSelect;
+
+// New types for project management enhancements
+export type InsertProjectTemplate = z.infer<typeof insertProjectTemplateSchema>;
+export type ProjectTemplate = typeof projectTemplates.$inferSelect;
+export type InsertTaskTemplate = z.infer<typeof insertTaskTemplateSchema>;
+export type TaskTemplate = typeof taskTemplates.$inferSelect;
+export type InsertTaskDependency = z.infer<typeof insertTaskDependencySchema>;
+export type TaskDependency = typeof taskDependencies.$inferSelect;
+export type InsertProjectComment = z.infer<typeof insertProjectCommentSchema>;
+export type ProjectComment = typeof projectComments.$inferSelect;
+export type InsertProjectActivity = z.infer<typeof insertProjectActivitySchema>;
+export type ProjectActivity = typeof projectActivity.$inferSelect;
+
+// Enhanced types with relations
+export type ProjectTemplateWithTasks = ProjectTemplate & {
+  taskTemplates: TaskTemplate[];
+};
+
+export type TaskWithDependencies = Task & {
+  dependencies: TaskDependency[];
+  dependents: TaskDependency[];
+};
+
+export type ProjectWithActivity = Project & {
+  comments: ProjectComment[];
+  activities: ProjectActivity[];
+};

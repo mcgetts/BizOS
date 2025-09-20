@@ -23,6 +23,8 @@ import { insertProjectSchema } from "@shared/schema";
 import type { Project, InsertProject, Client, User, Task } from "@shared/schema";
 import { useTableSort, SortConfig } from "@/hooks/useTableSort";
 import { SortableHeader } from "@/components/SortableHeader";
+import { ProjectTemplateSelector } from "@/components/ProjectTemplateSelector";
+import { ProjectCommunication } from "@/components/ProjectCommunication";
 import { z } from "zod";
 import {
   Plus,
@@ -40,7 +42,8 @@ import {
   LayoutGrid,
   Table,
   Building2,
-  Eye
+  Eye,
+  FileText
 } from "lucide-react";
 
 // Form validation schema for project creation/editing
@@ -188,35 +191,18 @@ function ProjectForm({ project, onSuccess }: { project?: Project; onSuccess: () 
           />
           <FormField
             control={form.control}
-            name="clientId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Client</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
-                  <FormControl>
-                    <SelectTrigger data-testid="select-project-client">
-                      <SelectValue placeholder="Select client" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {clients?.map((client) => (
-                      <SelectItem key={client.id} value={client.id}>
-                        {client.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
             name="companyId"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Company</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select
+                  onValueChange={(value) => {
+                    field.onChange(value);
+                    // Reset client when company changes
+                    form.setValue("clientId", "");
+                  }}
+                  defaultValue={field.value}
+                >
                   <FormControl>
                     <SelectTrigger data-testid="select-project-company">
                       <SelectValue placeholder="Select company" />
@@ -233,6 +219,49 @@ function ProjectForm({ project, onSuccess }: { project?: Project; onSuccess: () 
                 <FormMessage />
               </FormItem>
             )}
+          />
+          <FormField
+            control={form.control}
+            name="clientId"
+            render={({ field }) => {
+              const selectedCompanyId = form.watch("companyId");
+              const availableClients = clients?.filter(client =>
+                client.companyId === selectedCompanyId
+              ) || [];
+
+              return (
+                <FormItem>
+                  <FormLabel>Client</FormLabel>
+                  <Select
+                    onValueChange={field.onChange}
+                    defaultValue={field.value}
+                    disabled={!selectedCompanyId}
+                  >
+                    <FormControl>
+                      <SelectTrigger data-testid="select-project-client">
+                        <SelectValue
+                          placeholder={
+                            !selectedCompanyId
+                              ? "Select company first"
+                              : availableClients.length === 0
+                              ? "No clients for this company"
+                              : "Select client"
+                          }
+                        />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {availableClients.map((client) => (
+                        <SelectItem key={client.id} value={client.id}>
+                          {client.name} {client.position && `(${client.position})`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              );
+            }}
           />
           <FormField
             control={form.control}
@@ -732,22 +761,35 @@ export default function Projects() {
               </SelectContent>
             </Select>
           </div>
-          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-            <DialogTrigger asChild>
-              <Button data-testid="button-add-project">
-                <Plus className="w-4 h-4 mr-2" />
-                New Project
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Create New Project</DialogTitle>
-              </DialogHeader>
-              <ProjectForm
-                onSuccess={() => setIsAddDialogOpen(false)}
-              />
-            </DialogContent>
-          </Dialog>
+          <div className="flex items-center gap-3">
+            <ProjectTemplateSelector
+              onProjectCreated={() => {
+                queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+              }}
+              triggerButton={
+                <Button variant="outline" data-testid="button-use-template">
+                  <FileText className="w-4 h-4 mr-2" />
+                  Use Template
+                </Button>
+              }
+            />
+            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+              <DialogTrigger asChild>
+                <Button data-testid="button-add-project">
+                  <Plus className="w-4 h-4 mr-2" />
+                  New Project
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Create New Project</DialogTitle>
+                </DialogHeader>
+                <ProjectForm
+                  onSuccess={() => setIsAddDialogOpen(false)}
+                />
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
         {/* Stats Cards */}
@@ -857,22 +899,36 @@ export default function Projects() {
                   {searchTerm ? "No projects found matching your search" : "No projects found. Start your first project to get organized."}
                 </p>
                 {!searchTerm && (
-                  <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button className="mt-4" data-testid="button-add-first-project">
-                        <Plus className="w-4 h-4 mr-2" />
-                        Start First Project
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                      <DialogHeader>
-                        <DialogTitle>Create New Project</DialogTitle>
-                      </DialogHeader>
-                      <ProjectForm
-                        onSuccess={() => setIsAddDialogOpen(false)}
-                      />
-                    </DialogContent>
-                  </Dialog>
+                  <div className="flex flex-col sm:flex-row items-center gap-3 mt-4">
+                    <ProjectTemplateSelector
+                      onProjectCreated={() => {
+                        queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+                      }}
+                      triggerButton={
+                        <Button variant="outline" data-testid="button-use-template-empty">
+                          <FileText className="w-4 h-4 mr-2" />
+                          Use Template
+                        </Button>
+                      }
+                    />
+                    <span className="text-muted-foreground">or</span>
+                    <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button data-testid="button-add-first-project">
+                          <Plus className="w-4 h-4 mr-2" />
+                          Start from Scratch
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                        <DialogHeader>
+                          <DialogTitle>Create New Project</DialogTitle>
+                        </DialogHeader>
+                        <ProjectForm
+                          onSuccess={() => setIsAddDialogOpen(false)}
+                        />
+                      </DialogContent>
+                    </Dialog>
+                  </div>
                 )}
               </div>
             </CardContent>
@@ -1193,7 +1249,7 @@ export default function Projects() {
 
         {/* View Project Details Dialog */}
         <Dialog open={!!viewingProject} onOpenChange={() => setViewingProject(null)}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{viewingProject?.name}</DialogTitle>
             </DialogHeader>
@@ -1274,6 +1330,12 @@ export default function Projects() {
                     )}
                   </div>
                 </div>
+
+                {/* Project Communication */}
+                <ProjectCommunication
+                  projectId={viewingProject.id || ''}
+                  projectName={viewingProject.name || ''}
+                />
               </div>
             )}
             <DialogFooter>

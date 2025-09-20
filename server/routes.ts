@@ -41,6 +41,16 @@ import {
   updateOpportunityNextStepSchema,
   updateOpportunityCommunicationSchema,
   updateOpportunityStakeholderSchema,
+  projectTemplates,
+  taskTemplates,
+  taskDependencies,
+  projectComments,
+  projectActivity,
+  insertProjectTemplateSchema,
+  insertTaskTemplateSchema,
+  insertTaskDependencySchema,
+  insertProjectCommentSchema,
+  insertProjectActivitySchema,
 } from "@shared/schema";
 
 // Helper function to log activity history
@@ -1194,6 +1204,245 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting task:", error);
       res.status(500).json({ message: "Failed to delete task" });
+    }
+  });
+
+  // Project Template routes
+  app.get('/api/project-templates', isAuthenticated, async (req, res) => {
+    try {
+      const templates = await db.select().from(projectTemplates).where(eq(projectTemplates.isActive, true));
+      res.json(templates);
+    } catch (error) {
+      console.error("Error fetching project templates:", error);
+      res.status(500).json({ message: "Failed to fetch project templates" });
+    }
+  });
+
+  app.get('/api/project-templates/:id', isAuthenticated, async (req, res) => {
+    try {
+      const template = await db.select().from(projectTemplates)
+        .where(eq(projectTemplates.id, req.params.id))
+        .limit(1);
+
+      if (!template.length) {
+        return res.status(404).json({ message: "Project template not found" });
+      }
+
+      const tasks = await db.select().from(taskTemplates)
+        .where(eq(taskTemplates.projectTemplateId, req.params.id));
+
+      res.json({ ...template[0], taskTemplates: tasks });
+    } catch (error) {
+      console.error("Error fetching project template:", error);
+      res.status(500).json({ message: "Failed to fetch project template" });
+    }
+  });
+
+  app.post('/api/project-templates', isAuthenticated, requireRole(['admin', 'manager']), async (req, res) => {
+    try {
+      const validatedData = insertProjectTemplateSchema.parse(req.body);
+      const template = await db.insert(projectTemplates).values({
+        ...validatedData,
+        createdBy: req.user.id,
+      }).returning();
+
+      res.status(201).json(template[0]);
+    } catch (error) {
+      console.error("Error creating project template:", error);
+      res.status(400).json({ message: "Failed to create project template" });
+    }
+  });
+
+  app.put('/api/project-templates/:id', isAuthenticated, requireRole(['admin', 'manager']), async (req, res) => {
+    try {
+      const validatedData = insertProjectTemplateSchema.parse(req.body);
+      const result = await db.update(projectTemplates)
+        .set({
+          ...validatedData,
+          updatedAt: new Date(),
+        })
+        .where(eq(projectTemplates.id, req.params.id))
+        .returning();
+
+      if (!result.length) {
+        return res.status(404).json({ message: "Project template not found" });
+      }
+
+      res.json(result[0]);
+    } catch (error) {
+      console.error("Error updating project template:", error);
+      res.status(400).json({ message: "Failed to update project template" });
+    }
+  });
+
+  app.delete('/api/project-templates/:id', isAuthenticated, requireRole(['admin', 'manager']), async (req, res) => {
+    try {
+      const result = await db.delete(projectTemplates)
+        .where(eq(projectTemplates.id, req.params.id))
+        .returning();
+
+      if (!result.length) {
+        return res.status(404).json({ message: "Project template not found" });
+      }
+
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting project template:", error);
+      res.status(500).json({ message: "Failed to delete project template" });
+    }
+  });
+
+  app.post('/api/projects/from-template/:templateId', isAuthenticated, async (req, res) => {
+    try {
+      const { templateId } = req.params;
+      const projectData = req.body;
+
+      console.log("📝 Creating project from template:", templateId);
+      console.log("📝 Project data received:", projectData);
+
+      // Validate project data
+      const validatedData = insertProjectSchema.parse(projectData);
+      console.log("📝 Validated project data:", validatedData);
+
+      // Get template with task templates
+      const template = await db.select().from(projectTemplates)
+        .where(eq(projectTemplates.id, templateId))
+        .limit(1);
+
+      if (!template.length) {
+        return res.status(404).json({ message: "Project template not found" });
+      }
+
+      const taskTemplatesList = await db.select().from(taskTemplates)
+        .where(eq(taskTemplates.projectTemplateId, templateId));
+
+      // Create project from template
+      const newProject = await db.insert(projects).values({
+        ...validatedData,
+        budget: validatedData.budget || template[0].defaultBudget,
+        priority: validatedData.priority || template[0].defaultPriority,
+      }).returning();
+
+      // Create tasks from templates
+      const createdTasks = [];
+      for (const taskTemplate of taskTemplatesList) {
+        const task = await db.insert(tasks).values({
+          title: taskTemplate.title,
+          description: taskTemplate.description,
+          projectId: newProject[0].id,
+          estimatedHours: taskTemplate.estimatedHours,
+          priority: taskTemplate.priority,
+          tags: taskTemplate.tags,
+          createdBy: req.user.id,
+        }).returning();
+        createdTasks.push(task[0]);
+      }
+
+      res.status(201).json({ project: newProject[0], tasks: createdTasks });
+    } catch (error) {
+      console.error("Error creating project from template:", error);
+      console.error("Project data received:", projectData);
+      console.error("Template ID:", templateId);
+      res.status(400).json({
+        message: "Failed to create project from template",
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Task Dependencies routes
+  app.get('/api/tasks/:id/dependencies', isAuthenticated, async (req, res) => {
+    try {
+      const dependencies = await db.select().from(taskDependencies)
+        .where(eq(taskDependencies.taskId, req.params.id));
+      res.json(dependencies);
+    } catch (error) {
+      console.error("Error fetching task dependencies:", error);
+      res.status(500).json({ message: "Failed to fetch task dependencies" });
+    }
+  });
+
+  app.get('/api/task-dependencies', isAuthenticated, async (req, res) => {
+    try {
+      const dependencies = await db.select().from(taskDependencies);
+      res.json(dependencies);
+    } catch (error) {
+      console.error("Error fetching task dependencies:", error);
+      res.status(500).json({ message: "Failed to fetch task dependencies" });
+    }
+  });
+
+  app.post('/api/task-dependencies', isAuthenticated, async (req, res) => {
+    try {
+      const validatedData = insertTaskDependencySchema.parse(req.body);
+      const dependency = await db.insert(taskDependencies).values(validatedData).returning();
+      res.status(201).json(dependency[0]);
+    } catch (error) {
+      console.error("Error creating task dependency:", error);
+      res.status(400).json({ message: "Failed to create task dependency" });
+    }
+  });
+
+  app.delete('/api/task-dependencies/:id', isAuthenticated, async (req, res) => {
+    try {
+      await db.delete(taskDependencies).where(eq(taskDependencies.id, req.params.id));
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting task dependency:", error);
+      res.status(500).json({ message: "Failed to delete task dependency" });
+    }
+  });
+
+  // Project Comments routes
+  app.get('/api/projects/:id/comments', isAuthenticated, async (req, res) => {
+    try {
+      const comments = await db.select().from(projectComments)
+        .where(eq(projectComments.projectId, req.params.id))
+        .orderBy(desc(projectComments.createdAt));
+      res.json(comments);
+    } catch (error) {
+      console.error("Error fetching project comments:", error);
+      res.status(500).json({ message: "Failed to fetch project comments" });
+    }
+  });
+
+  app.post('/api/projects/:id/comments', isAuthenticated, async (req, res) => {
+    try {
+      const validatedData = insertProjectCommentSchema.parse(req.body);
+      const comment = await db.insert(projectComments).values({
+        ...validatedData,
+        projectId: req.params.id,
+        userId: req.user.id,
+      }).returning();
+
+      // Log activity
+      await db.insert(projectActivity).values({
+        projectId: req.params.id,
+        userId: req.user.id,
+        action: 'comment_added',
+        entityType: 'comment',
+        entityId: comment[0].id,
+        details: { content: validatedData.content.substring(0, 100) + '...' }
+      });
+
+      res.status(201).json(comment[0]);
+    } catch (error) {
+      console.error("Error creating project comment:", error);
+      res.status(400).json({ message: "Failed to create project comment" });
+    }
+  });
+
+  // Project Activity routes
+  app.get('/api/projects/:id/activity', isAuthenticated, async (req, res) => {
+    try {
+      const activities = await db.select().from(projectActivity)
+        .where(eq(projectActivity.projectId, req.params.id))
+        .orderBy(desc(projectActivity.createdAt))
+        .limit(50);
+      res.json(activities);
+    } catch (error) {
+      console.error("Error fetching project activity:", error);
+      res.status(500).json({ message: "Failed to fetch project activity" });
     }
   });
 

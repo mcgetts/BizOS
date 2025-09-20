@@ -19,7 +19,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertTaskSchema } from "@shared/schema";
-import type { Task, InsertTask, Project, User, Company } from "@shared/schema";
+import type { Task, InsertTask, Project, User, Company, TaskDependency } from "@shared/schema";
 import { useTableSort, SortConfig } from "@/hooks/useTableSort";
 import { SortableTableHead } from "@/components/SortableHeader";
 import { z } from "zod";
@@ -43,7 +43,9 @@ import {
   Pause,
   RotateCcw,
   Table,
-  LayoutGrid
+  LayoutGrid,
+  ArrowRight,
+  GitBranch
 } from "lucide-react";
 
 // Form validation schema for task creation/editing
@@ -392,6 +394,12 @@ export default function Tasks() {
     enabled: !!user,
   });
 
+  // Fetch task dependencies
+  const { data: taskDependencies } = useQuery<TaskDependency[]>({
+    queryKey: ["/api/task-dependencies"],
+    enabled: !!user,
+  });
+
   // Fetch projects and users for display
   const { data: projects } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
@@ -464,6 +472,19 @@ export default function Tasks() {
       </Layout>
     );
   }
+
+  // Helper function to get task dependencies
+  const getTaskDependencies = (taskId: string) => {
+    return taskDependencies?.filter(dep => dep.taskId === taskId) || [];
+  };
+
+  const getTaskDependents = (taskId: string) => {
+    return taskDependencies?.filter(dep => dep.dependsOnTaskId === taskId) || [];
+  };
+
+  const getTaskById = (taskId: string) => {
+    return tasks?.find(task => task.id === taskId);
+  };
 
   // Filter tasks based on search and filters
   const filteredTasks = tasks?.filter(task => {
@@ -804,6 +825,7 @@ export default function Tasks() {
                   >
                     Hours
                   </SortableTableHead>
+                  <th className="w-[120px] p-2">Dependencies</th>
                   <th className="w-[50px] p-2">Actions</th>
                 </TableRow>
               </TableHeader>
@@ -850,6 +872,38 @@ export default function Tasks() {
                       {(task.estimatedHours || task.actualHours) && (
                         <span>{task.actualHours || 0}h / {task.estimatedHours || 0}h</span>
                       )}
+                    </TableCell>
+                    <TableCell>
+                      {(() => {
+                        const dependencies = getTaskDependencies(task.id);
+                        const dependents = getTaskDependents(task.id);
+
+                        if (dependencies.length === 0 && dependents.length === 0) {
+                          return (
+                            <div className="flex items-center gap-1">
+                              <GitBranch className="w-3 h-3 text-muted-foreground" />
+                              <span className="text-xs text-muted-foreground">-</span>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div className="flex flex-col gap-1">
+                            {dependencies.length > 0 && (
+                              <div className="flex items-center gap-1" title={`Depends on ${dependencies.length} task(s)`}>
+                                <ArrowRight className="w-3 h-3 text-orange-500" />
+                                <span className="text-xs text-orange-600">{dependencies.length}</span>
+                              </div>
+                            )}
+                            {dependents.length > 0 && (
+                              <div className="flex items-center gap-1" title={`${dependents.length} task(s) depend on this`}>
+                                <GitBranch className="w-3 h-3 text-blue-500" />
+                                <span className="text-xs text-blue-600">{dependents.length}</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>
