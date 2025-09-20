@@ -17,61 +17,94 @@ import {
   BarChart3,
 } from "lucide-react";
 
-const navigationItems = [
+// Executive Dashboard - Top Level
+const execDashboard = {
+  title: "Exec Dashboard",
+  href: "/dashboard",
+  icon: LayoutDashboard,
+};
+
+// Business Flow Groups
+const navigationGroups = [
   {
-    title: "Dashboard",
-    href: "/dashboard",
-    icon: LayoutDashboard,
+    title: "GROWTH",
+    items: [
+      {
+        title: "Marketing",
+        href: "/marketing",
+        icon: Megaphone,
+      },
+      {
+        title: "CRM",
+        href: "/clients",
+        icon: Users,
+      },
+    ]
   },
   {
-    title: "CRM",
-    href: "/clients",
-    icon: Users,
+    title: "DELIVERY",
+    items: [
+      {
+        title: "Projects",
+        href: "/projects",
+        icon: FolderOpen,
+      },
+      {
+        title: "Tasks",
+        href: "/tasks",
+        icon: CheckSquare,
+      },
+      {
+        title: "Support",
+        href: "/support",
+        icon: HelpCircle,
+      },
+    ]
   },
   {
-    title: "Projects",
-    href: "/projects",
-    icon: FolderOpen,
+    title: "MANAGEMENT",
+    items: [
+      {
+        title: "Finance",
+        href: "/finance",
+        icon: DollarSign,
+      },
+      {
+        title: "Team",
+        href: "/team",
+        icon: UserCog,
+      },
+    ]
   },
   {
-    title: "Tasks",
-    href: "/tasks",
-    icon: CheckSquare,
+    title: "INTELLIGENCE",
+    items: [
+      {
+        title: "Analytics",
+        href: "/analytics",
+        icon: BarChart3,
+      },
+      {
+        title: "Knowledge",
+        href: "/knowledge",
+        icon: BookOpen,
+      },
+      {
+        title: "Company",
+        href: "/company",
+        icon: Building2,
+      },
+    ]
   },
   {
-    title: "Team",
-    href: "/team",
-    icon: UserCog,
-  },
-  {
-    title: "Finance",
-    href: "/finance",
-    icon: DollarSign,
-  },
-  {
-    title: "Knowledge",
-    href: "/knowledge",
-    icon: BookOpen,
-  },
-  {
-    title: "Marketing",
-    href: "/marketing",
-    icon: Megaphone,
-  },
-  {
-    title: "Support",
-    href: "/support",
-    icon: HelpCircle,
-  },
-  {
-    title: "Company",
-    href: "/company",
-    icon: Building2,
-  },
-  {
-    title: "Analytics",
-    href: "/analytics",
-    icon: BarChart3,
+    title: "CONTROL",
+    items: [
+      {
+        title: "Admin",
+        href: "/admin",
+        icon: Settings,
+      },
+    ]
   },
 ];
 
@@ -121,43 +154,67 @@ export function Sidebar({ user }: SidebarProps) {
 
       {/* Navigation Menu */}
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-        {navigationItems.map((item) => {
-          const isActive = location === item.href;
-          const Icon = item.icon;
-          
-          return (
-            <Link 
-              key={item.href} 
-              href={item.href}
-              className={cn(
-                "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors",
-                isActive
-                  ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              )}
-              data-testid={`link-${item.title.toLowerCase()}`}
-            >
-              <Icon className="w-5 h-5" />
-              {!collapsed && <span>{item.title}</span>}
-            </Link>
-          );
-        })}
-
-        <div className="border-t border-sidebar-border pt-2 mt-4">
-          <Link 
-            href="/admin"
-            className={cn(
-              "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors",
-              location === "/admin"
-                ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-            )}
-            data-testid="link-admin"
-          >
-            <Settings className="w-5 h-5" />
-            {!collapsed && <span>Admin</span>}
-          </Link>
+        {/* Executive Dashboard */}
+        <div className="mb-4">
+          {(() => {
+            const isActive = location === execDashboard.href;
+            const Icon = execDashboard.icon;
+            
+            return (
+              <Link 
+                key={execDashboard.href} 
+                href={execDashboard.href}
+                className={cn(
+                  "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors",
+                  isActive
+                    ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                )}
+                data-testid={`link-dashboard`}
+              >
+                <Icon className="w-5 h-5" />
+                {!collapsed && <span>{execDashboard.title}</span>}
+              </Link>
+            );
+          })()}
         </div>
+
+        {/* Business Flow Groups */}
+        {navigationGroups.map((group, groupIndex) => (
+          <div key={group.title} className={cn("space-y-1", groupIndex > 0 && "mt-6")}>
+            {/* Group Header */}
+            {!collapsed && (
+              <div className="px-3 py-1">
+                <span className="text-xs font-medium text-sidebar-foreground/60 uppercase tracking-wider">
+                  {group.title}
+                </span>
+              </div>
+            )}
+            
+            {/* Group Items */}
+            {group.items.map((item) => {
+              const isActive = location === item.href;
+              const Icon = item.icon;
+              
+              return (
+                <Link 
+                  key={item.href} 
+                  href={item.href}
+                  className={cn(
+                    "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors",
+                    isActive
+                      ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                      : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  )}
+                  data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}
+                >
+                  <Icon className="w-5 h-5" />
+                  {!collapsed && <span>{item.title}</span>}
+                </Link>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
       {/* User Profile */}
