@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { TrendingUp, TrendingDown, Minus, DollarSign, Users, FolderOpen, Ticket } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, PoundSterling, Users, FolderOpen, Ticket } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface DashboardKPIs {
@@ -132,7 +132,7 @@ export function DashboardKPIs() {
         current={kpis.revenue.current}
         target={kpis.revenue.target}
         growth={kpis.revenue.growth}
-        icon={DollarSign}
+        icon={PoundSterling}
         color="success"
         formatter={formatCurrency}
       />

@@ -51,7 +51,7 @@ import {
   Users,
   MapPin,
   Star,
-  DollarSign
+  PoundSterling
 } from "lucide-react";
 
 export default function Dashboard() {
@@ -632,8 +632,8 @@ export default function Dashboard() {
                         </span>
                         {event.value && (
                           <span className="flex items-center text-xs text-emerald-600 font-medium">
-                            <DollarSign className="w-3 h-3 mr-1" />
-                            ${event.value.toLocaleString()}
+                            <PoundSterling className="w-3 h-3 mr-1" />
+                            £{event.value.toLocaleString()}
                           </span>
                         )}
                       </div>

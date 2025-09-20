@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
-import { DollarSign, Calendar, User, Building2, MoreVertical, MoreHorizontal, Plus, AlertCircle, Eye, Edit, Trash2, ChevronUp, ChevronDown } from "lucide-react";
+import { PoundSterling, Calendar, User, Building2, MoreVertical, MoreHorizontal, Plus, AlertCircle, Eye, Edit, Trash2, ChevronUp, ChevronDown } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -1180,7 +1180,7 @@ export function SalesPipeline() {
                   <div className="space-y-2">
                     <Label className="font-medium">Value</Label>
                     <div className="flex items-center space-x-2">
-                      <DollarSign className="w-4 h-4 text-green-600" />
+                      <PoundSterling className="w-4 h-4 text-green-600" />
                       <span className="font-medium">{formatCurrency(parseFloat(selectedOpportunity.value))}</span>
                     </div>
                   </div>
@@ -1627,7 +1627,7 @@ export function SalesPipeline() {
 
                                 <div className="flex items-center justify-between text-xs">
                                   <div className="flex items-center text-green-600 font-medium">
-                                    <DollarSign className="w-3 h-3 mr-1" />
+                                    <PoundSterling className="w-3 h-3 mr-1" />
                                     {formatCurrency(parseFloat(opportunity.value || "0"))}
                                   </div>
                                   <div className="text-gray-500">

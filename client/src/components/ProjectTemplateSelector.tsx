@@ -26,7 +26,7 @@ import {
   FileText,
   Folder,
   Clock,
-  DollarSign,
+  PoundSterling,
   CheckCircle,
   ArrowRight,
   Sparkles,
@@ -251,7 +251,7 @@ export function ProjectTemplateSelector({ onProjectCreated, triggerButton }: Pro
                         )}
                         {template.defaultBudget && (
                           <div className="flex items-center gap-1">
-                            <DollarSign className="w-3 h-3" />
+                            <PoundSterling className="w-3 h-3" />
                             £{parseFloat(template.defaultBudget).toLocaleString()}
                           </div>
                         )}

@@ -18,7 +18,7 @@ import {
   Clock,
   AlertCircle,
   CheckCircle,
-  DollarSign,
+  PoundSterling,
   Target,
   Star,
   MapPin,
@@ -288,7 +288,7 @@ export default function Company() {
                   </p>
                 </div>
                 <div className="p-2 bg-emerald-100 rounded-lg">
-                  <DollarSign className="w-6 h-6 text-emerald-600" />
+                  <PoundSterling className="w-6 h-6 text-emerald-600" />
                 </div>
               </div>
               <div className="text-sm text-muted-foreground mt-2">

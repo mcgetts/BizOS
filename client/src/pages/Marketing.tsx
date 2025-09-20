@@ -16,7 +16,7 @@ import {
   TrendingUp,
   Target,
   Calendar,
-  DollarSign,
+  PoundSterling,
   Users,
   BarChart3,
   Mail,
@@ -145,7 +145,7 @@ export default function Marketing() {
                   </p>
                 </div>
                 <div className="p-2 bg-primary/10 rounded-lg">
-                  <DollarSign className="w-6 h-6 text-primary" />
+                  <PoundSterling className="w-6 h-6 text-primary" />
                 </div>
               </div>
               <div className="text-sm text-muted-foreground mt-2">

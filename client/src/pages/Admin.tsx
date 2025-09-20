@@ -42,7 +42,7 @@ import {
   Plus,
   Copy,
   Clock,
-  DollarSign,
+  PoundSterling,
   Folder
 } from "lucide-react";
 import {
@@ -1725,7 +1725,7 @@ function TemplateManagement() {
                     )}
                     {template.defaultBudget && (
                       <div className="flex items-center gap-1">
-                        <DollarSign className="w-3 h-3" />
+                        <PoundSterling className="w-3 h-3" />
                         £{parseFloat(template.defaultBudget).toLocaleString()}
                       </div>
                     )}

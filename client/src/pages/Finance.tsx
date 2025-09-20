@@ -26,7 +26,7 @@ import { z } from "zod";
 import {
   Plus,
   Search,
-  DollarSign,
+  PoundSterling,
   FileText,
   CreditCard,
   TrendingUp,
@@ -1038,7 +1038,7 @@ export default function Finance() {
                   </p>
                 </div>
                 <div className="p-2 bg-success/10 rounded-lg">
-                  <DollarSign className="w-6 h-6 text-success" />
+                  <PoundSterling className="w-6 h-6 text-success" />
                 </div>
               </div>
               <div className="flex items-center space-x-1 text-sm text-success mt-2">

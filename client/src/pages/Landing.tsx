@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, Users, FolderOpen, DollarSign, BookOpen, Megaphone } from "lucide-react";
+import { Building2, Users, FolderOpen, PoundSterling, BookOpen, Megaphone } from "lucide-react";
 
 export default function Landing() {
   const handleLogin = async () => {
@@ -43,7 +43,7 @@ export default function Landing() {
       description: "Portfolio tracking with client portals and team collaboration"
     },
     {
-      icon: DollarSign,
+      icon: PoundSterling,
       title: "Financial Management",
       description: "Invoice generation, payment tracking, and expense management"
     },
