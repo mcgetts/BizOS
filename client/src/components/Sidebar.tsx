@@ -7,7 +7,7 @@ import {
   FolderOpen,
   CheckSquare,
   UserCog,
-  DollarSign,
+  PoundSterling,
   BookOpen,
   Megaphone,
   HelpCircle,
@@ -67,7 +67,7 @@ const navigationGroups = [
       {
         title: "Finance",
         href: "/finance",
-        icon: DollarSign,
+        icon: PoundSterling,
       },
       {
         title: "Team",
