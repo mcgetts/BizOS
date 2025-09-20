@@ -9,6 +9,8 @@ import NotFound from "@/pages/not-found";
 import Landing from "@/pages/Landing";
 import Dashboard from "@/pages/Dashboard";
 import Clients from "@/pages/Clients";
+import NewClients from "@/pages/NewClients";
+import Analytics from "@/pages/Analytics";
 import Projects from "@/pages/Projects";
 import Tasks from "@/pages/Tasks";
 import Team from "@/pages/Team";
@@ -34,6 +36,7 @@ function Router() {
         <>
           <Route path="/" component={Dashboard} />
           <Route path="/dashboard" component={Dashboard} />
+          <Route path="/new-clients" component={NewClients} />
           <Route path="/clients" component={Clients} />
           <Route path="/projects" component={Projects} />
           <Route path="/tasks" component={Tasks} />
@@ -43,6 +46,7 @@ function Router() {
           <Route path="/marketing" component={Marketing} />
           <Route path="/support" component={Support} />
           <Route path="/company" component={Company} />
+          <Route path="/analytics" component={Analytics} />
           <Route path="/admin" component={Admin} />
         </>
       )}
