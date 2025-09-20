@@ -24,11 +24,6 @@ const navigationItems = [
     icon: LayoutDashboard,
   },
   {
-    title: "Clients",
-    href: "/new-clients",
-    icon: Users,
-  },
-  {
     title: "CRM",
     href: "/clients",
     icon: Users,
