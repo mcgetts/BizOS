@@ -4,23 +4,30 @@ import { Building2, Users, FolderOpen, DollarSign, BookOpen, Megaphone } from "l
 
 export default function Landing() {
   const handleLogin = async () => {
-    try {
-      const response = await fetch("/api/auth/dev-login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ username: "dev", password: "dev" }),
-        credentials: "include",
-      });
+    // Use dev login only in development mode, otherwise use OAuth flow
+    if (import.meta.env.DEV && window.location.hostname.includes('replit.dev')) {
+      // In development, use dev login endpoint
+      try {
+        const response = await fetch("/api/auth/dev-login", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ username: "dev", password: "dev" }),
+          credentials: "include",
+        });
 
-      if (response.ok) {
-        window.location.reload();
-      } else {
-        console.error("Login failed");
+        if (response.ok) {
+          window.location.reload();
+        } else {
+          console.error("Login failed");
+        }
+      } catch (error) {
+        console.error("Login error:", error);
       }
-    } catch (error) {
-      console.error("Login error:", error);
+    } else {
+      // For production/published app, use Replit OAuth flow
+      window.location.href = "/api/login";
     }
   };
 
