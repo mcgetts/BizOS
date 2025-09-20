@@ -26,7 +26,10 @@ const getOidcConfig = memoize(
       process.env.REPL_ID!
     );
   },
-  { maxAge: 3600 * 1000 }
+  { 
+    maxAge: 300 * 1000, // 5 minutes instead of 1 hour
+    normalizer: () => `${process.env.ISSUER_URL}|${process.env.REPL_ID}` // Key cache to both ISSUER_URL and REPL_ID
+  }
 );
 
 export function getSession() {
@@ -123,8 +126,6 @@ export async function setupAuth(app: Express) {
   app.use(passport.initialize());
   app.use(passport.session());
 
-  const config = await getOidcConfig();
-
   const verify: VerifyFunction = async (
     tokens: client.TokenEndpointResponse & client.TokenEndpointResponseHelpers,
     verified: passport.AuthenticateCallback
@@ -135,113 +136,124 @@ export async function setupAuth(app: Express) {
     verified(null, user);
   };
 
-  // Register strategies for all configured domains  
-  for (const domain of configuredDomains) {
+  // Helper function to register or update strategy with current config
+  const ensureStrategyWithCurrentConfig = async (domain: string, req?: any) => {
+    const config = await getOidcConfig(); // Fetch fresh config each time
+    const strategyName = `replitauth:${domain}`;
+    
+    // Remove existing strategy if it exists
+    if ((passport as any)._strategies?.[strategyName]) {
+      delete (passport as any)._strategies[strategyName];
+    }
+    
+    // Use req.protocol if available, otherwise default to https for production
+    const protocol = req?.protocol || 'https';
+    
     const strategy = new Strategy(
       {
-        name: `replitauth:${domain}`,
+        name: strategyName,
         config,
         scope: "openid email profile offline_access",
-        callbackURL: `https://${domain}/api/callback`,
+        callbackURL: `${protocol}://${domain}/api/callback`,
       },
       verify,
     );
     passport.use(strategy);
-  }
+  };
 
   passport.serializeUser((user: Express.User, cb) => cb(null, user));
   passport.deserializeUser((user: Express.User, cb) => cb(null, user));
 
-  app.get("/api/login", (req, res, next) => {
+  app.get("/api/login", async (req, res, next) => {
     const currentDomain = req.hostname;
     const strategyName = `replitauth:${currentDomain}`;
     
-    // Check if strategy exists, if not register dynamically with security guards
-    const strategyExists = (passport as any)._strategy ? !!(passport as any)._strategy(strategyName) : !!(passport as any)._strategies?.[strategyName];
-    if (!strategyExists) {
-      // Security check: only allow configured domains or reasonable dynamic registration
-      if (!configuredDomains.includes(currentDomain)) {
-        // Allow dynamic registration only if we haven't hit the limit
-        if (dynamicStrategies.size >= MAX_DYNAMIC_STRATEGIES) {
-          console.error(`❌ Too many dynamic strategies registered. Add '${currentDomain}' to REPLIT_DOMAINS.`);
-          return res.status(500).json({ 
-            error: "Authentication configuration error", 
-            message: `Domain '${currentDomain}' not configured. Contact administrator.`
-          });
-        }
-        
-        console.warn(`⚠️  Domain '${currentDomain}' not in REPLIT_DOMAINS. Registering dynamic strategy.`);
-        console.warn(`⚠️  Add '${currentDomain}' to REPLIT_DOMAINS in deployment secrets for better security`);
-        dynamicStrategies.add(currentDomain);
+    // Security check: only allow configured domains or reasonable dynamic registration
+    if (!configuredDomains.includes(currentDomain)) {
+      // Allow dynamic registration only if we haven't hit the limit
+      if (dynamicStrategies.size >= MAX_DYNAMIC_STRATEGIES) {
+        console.error(`❌ Too many dynamic strategies registered. Add '${currentDomain}' to REPLIT_DOMAINS.`);
+        return res.status(500).json({ 
+          error: "Authentication configuration error", 
+          message: `Domain '${currentDomain}' not configured. Contact administrator.`
+        });
       }
       
-      // Register strategy for this domain
-      const strategy = new Strategy(
-        {
-          name: strategyName,
-          config,
-          scope: "openid email profile offline_access",
-          callbackURL: `https://${currentDomain}/api/callback`,
-        },
-        verify,
-      );
-      passport.use(strategy);
+      console.warn(`⚠️  Domain '${currentDomain}' not in REPLIT_DOMAINS. Registering dynamic strategy.`);
+      console.warn(`⚠️  Add '${currentDomain}' to REPLIT_DOMAINS in deployment secrets for better security`);
+      dynamicStrategies.add(currentDomain);
     }
     
-    passport.authenticate(strategyName, {
-      prompt: "login consent",
-      scope: ["openid", "email", "profile", "offline_access"],
-    })(req, res, next);
+    try {
+      // Always ensure strategy uses current config (fresh OIDC discovery)
+      await ensureStrategyWithCurrentConfig(currentDomain, req);
+      
+      passport.authenticate(strategyName, {
+        prompt: "login consent",
+        scope: ["openid", "email", "profile", "offline_access"],
+      })(req, res, next);
+    } catch (error) {
+      console.error(`❌ Failed to setup authentication strategy for domain '${currentDomain}':`, error);
+      return res.status(500).json({ 
+        error: "Authentication configuration error", 
+        message: "Failed to initialize authentication. Please try again."
+      });
+    }
   });
 
-  app.get("/api/callback", (req, res, next) => {
+  app.get("/api/callback", async (req, res, next) => {
     const currentDomain = req.hostname;
     const strategyName = `replitauth:${currentDomain}`;
     
-    // Ensure strategy exists (should rarely happen if /api/login was called first)
-    const strategyExists = (passport as any)._strategy ? !!(passport as any)._strategy(strategyName) : !!(passport as any)._strategies?.[strategyName];
-    if (!strategyExists) {
-      // If strategy missing but domain is allowed, register it here instead of redirecting
-      if (configuredDomains.includes(currentDomain) || dynamicStrategies.size < MAX_DYNAMIC_STRATEGIES) {
-        console.warn(`⚠️  Strategy '${strategyName}' missing during callback. Registering on-demand.`);
-        if (!configuredDomains.includes(currentDomain)) {
-          dynamicStrategies.add(currentDomain);
-        }
-        
-        const strategy = new Strategy(
-          {
-            name: strategyName,
-            config,
-            scope: "openid email profile offline_access",
-            callbackURL: `https://${currentDomain}/api/callback`,
-          },
-          verify,
-        );
-        passport.use(strategy);
-      } else {
+    // Security check: ensure domain is allowed
+    if (!configuredDomains.includes(currentDomain) && !dynamicStrategies.has(currentDomain)) {
+      if (dynamicStrategies.size >= MAX_DYNAMIC_STRATEGIES) {
         console.error(`❌ Strategy '${strategyName}' not found and domain not allowed.`);
         return res.status(400).json({ 
           error: "Authentication error", 
           message: `Domain '${currentDomain}' not configured. Add to REPLIT_DOMAINS.`
         });
       }
+      
+      console.warn(`⚠️  Strategy '${strategyName}' missing during callback. Registering on-demand.`);
+      dynamicStrategies.add(currentDomain);
     }
     
-    passport.authenticate(strategyName, {
-      successReturnToOrRedirect: "/",
-      failureRedirect: "/api/login",
-    })(req, res, next);
+    try {
+      // Always ensure strategy uses current config (fresh OIDC discovery)
+      await ensureStrategyWithCurrentConfig(currentDomain, req);
+      
+      passport.authenticate(strategyName, {
+        successReturnToOrRedirect: "/",
+        failureRedirect: "/api/login",
+      })(req, res, next);
+    } catch (error) {
+      console.error(`❌ Failed to setup authentication strategy for callback '${currentDomain}':`, error);
+      return res.status(500).json({ 
+        error: "Authentication configuration error", 
+        message: "Failed to process authentication callback. Please try again."
+      });
+    }
   });
 
-  app.get("/api/logout", (req, res) => {
-    req.logout(() => {
-      res.redirect(
-        client.buildEndSessionUrl(config, {
-          client_id: process.env.REPL_ID!,
-          post_logout_redirect_uri: `${req.protocol}://${req.hostname}`,
-        }).href
-      );
-    });
+  app.get("/api/logout", async (req, res) => {
+    try {
+      const config = await getOidcConfig(); // Fetch fresh config for logout
+      req.logout(() => {
+        res.redirect(
+          client.buildEndSessionUrl(config, {
+            client_id: process.env.REPL_ID!,
+            post_logout_redirect_uri: `${req.protocol}://${req.hostname}`,
+          }).href
+        );
+      });
+    } catch (error) {
+      console.error(`❌ Failed to get OIDC config for logout:`, error);
+      // Fallback to simple logout without redirect
+      req.logout(() => {
+        res.redirect("/");
+      });
+    }
   });
 }
 
