@@ -635,28 +635,21 @@ export default function NewClients() {
     ).length;
   };
 
-  if (!isAuthenticated || clientsLoading || companiesLoading) {
-    return (
-      <div className="h-screen flex items-center justify-center">
-        <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
-      </div>
-    );
-  }
-
-  const filteredClients = clients?.filter((client: Client) =>
+  // Always filter data, even if loading
+  const filteredClients = (clients || []).filter((client: Client) =>
     client.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     client.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     client.position?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     client.department?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     client.company?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     client.company?.industry?.toLowerCase().includes(searchTerm.toLowerCase())
-  ) || [];
+  );
 
   // Filter companies based on search term
-  const filteredCompanies = companies?.filter((company) =>
+  const filteredCompanies = (companies || []).filter((company) =>
     company.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     company.industry?.toLowerCase().includes(searchTerm.toLowerCase())
-  ) || [];
+  );
 
   // Companies sorting configuration
   const companySortConfigs: SortConfig[] = [
@@ -703,8 +696,17 @@ export default function NewClients() {
     }
   ];
 
+  // MUST call hooks before any conditional returns
   const { sortedData: sortedCompanies, sortState: companySortState, handleSort: handleCompanySort } = useTableSort(filteredCompanies, companySortConfigs);
   const { sortedData: sortedClients, sortState: clientSortState, handleSort: handleClientSort } = useTableSort(filteredClients, clientSortConfigs);
+
+  if (!isAuthenticated || clientsLoading || companiesLoading) {
+    return (
+      <div className="h-screen flex items-center justify-center">
+        <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    );
+  }
 
   return (
     <Layout title="Clients - Contact and Company Management" breadcrumbs={["Clients"]}>
