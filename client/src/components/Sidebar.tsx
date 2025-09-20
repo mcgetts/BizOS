@@ -14,6 +14,7 @@ import {
   Settings,
   Menu,
   Building2,
+  BarChart3,
 } from "lucide-react";
 
 const navigationItems = [
@@ -21,6 +22,11 @@ const navigationItems = [
     title: "Dashboard",
     href: "/dashboard",
     icon: LayoutDashboard,
+  },
+  {
+    title: "Clients",
+    href: "/new-clients",
+    icon: Users,
   },
   {
     title: "CRM",
@@ -66,6 +72,11 @@ const navigationItems = [
     title: "Company",
     href: "/company",
     icon: Building2,
+  },
+  {
+    title: "Analytics",
+    href: "/analytics",
+    icon: BarChart3,
   },
 ];
 
