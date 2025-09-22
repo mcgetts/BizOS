@@ -1006,26 +1006,6 @@ export default function Finance() {
   return (
     <Layout title="Financial Management" breadcrumbs={["Finance"]}>
       <div className="space-y-6">
-        {/* Header Actions */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search invoices and expenses..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 w-80"
-                data-testid="input-search-finance"
-              />
-            </div>
-          </div>
-          <div className="flex space-x-2">
-            <ExpenseForm onSuccess={() => {}} />
-            <InvoiceForm onSuccess={() => {}} />
-          </div>
-        </div>
-
         {/* Financial Overview Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <Card className="glassmorphism">
@@ -1121,26 +1101,46 @@ export default function Finance() {
           </Card>
         )}
 
-        {/* View Toggle */}
-        <div className="flex justify-end gap-2">
-          <Button
-            variant={viewMode === "table" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setViewMode("table")}
-            className="gap-2"
-          >
-            <Table className="h-4 w-4" />
-            Table
-          </Button>
-          <Button
-            variant={viewMode === "board" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setViewMode("board")}
-            className="gap-2"
-          >
-            <LayoutGrid className="h-4 w-4" />
-            Board
-          </Button>
+        {/* Search Bar */}
+        <div className="flex items-center space-x-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search invoices and expenses..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 w-80"
+              data-testid="input-search-finance"
+            />
+          </div>
+        </div>
+
+        {/* View Toggle with Action Buttons */}
+        <div className="flex items-center justify-center gap-4">
+          <div className="flex justify-center gap-2">
+            <Button
+              variant={viewMode === "board" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setViewMode("board")}
+              className="gap-2"
+            >
+              <LayoutGrid className="h-4 w-4" />
+              Board
+            </Button>
+            <Button
+              variant={viewMode === "table" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setViewMode("table")}
+              className="gap-2"
+            >
+              <Table className="h-4 w-4" />
+              Table
+            </Button>
+          </div>
+          <div className="flex space-x-2 ml-auto">
+            <ExpenseForm onSuccess={() => {}} />
+            <InvoiceForm onSuccess={() => {}} />
+          </div>
         </div>
 
         {/* Financial Data Tabs */}

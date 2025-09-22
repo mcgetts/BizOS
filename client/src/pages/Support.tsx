@@ -20,13 +20,14 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { insertSupportTicketSchema, type SupportTicket, type InsertSupportTicket, type User, type Client } from "@shared/schema";
 import { z } from "zod";
-import { 
-  Plus, 
-  Search, 
-  HelpCircle, 
+import {
+  Plus,
+  Search,
+  HelpCircle,
   AlertTriangle,
   Clock,
   CheckCircle,
+  BookOpen,
   User as UserIcon,
   MessageCircle,
   Star,
@@ -322,48 +323,106 @@ export default function Support() {
   return (
     <Layout title="Service & Support" breadcrumbs={["Support"]}>
       <div className="space-y-6">
-        {/* Header Actions */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search tickets..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 w-80"
-                data-testid="input-search-support"
-              />
-            </div>
-            
-            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-              <SelectTrigger className="w-40" data-testid="select-category">
-                <SelectValue placeholder="Category" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Categories</SelectItem>
-                <SelectItem value="technical">Technical</SelectItem>
-                <SelectItem value="billing">Billing</SelectItem>
-                <SelectItem value="general">General</SelectItem>
-                <SelectItem value="feature">Feature Request</SelectItem>
-                <SelectItem value="bug">Bug Report</SelectItem>
-              </SelectContent>
-            </Select>
+        {/* Support Overview Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <Card className="glassmorphism">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Open Tickets</p>
+                  <p className="text-2xl font-bold" data-testid="text-open-tickets">
+                    {tickets?.filter(t => t.status === 'open').length || 0}
+                  </p>
+                </div>
+                <BookOpen className="w-8 h-8 text-destructive" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="glassmorphism">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">In Progress</p>
+                  <p className="text-2xl font-bold" data-testid="text-in-progress-tickets">
+                    {tickets?.filter(t => t.status === 'in_progress').length || 0}
+                  </p>
+                </div>
+                <Clock className="w-8 h-8 text-warning" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="glassmorphism">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Resolved</p>
+                  <p className="text-2xl font-bold text-success" data-testid="text-resolved-tickets">
+                    {tickets?.filter(t => t.status === 'resolved').length || 0}
+                  </p>
+                </div>
+                <CheckCircle className="w-8 h-8 text-success" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="glassmorphism">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Satisfaction</p>
+                  <p className="text-2xl font-bold" data-testid="text-satisfaction-score">
+                    N/A
+                  </p>
+                </div>
+                <Star className="w-8 h-8 text-accent-foreground" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
-            <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-              <SelectTrigger className="w-40" data-testid="select-status">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="open">Open</SelectItem>
-                <SelectItem value="in_progress">In Progress</SelectItem>
-                <SelectItem value="resolved">Resolved</SelectItem>
-                <SelectItem value="closed">Closed</SelectItem>
-              </SelectContent>
-            </Select>
+        {/* Search and Filters */}
+        <div className="flex items-center space-x-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search tickets..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 w-80"
+              data-testid="input-search-support"
+            />
           </div>
-          
+
+          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+            <SelectTrigger className="w-40" data-testid="select-category">
+              <SelectValue placeholder="Category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              <SelectItem value="technical">Technical</SelectItem>
+              <SelectItem value="billing">Billing</SelectItem>
+              <SelectItem value="general">General</SelectItem>
+              <SelectItem value="feature">Feature Request</SelectItem>
+              <SelectItem value="bug">Bug Report</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+            <SelectTrigger className="w-40" data-testid="select-status">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="open">Open</SelectItem>
+              <SelectItem value="in_progress">In Progress</SelectItem>
+              <SelectItem value="resolved">Resolved</SelectItem>
+              <SelectItem value="closed">Closed</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Support Tickets Section */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Support Tickets</h2>
           <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
             <DialogTrigger asChild>
               <Button data-testid="button-create-ticket">
@@ -621,6 +680,181 @@ export default function Support() {
               </div>
             </CardContent>
           </Card>
+        </div>
+
+        {/* Support Tickets Section */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Support Tickets</h2>
+          <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
+            <DialogTrigger asChild>
+              <Button data-testid="button-create-ticket">
+                <Plus className="w-4 h-4 mr-2" />
+                New Ticket
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Create Support Ticket</DialogTitle>
+              </DialogHeader>
+              <Form {...createForm}>
+                <form onSubmit={createForm.handleSubmit(onCreateSubmit)} className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={createForm.control}
+                      name="category"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Category</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger data-testid="input-category">
+                                <SelectValue placeholder="Select category" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="technical">Technical</SelectItem>
+                              <SelectItem value="billing">Billing</SelectItem>
+                              <SelectItem value="general">General</SelectItem>
+                              <SelectItem value="feature">Feature Request</SelectItem>
+                              <SelectItem value="bug">Bug Report</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={createForm.control}
+                      name="priority"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Priority</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger data-testid="input-priority">
+                                <SelectValue placeholder="Select priority" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="low">Low</SelectItem>
+                              <SelectItem value="medium">Medium</SelectItem>
+                              <SelectItem value="high">High</SelectItem>
+                              <SelectItem value="urgent">Urgent</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={createForm.control}
+                      name="clientId"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Client (Optional)</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value ?? undefined}>
+                            <FormControl>
+                              <SelectTrigger data-testid="input-client">
+                                <SelectValue placeholder="Select client" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {clients?.map((client) => (
+                                <SelectItem key={client.id} value={client.id}>
+                                  {client.name} - {client.company}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={createForm.control}
+                      name="assignedTo"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Assign To (Optional)</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value ?? undefined}>
+                            <FormControl>
+                              <SelectTrigger data-testid="input-assigned-to">
+                                <SelectValue placeholder="Assign to agent" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {users?.filter(user => user.role === 'employee' || user.role === 'manager' || user.role === 'admin').map((user) => (
+                                <SelectItem key={user.id} value={user.id}>
+                                  {user.firstName} {user.lastName}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField
+                    control={createForm.control}
+                    name="title"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Title</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Brief description of the issue" {...field} data-testid="input-title" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={createForm.control}
+                    name="description"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Description</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            placeholder="Detailed description of the issue, steps to reproduce, expected behavior..."
+                            className="min-h-[120px]"
+                            {...field}
+                            data-testid="input-description"
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Provide as much detail as possible to help us resolve your issue quickly.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <div className="flex justify-end space-x-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setCreateModalOpen(false)}
+                      data-testid="button-cancel-create"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={createTicketMutation.isPending}
+                      data-testid="button-submit-create"
+                    >
+                      {createTicketMutation.isPending ? "Creating..." : "Create Ticket"}
+                    </Button>
+                  </div>
+                </form>
+              </Form>
+            </DialogContent>
+          </Dialog>
         </div>
 
         {/* Support Content */}

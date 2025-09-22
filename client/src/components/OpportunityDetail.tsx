@@ -97,6 +97,28 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
   const [isAddingStakeholder, setIsAddingStakeholder] = useState(false);
   const [isEditingStage, setIsEditingStage] = useState(false);
 
+  // Strategy editing states
+  const [isAddingPainPoint, setIsAddingPainPoint] = useState(false);
+  const [isAddingSuccessCriteria, setIsAddingSuccessCriteria] = useState(false);
+  const [isEditingBudget, setIsEditingBudget] = useState(false);
+  const [isEditingDecisionProcess, setIsEditingDecisionProcess] = useState(false);
+  const [editingPainPointIndex, setEditingPainPointIndex] = useState<number | null>(null);
+  const [editingSuccessCriteriaIndex, setEditingSuccessCriteriaIndex] = useState<number | null>(null);
+
+  // Next Steps, Communications, and Stakeholders editing states
+  const [editingNextStepId, setEditingNextStepId] = useState<string | null>(null);
+  const [editingCommunicationId, setEditingCommunicationId] = useState<string | null>(null);
+  const [editingStakeholderId, setEditingStakeholderId] = useState<string | null>(null);
+
+  // Strategy form data
+  const [newPainPoint, setNewPainPoint] = useState("");
+  const [newSuccessCriteria, setNewSuccessCriteria] = useState("");
+  const [budgetForm, setBudgetForm] = useState({
+    budget: opportunity.budget || "",
+    budgetStatus: (opportunity as any).budgetStatus || ""
+  });
+  const [decisionProcessForm, setDecisionProcessForm] = useState((opportunity as any).decisionProcess || "");
+
   // Stage configuration (matching SalesPipeline)
   const stageConfig = [
     { key: "lead", label: "Lead", color: "bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-100" },
@@ -127,6 +149,13 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
     enabled: isOpen,
   });
   const stakeholders = Array.isArray(stakeholdersData) ? stakeholdersData : [];
+
+  // Fetch users for assignment dropdowns
+  const { data: usersData = [] } = useQuery({
+    queryKey: ["/api/users"],
+    enabled: isOpen,
+  });
+  const users = Array.isArray(usersData) ? usersData : [];
 
   // Fetch activity history
   const { data: activityHistoryData = [] } = useQuery({
@@ -163,6 +192,73 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
     },
   });
 
+  // Update mutations
+  const updateNextStepMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => {
+      console.log('Updating next step with data:', { id, data });
+      return apiRequest("PUT", `/api/opportunities/${opportunity.id}/next-steps/${id}`, data);
+    },
+    onSuccess: (response) => {
+      console.log('Next step update successful:', response);
+      queryClient.invalidateQueries({
+        queryKey: [`/api/opportunities/${opportunity.id}/next-steps`]
+      });
+      setEditingNextStepId(null);
+      alert('Next step updated successfully!');
+    },
+    onError: (error: any) => {
+      console.error('Failed to update next step:', error);
+      const errorMessage = error?.message ||
+        error?.response?.data?.message ||
+        'Failed to update next step. Please check your input and try again.';
+      alert(errorMessage);
+    },
+  });
+
+  const updateCommunicationMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => {
+      console.log('Updating communication with data:', { id, data });
+      return apiRequest("PUT", `/api/opportunities/${opportunity.id}/communications/${id}`, data);
+    },
+    onSuccess: (response) => {
+      console.log('Communication update successful:', response);
+      queryClient.invalidateQueries({
+        queryKey: [`/api/opportunities/${opportunity.id}/communications`]
+      });
+      setEditingCommunicationId(null);
+      alert('Communication updated successfully!');
+    },
+    onError: (error: any) => {
+      console.error('Failed to update communication:', error);
+      const errorMessage = error?.message ||
+        error?.response?.data?.message ||
+        'Failed to update communication. Please check your input and try again.';
+      alert(errorMessage);
+    },
+  });
+
+  const updateStakeholderMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => {
+      console.log('Updating stakeholder with data:', { id, data });
+      return apiRequest("PUT", `/api/opportunities/${opportunity.id}/stakeholders/${id}`, data);
+    },
+    onSuccess: (response) => {
+      console.log('Stakeholder update successful:', response);
+      queryClient.invalidateQueries({
+        queryKey: [`/api/opportunities/${opportunity.id}/stakeholders`]
+      });
+      setEditingStakeholderId(null);
+      alert('Stakeholder updated successfully!');
+    },
+    onError: (error: any) => {
+      console.error('Failed to update stakeholder:', error);
+      const errorMessage = error?.message ||
+        error?.response?.data?.message ||
+        'Failed to update stakeholder. Please check your input and try again.';
+      alert(errorMessage);
+    },
+  });
+
   // Stage update mutation
   const updateStageMutation = useMutation({
     mutationFn: (newStage: string) => apiRequest("PUT", `/api/opportunities/${opportunity.id}`, { stage: newStage }),
@@ -171,6 +267,29 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
         queryKey: [`/api/opportunities`]
       });
       setIsEditingStage(false);
+    },
+  });
+
+  // Strategy update mutation
+  const updateStrategyMutation = useMutation({
+    mutationFn: (data: any) => apiRequest("PUT", `/api/opportunities/${opportunity.id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: [`/api/opportunities`]
+      });
+      // Reset editing states
+      setIsAddingPainPoint(false);
+      setIsAddingSuccessCriteria(false);
+      setIsEditingBudget(false);
+      setIsEditingDecisionProcess(false);
+      setEditingPainPointIndex(null);
+      setEditingSuccessCriteriaIndex(null);
+      setNewPainPoint("");
+      setNewSuccessCriteria("");
+    },
+    onError: (error) => {
+      console.error('Failed to update strategy:', error);
+      alert('Failed to update strategy. Please try again.');
     },
   });
 
@@ -264,6 +383,77 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
     }
   };
 
+  // Strategy management handlers
+  const handleAddPainPoint = () => {
+    if (!newPainPoint.trim()) return;
+
+    const currentPainPoints = (opportunity as any).painPoints || [];
+    const updatedPainPoints = [...currentPainPoints, newPainPoint.trim()];
+
+    updateStrategyMutation.mutate({ painPoints: updatedPainPoints });
+  };
+
+  const handleEditPainPoint = (index: number, newValue: string) => {
+    if (!newValue.trim()) return;
+
+    const currentPainPoints = [...((opportunity as any).painPoints || [])];
+    currentPainPoints[index] = newValue.trim();
+
+    updateStrategyMutation.mutate({ painPoints: currentPainPoints });
+  };
+
+  const handleDeletePainPoint = (index: number) => {
+    if (!confirm('Are you sure you want to delete this pain point?')) return;
+
+    const currentPainPoints = [...((opportunity as any).painPoints || [])];
+    currentPainPoints.splice(index, 1);
+
+    updateStrategyMutation.mutate({ painPoints: currentPainPoints });
+  };
+
+  const handleAddSuccessCriteria = () => {
+    if (!newSuccessCriteria.trim()) return;
+
+    const currentCriteria = (opportunity as any).successCriteria || [];
+    const updatedCriteria = [...currentCriteria, newSuccessCriteria.trim()];
+
+    updateStrategyMutation.mutate({ successCriteria: updatedCriteria });
+  };
+
+  const handleEditSuccessCriteria = (index: number, newValue: string) => {
+    if (!newValue.trim()) return;
+
+    const currentCriteria = [...((opportunity as any).successCriteria || [])];
+    currentCriteria[index] = newValue.trim();
+
+    updateStrategyMutation.mutate({ successCriteria: currentCriteria });
+  };
+
+  const handleDeleteSuccessCriteria = (index: number) => {
+    if (!confirm('Are you sure you want to delete this success criteria?')) return;
+
+    const currentCriteria = [...((opportunity as any).successCriteria || [])];
+    currentCriteria.splice(index, 1);
+
+    updateStrategyMutation.mutate({ successCriteria: currentCriteria });
+  };
+
+  const handleUpdateBudget = () => {
+    const updateData: any = {};
+    if (budgetForm.budget.trim()) {
+      updateData.budget = budgetForm.budget.trim();
+    }
+    if (budgetForm.budgetStatus.trim()) {
+      updateData.budgetStatus = budgetForm.budgetStatus.trim();
+    }
+
+    updateStrategyMutation.mutate(updateData);
+  };
+
+  const handleUpdateDecisionProcess = () => {
+    updateStrategyMutation.mutate({ decisionProcess: decisionProcessForm.trim() });
+  };
+
   // Form handlers
   const handleAddNextStep = (e: React.FormEvent) => {
     e.preventDefault();
@@ -326,7 +516,7 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
             <div className="flex items-center space-x-2">
               {isEditingStage ? (
                 <div className="flex items-center space-x-2">
-                  <Select onValueChange={handleStageUpdate} defaultValue={opportunity.stage}>
+                  <Select onValueChange={handleStageUpdate} defaultValue={opportunity.stage || "lead"}>
                     <SelectTrigger className="w-32">
                       <SelectValue />
                     </SelectTrigger>
@@ -537,6 +727,151 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
                 </Card>
               )}
 
+              {/* Edit Next Step Dialog */}
+              {editingNextStepId && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Edit Next Step</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const formData = new FormData(e.currentTarget);
+
+                        // Properly convert and validate form data
+                        const titleValue = formData.get('title');
+                        const descriptionValue = formData.get('description');
+                        const priorityValue = formData.get('priority');
+                        const statusValue = formData.get('status');
+                        const dueDateValue = formData.get('dueDate');
+                        const assignedToValue = formData.get('assignedTo');
+
+                        // Validation
+                        if (!titleValue || typeof titleValue !== 'string' || !titleValue.trim()) {
+                          alert('Title is required');
+                          return;
+                        }
+
+                        const data = {
+                          title: titleValue.toString().trim(),
+                          description: descriptionValue?.toString().trim() || null,
+                          priority: priorityValue?.toString() || 'medium',
+                          status: statusValue?.toString() || 'pending',
+                          dueDate: dueDateValue && dueDateValue.toString().trim()
+                            ? new Date(dueDateValue.toString())
+                            : null,
+                          assignedTo: assignedToValue && assignedToValue.toString().trim()
+                            ? assignedToValue.toString()
+                            : null,
+                        };
+
+                        console.log('Submitting next step update:', data);
+                        updateNextStepMutation.mutate({ id: editingNextStepId, data });
+                      }}
+                      className="space-y-4"
+                    >
+                      {(() => {
+                        const currentStep = nextSteps.find(step => step.id === editingNextStepId);
+                        return currentStep ? (
+                          <>
+                            <div>
+                              <Label htmlFor="edit-title">Title *</Label>
+                              <Input
+                                name="title"
+                                defaultValue={currentStep.title}
+                                required
+                                placeholder="e.g., Follow up with decision maker"
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor="edit-description">Description</Label>
+                              <Textarea
+                                name="description"
+                                defaultValue={currentStep.description || ''}
+                                placeholder="Additional details..."
+                              />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <Label htmlFor="edit-priority">Priority</Label>
+                                <Select name="priority" defaultValue={currentStep.priority}>
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="low">Low</SelectItem>
+                                    <SelectItem value="medium">Medium</SelectItem>
+                                    <SelectItem value="high">High</SelectItem>
+                                    <SelectItem value="urgent">Urgent</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div>
+                                <Label htmlFor="edit-status">Status</Label>
+                                <Select name="status" defaultValue={currentStep.status}>
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="pending">Pending</SelectItem>
+                                    <SelectItem value="in_progress">In Progress</SelectItem>
+                                    <SelectItem value="completed">Completed</SelectItem>
+                                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <Label htmlFor="edit-dueDate">Due Date</Label>
+                                <Input
+                                  name="dueDate"
+                                  type="date"
+                                  defaultValue={
+                                    currentStep.dueDate
+                                      ? new Date(currentStep.dueDate).toISOString().split('T')[0]
+                                      : ''
+                                  }
+                                />
+                              </div>
+                              <div>
+                                <Label htmlFor="edit-assignedTo">Assigned To</Label>
+                                <Select name="assignedTo" defaultValue={currentStep.assignedTo || ''}>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select user" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="">Unassigned</SelectItem>
+                                    {users?.map((user) => (
+                                      <SelectItem key={user.id} value={user.id}>
+                                        {user.firstName} {user.lastName}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                            <div className="flex justify-end space-x-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setEditingNextStepId(null)}
+                              >
+                                Cancel
+                              </Button>
+                              <Button type="submit" disabled={updateNextStepMutation.isPending}>
+                                {updateNextStepMutation.isPending ? 'Updating...' : 'Update Next Step'}
+                              </Button>
+                            </div>
+                          </>
+                        ) : null;
+                      })()}
+                    </form>
+                  </CardContent>
+                </Card>
+              )}
+
               <div className="space-y-3">
                 {nextSteps.map((nextStep: NextStep) => (
                   <Card key={nextStep.id}>
@@ -571,11 +906,16 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
                           </div>
                         </div>
                         <div className="flex gap-2">
-                          <Button variant="ghost" size="sm">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setEditingNextStepId(nextStep.id)}
+                            disabled={editingNextStepId === nextStep.id}
+                          >
                             <Edit className="w-3 h-3" />
                           </Button>
-                          <Button 
-                            variant="ghost" 
+                          <Button
+                            variant="ghost"
                             size="sm"
                             onClick={() => deleteNextStepMutation.mutate(nextStep.id)}
                             disabled={deleteNextStepMutation.isPending}
@@ -674,6 +1014,173 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
                 </Card>
               )}
 
+              {/* Edit Communication Dialog */}
+              {editingCommunicationId && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Edit Communication</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const formData = new FormData(e.currentTarget);
+
+                        // Properly convert and validate form data
+                        const typeValue = formData.get('type');
+                        const subjectValue = formData.get('subject');
+                        const summaryValue = formData.get('summary');
+                        const outcomeValue = formData.get('outcome');
+                        const attendeesValue = formData.get('attendees');
+                        const followUpRequiredValue = formData.get('followUpRequired');
+                        const followUpDateValue = formData.get('followUpDate');
+                        const communicationDateValue = formData.get('communicationDate');
+
+                        // Validation
+                        if (!summaryValue || typeof summaryValue !== 'string' || !summaryValue.trim()) {
+                          alert('Summary is required');
+                          return;
+                        }
+                        if (!communicationDateValue || typeof communicationDateValue !== 'string' || !communicationDateValue.trim()) {
+                          alert('Communication date is required');
+                          return;
+                        }
+
+                        const data = {
+                          type: typeValue?.toString() || 'call',
+                          subject: subjectValue?.toString().trim() || null,
+                          summary: summaryValue.toString().trim(),
+                          outcome: outcomeValue?.toString() || null,
+                          attendees: attendeesValue ? attendeesValue.toString().split(',').map(s => s.trim()).filter(s => s) : [],
+                          followUpRequired: followUpRequiredValue === 'on',
+                          followUpDate: followUpDateValue && followUpDateValue.toString().trim()
+                            ? new Date(followUpDateValue.toString())
+                            : null,
+                          communicationDate: new Date(communicationDateValue.toString()),
+                        };
+
+                        console.log('Submitting communication update:', data);
+                        updateCommunicationMutation.mutate({ id: editingCommunicationId, data });
+                      }}
+                      className="space-y-4"
+                    >
+                      {(() => {
+                        const currentComm = communications.find(comm => comm.id === editingCommunicationId);
+                        return currentComm ? (
+                          <>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <Label htmlFor="edit-type">Type *</Label>
+                                <Select name="type" defaultValue={currentComm.type}>
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="call">Phone Call</SelectItem>
+                                    <SelectItem value="email">Email</SelectItem>
+                                    <SelectItem value="meeting">Meeting</SelectItem>
+                                    <SelectItem value="demo">Demo</SelectItem>
+                                    <SelectItem value="proposal">Proposal</SelectItem>
+                                    <SelectItem value="contract">Contract</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div>
+                                <Label htmlFor="edit-outcome">Outcome</Label>
+                                <Select name="outcome" defaultValue={currentComm.outcome || ''}>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select outcome" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="positive">Positive</SelectItem>
+                                    <SelectItem value="neutral">Neutral</SelectItem>
+                                    <SelectItem value="negative">Negative</SelectItem>
+                                    <SelectItem value="no_response">No Response</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                            <div>
+                              <Label htmlFor="edit-subject">Subject</Label>
+                              <Input
+                                name="subject"
+                                defaultValue={currentComm.subject || ''}
+                                placeholder="e.g., Product demo discussion"
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor="edit-summary">Summary *</Label>
+                              <Textarea
+                                name="summary"
+                                defaultValue={currentComm.summary || ''}
+                                required
+                                placeholder="What was discussed..."
+                              />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <Label htmlFor="edit-communicationDate">Date & Time *</Label>
+                                <Input
+                                  name="communicationDate"
+                                  type="datetime-local"
+                                  defaultValue={
+                                    currentComm.communicationDate
+                                      ? new Date(currentComm.communicationDate).toISOString().slice(0, 16)
+                                      : ''
+                                  }
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <Label htmlFor="edit-attendees">Attendees</Label>
+                                <Input
+                                  name="attendees"
+                                  defaultValue={currentComm.attendees ? currentComm.attendees.join(', ') : ''}
+                                  placeholder="John Doe, Jane Smith"
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <Label htmlFor="edit-followUpDate">Follow-up Date</Label>
+                              <Input
+                                name="followUpDate"
+                                type="date"
+                                defaultValue={
+                                  currentComm.followUpDate
+                                    ? new Date(currentComm.followUpDate).toISOString().split('T')[0]
+                                    : ''
+                                }
+                              />
+                              <div className="flex items-center space-x-2 pt-2">
+                                <input
+                                  type="checkbox"
+                                  name="followUpRequired"
+                                  id="edit-followUpRequired"
+                                  defaultChecked={currentComm.followUpRequired || false}
+                                />
+                                <Label htmlFor="edit-followUpRequired">Follow-up required</Label>
+                              </div>
+                            </div>
+                            <div className="flex justify-end space-x-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setEditingCommunicationId(null)}
+                              >
+                                Cancel
+                              </Button>
+                              <Button type="submit" disabled={updateCommunicationMutation.isPending}>
+                                {updateCommunicationMutation.isPending ? 'Updating...' : 'Update Communication'}
+                              </Button>
+                            </div>
+                          </>
+                        ) : null;
+                      })()}
+                    </form>
+                  </CardContent>
+                </Card>
+              )}
+
               <div className="space-y-3">
                 {communications.map((comm: Communication) => {
                   const IconComponent = communicationTypeIcons[comm.type];
@@ -708,11 +1215,16 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
                             </div>
                           </div>
                           <div className="flex gap-2">
-                            <Button variant="ghost" size="sm">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setEditingCommunicationId(comm.id)}
+                              disabled={editingCommunicationId === comm.id}
+                            >
                               <Edit className="w-3 h-3" />
                             </Button>
-                            <Button 
-                              variant="ghost" 
+                            <Button
+                              variant="ghost"
                               size="sm"
                               onClick={() => deleteCommunicationMutation.mutate(comm.id)}
                               disabled={deleteCommunicationMutation.isPending}
@@ -824,6 +1336,152 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
                 </Card>
               )}
 
+              {/* Edit Stakeholder Dialog */}
+              {editingStakeholderId && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Edit Stakeholder</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const formData = new FormData(e.currentTarget);
+
+                        // Properly convert and validate form data
+                        const nameValue = formData.get('name');
+                        const roleValue = formData.get('role');
+                        const influenceValue = formData.get('influence');
+                        const relationshipStrengthValue = formData.get('relationshipStrength');
+                        const emailValue = formData.get('email');
+                        const phoneValue = formData.get('phone');
+                        const notesValue = formData.get('notes');
+
+                        // Validation
+                        if (!nameValue || typeof nameValue !== 'string' || !nameValue.trim()) {
+                          alert('Name is required');
+                          return;
+                        }
+
+                        const data = {
+                          name: nameValue.toString().trim(),
+                          role: roleValue?.toString() || 'user',
+                          influence: influenceValue?.toString() || 'medium',
+                          relationshipStrength: relationshipStrengthValue?.toString() || 'neutral',
+                          email: emailValue && emailValue.toString().trim() ? emailValue.toString().trim() : null,
+                          phone: phoneValue && phoneValue.toString().trim() ? phoneValue.toString().trim() : null,
+                          notes: notesValue && notesValue.toString().trim() ? notesValue.toString().trim() : null,
+                        };
+
+                        console.log('Submitting stakeholder update:', data);
+                        updateStakeholderMutation.mutate({ id: editingStakeholderId, data });
+                      }}
+                      className="space-y-4"
+                    >
+                      {(() => {
+                        const currentStakeholder = stakeholders.find(stakeholder => stakeholder.id === editingStakeholderId);
+                        return currentStakeholder ? (
+                          <>
+                            <div>
+                              <Label htmlFor="edit-name">Name *</Label>
+                              <Input
+                                name="name"
+                                defaultValue={currentStakeholder.name}
+                                required
+                                placeholder="e.g., John Smith"
+                              />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <Label htmlFor="edit-role">Role</Label>
+                                <Select name="role" defaultValue={currentStakeholder.role || 'user'}>
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="decision_maker">Decision Maker</SelectItem>
+                                    <SelectItem value="influencer">Influencer</SelectItem>
+                                    <SelectItem value="user">User</SelectItem>
+                                    <SelectItem value="blocker">Blocker</SelectItem>
+                                    <SelectItem value="champion">Champion</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div>
+                                <Label htmlFor="edit-influence">Influence Level</Label>
+                                <Select name="influence" defaultValue={currentStakeholder.influence || 'medium'}>
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="low">Low</SelectItem>
+                                    <SelectItem value="medium">Medium</SelectItem>
+                                    <SelectItem value="high">High</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <Label htmlFor="edit-email">Email</Label>
+                                <Input
+                                  name="email"
+                                  type="email"
+                                  defaultValue={currentStakeholder.email || ''}
+                                  placeholder="john@company.com"
+                                />
+                              </div>
+                              <div>
+                                <Label htmlFor="edit-phone">Phone</Label>
+                                <Input
+                                  name="phone"
+                                  defaultValue={currentStakeholder.phone || ''}
+                                  placeholder="+1 (555) 123-4567"
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <Label htmlFor="edit-relationshipStrength">Relationship Strength</Label>
+                              <Select name="relationshipStrength" defaultValue={currentStakeholder.relationshipStrength || 'neutral'}>
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="strong">Strong</SelectItem>
+                                  <SelectItem value="neutral">Neutral</SelectItem>
+                                  <SelectItem value="weak">Weak</SelectItem>
+                                  <SelectItem value="unknown">Unknown</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <Label htmlFor="edit-notes">Notes</Label>
+                              <Textarea
+                                name="notes"
+                                defaultValue={currentStakeholder.notes || ''}
+                                placeholder="Additional information about this stakeholder..."
+                              />
+                            </div>
+                            <div className="flex justify-end space-x-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setEditingStakeholderId(null)}
+                              >
+                                Cancel
+                              </Button>
+                              <Button type="submit" disabled={updateStakeholderMutation.isPending}>
+                                {updateStakeholderMutation.isPending ? 'Updating...' : 'Update Stakeholder'}
+                              </Button>
+                            </div>
+                          </>
+                        ) : null;
+                      })()}
+                    </form>
+                  </CardContent>
+                </Card>
+              )}
+
               <div className="grid gap-3">
                 {stakeholders.map((stakeholder: Stakeholder) => {
                   const RoleIcon = getRoleIcon(stakeholder.role || "");
@@ -863,11 +1521,16 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
                             </div>
                           </div>
                           <div className="flex gap-2">
-                            <Button variant="ghost" size="sm">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setEditingStakeholderId(stakeholder.id)}
+                              disabled={editingStakeholderId === stakeholder.id}
+                            >
                               <Edit className="w-3 h-3" />
                             </Button>
-                            <Button 
-                              variant="ghost" 
+                            <Button
+                              variant="ghost"
                               size="sm"
                               onClick={() => deleteStakeholderMutation.mutate(stakeholder.id)}
                               disabled={deleteStakeholderMutation.isPending}
@@ -988,80 +1651,359 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
 
             <TabsContent value="strategy" className="space-y-4">
               <div className="grid gap-4">
-                {Array.isArray(opportunity.painPoints) && opportunity.painPoints.length > 0 && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-sm flex items-center gap-2">
+                {/* Pain Points Section */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm flex items-center justify-between">
+                      <div className="flex items-center gap-2">
                         <AlertTriangle className="w-4 h-4" />
                         Pain Points
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsAddingPainPoint(!isAddingPainPoint)}
+                      >
+                        <Plus className="w-4 h-4 mr-1" />
+                        Add
+                      </Button>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {isAddingPainPoint && (
+                      <div className="flex gap-2">
+                        <Input
+                          value={newPainPoint}
+                          onChange={(e) => setNewPainPoint(e.target.value)}
+                          placeholder="Enter new pain point..."
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleAddPainPoint();
+                            } else if (e.key === 'Escape') {
+                              setIsAddingPainPoint(false);
+                              setNewPainPoint("");
+                            }
+                          }}
+                        />
+                        <Button size="sm" onClick={handleAddPainPoint}>
+                          Add
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setIsAddingPainPoint(false);
+                            setNewPainPoint("");
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    )}
+
+                    {Array.isArray((opportunity as any).painPoints) && (opportunity as any).painPoints.length > 0 ? (
                       <ul className="space-y-2">
-                        {opportunity.painPoints.map((point, index) => (
-                          <li key={index} className="flex items-start gap-2">
+                        {(opportunity as any).painPoints.map((point: string, index: number) => (
+                          <li key={index} className="flex items-start gap-2 group">
                             <div className="w-2 h-2 bg-red-500 rounded-full mt-2 flex-shrink-0" />
-                            <span className="text-sm">{point}</span>
+                            {editingPainPointIndex === index ? (
+                              <div className="flex-1 flex gap-2">
+                                <Input
+                                  defaultValue={point}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      handleEditPainPoint(index, e.currentTarget.value);
+                                    } else if (e.key === 'Escape') {
+                                      setEditingPainPointIndex(null);
+                                    }
+                                  }}
+                                  onBlur={(e) => {
+                                    if (e.target.value !== point) {
+                                      handleEditPainPoint(index, e.target.value);
+                                    } else {
+                                      setEditingPainPointIndex(null);
+                                    }
+                                  }}
+                                  autoFocus
+                                />
+                              </div>
+                            ) : (
+                              <>
+                                <span className="text-sm flex-1">{point}</span>
+                                <div className="opacity-0 group-hover:opacity-100 flex gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0"
+                                    onClick={() => setEditingPainPointIndex(index)}
+                                  >
+                                    <Edit className="w-3 h-3" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0 text-red-600 hover:text-red-800"
+                                    onClick={() => handleDeletePainPoint(index)}
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </Button>
+                                </div>
+                              </>
+                            )}
                           </li>
                         ))}
                       </ul>
-                    </CardContent>
-                  </Card>
-                )}
+                    ) : (
+                      <p className="text-sm text-gray-500 italic">No pain points identified yet.</p>
+                    )}
+                  </CardContent>
+                </Card>
 
-                {Array.isArray(opportunity.successCriteria) && opportunity.successCriteria.length > 0 && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-sm flex items-center gap-2">
+                {/* Success Criteria Section */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm flex items-center justify-between">
+                      <div className="flex items-center gap-2">
                         <Target className="w-4 h-4" />
                         Success Criteria
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsAddingSuccessCriteria(!isAddingSuccessCriteria)}
+                      >
+                        <Plus className="w-4 h-4 mr-1" />
+                        Add
+                      </Button>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {isAddingSuccessCriteria && (
+                      <div className="flex gap-2">
+                        <Input
+                          value={newSuccessCriteria}
+                          onChange={(e) => setNewSuccessCriteria(e.target.value)}
+                          placeholder="Enter new success criteria..."
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleAddSuccessCriteria();
+                            } else if (e.key === 'Escape') {
+                              setIsAddingSuccessCriteria(false);
+                              setNewSuccessCriteria("");
+                            }
+                          }}
+                        />
+                        <Button size="sm" onClick={handleAddSuccessCriteria}>
+                          Add
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setIsAddingSuccessCriteria(false);
+                            setNewSuccessCriteria("");
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    )}
+
+                    {Array.isArray((opportunity as any).successCriteria) && (opportunity as any).successCriteria.length > 0 ? (
                       <ul className="space-y-2">
-                        {opportunity.successCriteria.map((criteria, index) => (
-                          <li key={index} className="flex items-start gap-2">
+                        {(opportunity as any).successCriteria.map((criteria: string, index: number) => (
+                          <li key={index} className="flex items-start gap-2 group">
                             <div className="w-2 h-2 bg-green-500 rounded-full mt-2 flex-shrink-0" />
-                            <span className="text-sm">{criteria}</span>
+                            {editingSuccessCriteriaIndex === index ? (
+                              <div className="flex-1 flex gap-2">
+                                <Input
+                                  defaultValue={criteria}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      handleEditSuccessCriteria(index, e.currentTarget.value);
+                                    } else if (e.key === 'Escape') {
+                                      setEditingSuccessCriteriaIndex(null);
+                                    }
+                                  }}
+                                  onBlur={(e) => {
+                                    if (e.target.value !== criteria) {
+                                      handleEditSuccessCriteria(index, e.target.value);
+                                    } else {
+                                      setEditingSuccessCriteriaIndex(null);
+                                    }
+                                  }}
+                                  autoFocus
+                                />
+                              </div>
+                            ) : (
+                              <>
+                                <span className="text-sm flex-1">{criteria}</span>
+                                <div className="opacity-0 group-hover:opacity-100 flex gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0"
+                                    onClick={() => setEditingSuccessCriteriaIndex(index)}
+                                  >
+                                    <Edit className="w-3 h-3" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0 text-red-600 hover:text-red-800"
+                                    onClick={() => handleDeleteSuccessCriteria(index)}
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </Button>
+                                </div>
+                              </>
+                            )}
                           </li>
                         ))}
                       </ul>
-                    </CardContent>
-                  </Card>
-                )}
+                    ) : (
+                      <p className="text-sm text-gray-500 italic">No success criteria defined yet.</p>
+                    )}
+                  </CardContent>
+                </Card>
 
-                {opportunity.budget && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-sm">Budget Information</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      <div className="flex justify-between">
-                        <span className="text-sm text-gray-600">Budget:</span>
-                        <span className="font-medium">£{parseFloat(opportunity.budget || "0").toLocaleString()}</span>
-                      </div>
-                      {opportunity.budgetStatus && (
-                        <div className="flex justify-between">
-                          <span className="text-sm text-gray-600">Status:</span>
-                          <Badge variant={opportunity.budgetStatus === "approved" ? "default" : "secondary"}>
-                            {opportunity.budgetStatus}
-                          </Badge>
+                {/* Budget Information Section */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm flex items-center justify-between">
+                      Budget Information
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsEditingBudget(!isEditingBudget)}
+                      >
+                        <Edit className="w-4 h-4 mr-1" />
+                        Edit
+                      </Button>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {isEditingBudget ? (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label>Budget Amount</Label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={budgetForm.budget}
+                              onChange={(e) => setBudgetForm(prev => ({ ...prev, budget: e.target.value }))}
+                              placeholder="e.g., 50000"
+                            />
+                          </div>
+                          <div>
+                            <Label>Budget Status</Label>
+                            <Select
+                              value={budgetForm.budgetStatus}
+                              onValueChange={(value) => setBudgetForm(prev => ({ ...prev, budgetStatus: value }))}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select status" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="pending">Pending</SelectItem>
+                                <SelectItem value="approved">Approved</SelectItem>
+                                <SelectItem value="under_review">Under Review</SelectItem>
+                                <SelectItem value="rejected">Rejected</SelectItem>
+                                <SelectItem value="unknown">Unknown</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
                         </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                )}
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={handleUpdateBudget}>
+                            Save
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setIsEditingBudget(false);
+                              setBudgetForm({
+                                budget: opportunity.budget || "",
+                                budgetStatus: (opportunity as any).budgetStatus || ""
+                              });
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">Budget:</span>
+                          <span className="font-medium">
+                            {opportunity.budget ? `£${parseFloat(opportunity.budget).toLocaleString()}` : 'Not set'}
+                          </span>
+                        </div>
+                        {(opportunity as any).budgetStatus && (
+                          <div className="flex justify-between">
+                            <span className="text-sm text-gray-600">Status:</span>
+                            <Badge variant={(opportunity as any).budgetStatus === "approved" ? "default" : "secondary"}>
+                              {(opportunity as any).budgetStatus}
+                            </Badge>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
 
-                {opportunity.decisionProcess && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-sm">Decision Process</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-sm">{opportunity.decisionProcess}</p>
-                    </CardContent>
-                  </Card>
-                )}
+                {/* Decision Process Section */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm flex items-center justify-between">
+                      Decision Process
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsEditingDecisionProcess(!isEditingDecisionProcess)}
+                      >
+                        <Edit className="w-4 h-4 mr-1" />
+                        Edit
+                      </Button>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {isEditingDecisionProcess ? (
+                      <div className="space-y-3">
+                        <Textarea
+                          value={decisionProcessForm}
+                          onChange={(e) => setDecisionProcessForm(e.target.value)}
+                          placeholder="Describe the customer's decision-making process..."
+                          rows={4}
+                        />
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={handleUpdateDecisionProcess}>
+                            Save
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setIsEditingDecisionProcess(false);
+                              setDecisionProcessForm((opportunity as any).decisionProcess || "");
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm">
+                        {(opportunity as any).decisionProcess || (
+                          <span className="text-gray-500 italic">No decision process documented yet.</span>
+                        )}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
               </div>
             </TabsContent>
           </div>

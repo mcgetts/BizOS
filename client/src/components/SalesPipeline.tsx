@@ -357,15 +357,21 @@ export function SalesPipeline() {
 
   const editOpportunityMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<CreateOpportunityForm> }) => {
-      return apiRequest("PUT", `/api/opportunities/${id}`, data);
+      console.log('Updating opportunity with data:', data);
+      const response = await apiRequest("PUT", `/api/opportunities/${id}`, data);
+      console.log('Update response:', response);
+      return response;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/opportunities'] });
       setIsEditDialogOpen(false);
       setSelectedOpportunity(null);
+      alert('Opportunity updated successfully!');
     },
     onError: (error) => {
       console.error('Failed to update opportunity:', error);
+      const errorMessage = error?.message || 'Failed to update opportunity. Please try again.';
+      alert(errorMessage);
     },
   });
 
@@ -510,7 +516,16 @@ export function SalesPipeline() {
   };
 
   const updateEditForm = (field: keyof CreateOpportunityForm, value: any) => {
-    setEditForm(prev => ({ ...prev, [field]: value }));
+    setEditForm(prev => {
+      const updated = { ...prev, [field]: value };
+
+      // Reset contactId when company changes
+      if (field === 'companyId' && value !== prev.companyId) {
+        updated.contactId = '';
+      }
+
+      return updated;
+    });
   };
 
   const handleViewDetails = (opportunity: SalesOpportunity) => {
@@ -570,9 +585,32 @@ export function SalesPipeline() {
       return;
     }
 
+    // Clean and transform data before sending
+    const submissionData = {
+      title: editForm.title.trim(),
+      description: editForm.description?.trim() || null,
+      companyId: editForm.companyId,
+      contactId: editForm.contactId || null,
+      assignedTo: editForm.assignedTo || null,
+      stage: editForm.stage,
+      value: editForm.value,
+      probability: editForm.probability,
+      expectedCloseDate: editForm.expectedCloseDate,
+      source: editForm.source || null,
+      priority: editForm.priority,
+      tags: editForm.tags || [],
+      painPoints: editForm.painPoints || [],
+      successCriteria: editForm.successCriteria || [],
+      budget: editForm.budget || null,
+      budgetStatus: editForm.budgetStatus || null,
+      decisionProcess: editForm.decisionProcess || null,
+    };
+
+    console.log('Submitting edit form data:', submissionData);
+
     editOpportunityMutation.mutate({
       id: selectedOpportunity.id,
-      data: editForm,
+      data: submissionData,
     });
   };
 
@@ -1389,7 +1427,7 @@ export function SalesPipeline() {
                         <SelectValue placeholder="Select contact" />
                       </SelectTrigger>
                       <SelectContent>
-                        {clients?.map((client) => (
+                        {clients?.filter(client => !editForm.companyId || client.companyId === editForm.companyId).map((client) => (
                           <SelectItem key={client.id} value={client.id}>
                             {client.name} {client.position && `- ${client.position}`} {client.company?.name && `(${client.company.name})`}
                           </SelectItem>

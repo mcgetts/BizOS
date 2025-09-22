@@ -758,32 +758,8 @@ export default function Clients() {
   const { sortedData: sortedClients, sortState: clientSortState, handleSort: handleClientSort } = useTableSort(filteredClients, clientSortConfigs);
 
   return (
-    <Layout title="CRM - Customer Relationship Management" breadcrumbs={["CRM"]}>
+    <Layout title="Customer Relationship Management" breadcrumbs={["CRM"]}>
       <div className="space-y-6">
-        {/* Header Section */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold">CRM Dashboard</h1>
-            <p className="text-muted-foreground">
-              Manage customer contacts and relationships
-            </p>
-          </div>
-        </div>
-
-        {/* Search */}
-        <div className="flex items-center space-x-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search contacts, companies, positions..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 w-80"
-              data-testid="input-search-clients"
-            />
-          </div>
-        </div>
-
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <Card className="glassmorphism">
@@ -841,6 +817,20 @@ export default function Clients() {
               </div>
             </CardContent>
           </Card>
+        </div>
+
+        {/* Search */}
+        <div className="flex items-center space-x-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search contacts, companies, positions..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 w-80"
+              data-testid="input-search-clients"
+            />
+          </div>
         </div>
 
         {/* Sales Pipeline */}

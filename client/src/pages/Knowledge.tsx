@@ -752,6 +752,44 @@ export default function Knowledge() {
           </Card>
         </div>
 
+        {/* Search and Filters */}
+        <div className="flex items-center space-x-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search knowledge base..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 w-80"
+              data-testid="input-search-knowledge"
+            />
+          </div>
+          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+            <SelectTrigger className="w-48" data-testid="select-category-filter">
+              <SelectValue placeholder="Filter by category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              {categories.map((category) => (
+                <SelectItem key={category} value={category}>
+                  {category.charAt(0).toUpperCase() + category.slice(1)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+            <SelectTrigger className="w-40" data-testid="select-status-filter">
+              <SelectValue placeholder="Filter by status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="draft">Draft</SelectItem>
+              <SelectItem value="published">Published</SelectItem>
+              <SelectItem value="archived">Archived</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
         {/* Content Tabs */}
         <Tabs defaultValue="articles" className="space-y-4">
           <TabsList className="grid w-full grid-cols-4">
@@ -766,10 +804,200 @@ export default function Knowledge() {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle>Knowledge Articles</CardTitle>
-                  <Button variant="outline" size="sm">
-                    <Download className="w-4 h-4 mr-2" />
-                    Export
-                  </Button>
+                  <div className="flex items-center gap-4">
+                    <Button variant="outline" size="sm">
+                      <Download className="w-4 h-4 mr-2" />
+                      Export
+                    </Button>
+                    <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
+                      <DialogTrigger asChild>
+                        <Button data-testid="button-add-article">
+                          <Plus className="w-4 h-4 mr-2" />
+                          New Asset
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                        <DialogHeader>
+                          <DialogTitle>Create Knowledge Article</DialogTitle>
+                        </DialogHeader>
+                        <Form {...createForm}>
+                          <form onSubmit={createForm.handleSubmit(onCreateSubmit)} className="space-y-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <FormField
+                                control={createForm.control}
+                                name="title"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Title</FormLabel>
+                                    <FormControl>
+                                      <Input placeholder="Enter article title..." {...field} data-testid="input-article-title" />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={createForm.control}
+                                name="category"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Category</FormLabel>
+                                    <Select onValueChange={field.onChange} value={field.value || "guide"}>
+                                      <FormControl>
+                                        <SelectTrigger data-testid="select-article-category">
+                                          <SelectValue placeholder="Select a category" />
+                                        </SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent>
+                                        {categories.map((category) => (
+                                          <SelectItem key={category} value={category}>
+                                            {category.charAt(0).toUpperCase() + category.slice(1)}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
+                            <FormField
+                              control={createForm.control}
+                              name="content"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Content</FormLabel>
+                                  <FormControl>
+                                    <Textarea
+                                      placeholder="Write your article content here..."
+                                      className="min-h-[200px]"
+                                      {...field}
+                                      data-testid="input-article-content"
+                                    />
+                                  </FormControl>
+                                  <FormDescription>
+                                    Use markdown formatting for better presentation.
+                                  </FormDescription>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={createForm.control}
+                              name="tags"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Tags</FormLabel>
+                                  <div className="space-y-2">
+                                    <div className="flex gap-2">
+                                      <Input
+                                        placeholder="Add a tag..."
+                                        value={tagInput}
+                                        onChange={(e) => setTagInput(e.target.value)}
+                                        onKeyPress={(e) => {
+                                          if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            handleTagAdd(createForm, field.value || []);
+                                          }
+                                        }}
+                                        data-testid="input-article-tag"
+                                      />
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => handleTagAdd(createForm, field.value || [])}
+                                        data-testid="button-add-tag"
+                                      >
+                                        Add
+                                      </Button>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                      {(field.value || []).map((tag, index) => (
+                                        <Badge key={index} variant="secondary" className="flex items-center gap-1">
+                                          {tag}
+                                          <button
+                                            type="button"
+                                            onClick={() => handleTagRemove(createForm, field.value || [], tag)}
+                                            className="ml-1 text-xs"
+                                            data-testid={`button-remove-tag-${index}`}
+                                          >
+                                            ×
+                                          </button>
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  </div>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <FormField
+                                control={createForm.control}
+                                name="status"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Status</FormLabel>
+                                    <Select onValueChange={field.onChange} defaultValue={field.value || undefined}>
+                                      <FormControl>
+                                        <SelectTrigger data-testid="select-article-status">
+                                          <SelectValue placeholder="Select status" />
+                                        </SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent>
+                                        <SelectItem value="draft">Draft</SelectItem>
+                                        <SelectItem value="published">Published</SelectItem>
+                                        <SelectItem value="archived">Archived</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={createForm.control}
+                                name="isPublic"
+                                render={({ field }) => (
+                                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                                    <div className="space-y-0.5">
+                                      <FormLabel className="text-base">Public Access</FormLabel>
+                                      <FormDescription>
+                                        Allow public access to this article
+                                      </FormDescription>
+                                    </div>
+                                    <FormControl>
+                                      <Switch
+                                        checked={field.value}
+                                        onCheckedChange={field.onChange}
+                                        data-testid="switch-article-public"
+                                      />
+                                    </FormControl>
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
+                            <div className="flex justify-end space-x-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setCreateModalOpen(false)}
+                                data-testid="button-cancel-create"
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                type="submit"
+                                disabled={createArticleMutation.isPending}
+                                data-testid="button-submit-create"
+                              >
+                                {createArticleMutation.isPending ? "Creating..." : "Create Article"}
+                              </Button>
+                            </div>
+                          </form>
+                        </Form>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>

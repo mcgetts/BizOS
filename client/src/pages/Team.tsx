@@ -324,50 +324,130 @@ export default function Team() {
   return (
     <Layout title="Team Management" breadcrumbs={["Team"]}>
       <div className="space-y-6">
-        {/* Header Actions */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search team members..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 w-80"
-                data-testid="input-search-team"
-              />
-            </div>
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <Card className="glassmorphism">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Total Members</p>
+                  <p className="text-2xl font-bold" data-testid="text-total-members">
+                    {actualTeamMembers.length}
+                  </p>
+                </div>
+                <Users className="w-8 h-8 text-primary" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="glassmorphism">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Active Now</p>
+                  <p className="text-2xl font-bold" data-testid="text-active-members">
+                    {actualTeamMembers.filter(m => m.isActive).length}
+                  </p>
+                </div>
+                <UserCheck className="w-8 h-8 text-success" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="glassmorphism">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Avg Productivity</p>
+                  <p className="text-2xl font-bold" data-testid="text-avg-productivity">
+                    N/A
+                  </p>
+                </div>
+                <Award className="w-8 h-8 text-warning" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="glassmorphism">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Active Tasks</p>
+                  <p className="text-2xl font-bold" data-testid="text-active-tasks">
+                    {tasks?.filter((task: any) => task.status !== 'completed').length || 0}
+                  </p>
+                </div>
+                <Clock className="w-8 h-8 text-accent-foreground" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Search Bar */}
+        <div className="flex items-center space-x-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search team members..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 w-80"
+              data-testid="input-search-team"
+            />
           </div>
-          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-            <DialogTrigger asChild>
-              <Button data-testid="button-add-member">
-                <Plus className="w-4 h-4 mr-2" />
-                Add Team Member
+        </div>
+
+        {/* Team Members Section */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Team Members</h2>
+          <div className="flex items-center gap-4">
+            <div className="flex justify-center gap-2">
+              <Button
+                variant={viewMode === "grid" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setViewMode("grid")}
+                className="gap-2"
+              >
+                <LayoutGrid className="h-4 w-4" />
+                Grid
               </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>Add Team Member</DialogTitle>
-              </DialogHeader>
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="firstName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>First Name</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Enter first name" {...field} value={field.value ?? ""} data-testid="input-first-name" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="lastName"
-                    render={({ field }) => (
+              <Button
+                variant={viewMode === "table" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setViewMode("table")}
+                className="gap-2"
+              >
+                <Table className="h-4 w-4" />
+                Table
+              </Button>
+            </div>
+            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+              <DialogTrigger asChild>
+                <Button data-testid="button-add-member">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Team Member
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Add Team Member</DialogTitle>
+                </DialogHeader>
+                <Form {...form}>
+                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                    <FormField
+                      control={form.control}
+                      name="firstName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>First Name</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Enter first name" {...field} value={field.value ?? ""} data-testid="input-first-name" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="lastName"
+                      render={({ field }) => (
                       <FormItem>
                         <FormLabel>Last Name</FormLabel>
                         <FormControl>
@@ -464,87 +544,6 @@ export default function Team() {
           </Dialog>
         </div>
 
-        {/* View Toggle */}
-        <div className="flex justify-end gap-2">
-          <Button
-            variant={viewMode === "grid" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setViewMode("grid")}
-            className="gap-2"
-          >
-            <LayoutGrid className="h-4 w-4" />
-            Grid
-          </Button>
-          <Button
-            variant={viewMode === "table" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setViewMode("table")}
-            className="gap-2"
-          >
-            <Table className="h-4 w-4" />
-            Table
-          </Button>
-        </div>
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <Card className="glassmorphism">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Total Members</p>
-                  <p className="text-2xl font-bold" data-testid="text-total-members">
-                    {actualTeamMembers.length}
-                  </p>
-                </div>
-                <Users className="w-8 h-8 text-primary" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="glassmorphism">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Active Now</p>
-                  <p className="text-2xl font-bold" data-testid="text-active-members">
-                    {actualTeamMembers.filter(m => m.isActive).length}
-                  </p>
-                </div>
-                <UserCheck className="w-8 h-8 text-success" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="glassmorphism">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Avg Productivity</p>
-                  <p className="text-2xl font-bold" data-testid="text-avg-productivity">
-                    N/A
-                  </p>
-                </div>
-                <Award className="w-8 h-8 text-warning" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="glassmorphism">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Active Tasks</p>
-                  <p className="text-2xl font-bold" data-testid="text-active-tasks">
-                    {tasks?.filter((task: any) => task.status !== 'completed').length || 0}
-                  </p>
-                </div>
-                <Clock className="w-8 h-8 text-accent-foreground" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
         {/* Team Members Views */}
         {viewMode === "grid" ? (
           /* Grid View */
@@ -567,77 +566,49 @@ export default function Team() {
                       <div>
                         <h3
                           className="font-semibold text-foreground cursor-pointer hover:text-blue-600 hover:underline"
-                          data-testid={`text-name-${index}`}
                           onClick={() => openDetailsDialog(member)}
+                          data-testid={`text-member-name-${index}`}
                         >
                           {getUserDisplayName(member)}
                         </h3>
                         <p className="text-sm text-muted-foreground">{member.role || 'No role assigned'}</p>
                       </div>
                     </div>
-                    <Badge variant={getStatusColor(member.isActive || false)} data-testid={`badge-status-${index}`}>
+                    <Badge variant={getStatusColor(member.isActive || false)}>
                       {member.isActive ? 'Active' : 'Inactive'}
                     </Badge>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex items-center text-sm text-muted-foreground">
-                      <Mail className="w-4 h-4 mr-2" />
-                      {member.email}
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="font-medium text-muted-foreground">Department</p>
+                      <p className="text-foreground">{member.department || 'N/A'}</p>
                     </div>
-                    <div className="flex items-center text-sm text-muted-foreground">
-                      <Phone className="w-4 h-4 mr-2" />
-                      {member.phone}
+                    <div>
+                      <p className="font-medium text-muted-foreground">Position</p>
+                      <p className="text-foreground">{member.position || 'N/A'}</p>
                     </div>
-                    <div className="flex items-center text-sm text-muted-foreground">
-                      <Calendar className="w-4 h-4 mr-2" />
-                      Joined {new Date(member.createdAt || '').toLocaleDateString()}
+                    <div>
+                      <p className="font-medium text-muted-foreground">Email</p>
+                      <p className="text-foreground truncate">{member.email || 'N/A'}</p>
                     </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Department</span>
-                      <span className="font-medium">{member.department}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Active Tasks</span>
-                      <span className="font-medium">{activeTasks.length}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Completed Tasks</span>
-                      <span className="font-medium text-success">{memberTasks.filter(t => t.status === 'completed').length}</span>
+                    <div>
+                      <p className="font-medium text-muted-foreground">Phone</p>
+                      <p className="text-foreground">{member.phone || 'N/A'}</p>
                     </div>
                   </div>
 
-                  {/* Assigned Tasks Section */}
-                  {memberTasks.length > 0 && (
+                  {activeTasks.length > 0 && (
                     <div className="space-y-2">
-                      <p className="text-sm font-medium text-muted-foreground">Current Tasks</p>
-                      <div className="space-y-2 max-h-32 overflow-y-auto">
+                      <p className="text-sm font-medium text-muted-foreground">Active Tasks ({activeTasks.length})</p>
+                      <div className="space-y-1">
                         {activeTasks.slice(0, 3).map((task, taskIndex) => (
-                          <div
-                            key={task.id}
-                            className="p-2 bg-muted/30 rounded-sm border border-border/50"
-                            data-testid={`member-task-${taskIndex}`}
-                          >
-                            <div className="flex items-center justify-between mb-1">
-                              <div className="font-medium text-xs truncate" title={task.title}>
-                                {task.title}
-                              </div>
-                              <Badge
-                                variant="outline"
-                                className={`text-xs ${getTaskStatusColor(task.status || "todo")}`}
-                              >
-                                {task.status || "todo"}
-                              </Badge>
-                            </div>
-                            {task.priority && (
-                              <Badge variant="outline" className="text-xs">
-                                {task.priority}
-                              </Badge>
-                            )}
+                          <div key={task.id} className="flex items-center justify-between text-xs bg-muted/50 rounded p-2">
+                            <span className="truncate">{task.title}</span>
+                            <Badge variant="outline" className="text-xs">
+                              {task.status}
+                            </Badge>
                           </div>
                         ))}
                         {activeTasks.length > 3 && (
@@ -692,13 +663,14 @@ export default function Team() {
                             const deleteMember = async () => {
                               try {
                                 const response = await fetch(`/api/users/${member.id}`, {
-                                  method: 'DELETE'
+                                  method: 'DELETE',
                                 });
+
                                 if (response.ok) {
                                   queryClient.invalidateQueries({ queryKey: ["/api/users"] });
                                   toast({
                                     title: "Success",
-                                    description: "Team member deleted successfully!",
+                                    description: `${getUserDisplayName(member)} has been deleted successfully`,
                                   });
                                 } else {
                                   const errorData = await response.text();
@@ -776,20 +748,20 @@ export default function Team() {
                       Department
                     </SortableTableHead>
                     <SortableTableHead
-                      column="contact"
+                      column="position"
                       currentSort={sortState.column}
                       direction={sortState.direction}
                       onSort={handleSort}
                     >
-                      Contact
+                      Position
                     </SortableTableHead>
                     <SortableTableHead
-                      column="tasks"
+                      column="email"
                       currentSort={sortState.column}
                       direction={sortState.direction}
                       onSort={handleSort}
                     >
-                      Tasks
+                      Email
                     </SortableTableHead>
                     <SortableTableHead
                       column="status"
@@ -799,14 +771,13 @@ export default function Team() {
                     >
                       Status
                     </SortableTableHead>
-                    <th className="w-[100px] p-2">Actions</th>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {sortedMembers.map((member, index) => {
                     const memberTasks = getMemberTasks(member.id);
                     const activeTasks = memberTasks.filter(task => task.status !== 'completed');
-                    const completedTasks = memberTasks.filter(task => task.status === 'completed');
 
                     return (
                       <TableRow key={member.id} data-testid={`row-member-${index}`}>
@@ -814,60 +785,28 @@ export default function Team() {
                           <div className="flex items-center space-x-3">
                             <Avatar className="w-8 h-8">
                               <AvatarImage src={member.profileImageUrl || ''} alt={getUserDisplayName(member)} />
-                              <AvatarFallback className="text-xs">
+                              <AvatarFallback>
                                 {getUserInitials(member)}
                               </AvatarFallback>
                             </Avatar>
                             <div>
-                              <div
-                                className="font-medium cursor-pointer hover:text-blue-600 hover:underline"
-                                data-testid={`text-name-${index}`}
-                                onClick={() => openDetailsDialog(member)}
-                              >
-                                {getUserDisplayName(member)}
-                              </div>
-                              <div className="text-sm text-muted-foreground">
-                                Joined {new Date(member.createdAt || '').toLocaleDateString()}
-                              </div>
+                              <div className="font-medium">{getUserDisplayName(member)}</div>
+                              {activeTasks.length > 0 && (
+                                <div className="text-xs text-muted-foreground">
+                                  {activeTasks.length} active tasks
+                                </div>
+                              )}
                             </div>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <span className="font-medium">{member.role || 'No role assigned'}</span>
+                          <Badge variant="outline">{member.role || 'N/A'}</Badge>
                         </TableCell>
+                        <TableCell>{member.department || 'N/A'}</TableCell>
+                        <TableCell>{member.position || 'N/A'}</TableCell>
+                        <TableCell>{member.email || 'N/A'}</TableCell>
                         <TableCell>
-                          <span>{member.department || 'N/A'}</span>
-                        </TableCell>
-                        <TableCell>
-                          <div className="space-y-1">
-                            {member.email && (
-                              <div className="flex items-center text-sm">
-                                <Mail className="w-3 h-3 mr-1 text-muted-foreground" />
-                                {member.email}
-                              </div>
-                            )}
-                            {member.phone && (
-                              <div className="flex items-center text-sm">
-                                <Phone className="w-3 h-3 mr-1 text-muted-foreground" />
-                                {member.phone}
-                              </div>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="space-y-1">
-                            <div className="text-sm">
-                              <span className="font-medium text-blue-600 dark:text-blue-400">{activeTasks.length}</span>
-                              <span className="text-muted-foreground"> active</span>
-                            </div>
-                            <div className="text-sm">
-                              <span className="font-medium text-green-600 dark:text-green-400">{completedTasks.length}</span>
-                              <span className="text-muted-foreground"> completed</span>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={getStatusColor(member.isActive || false)} data-testid={`badge-status-${index}`}>
+                          <Badge variant={getStatusColor(member.isActive || false)}>
                             {member.isActive ? 'Active' : 'Inactive'}
                           </Badge>
                         </TableCell>
@@ -892,13 +831,14 @@ export default function Team() {
                                   const deleteMember = async () => {
                                     try {
                                       const response = await fetch(`/api/users/${member.id}`, {
-                                        method: 'DELETE'
+                                        method: 'DELETE',
                                       });
+
                                       if (response.ok) {
                                         queryClient.invalidateQueries({ queryKey: ["/api/users"] });
                                         toast({
                                           title: "Success",
-                                          description: "Team member deleted successfully!",
+                                          description: `${getUserDisplayName(member)} has been deleted successfully`,
                                         });
                                       } else {
                                         const errorData = await response.text();
@@ -995,18 +935,22 @@ export default function Team() {
                         <Phone className="w-4 h-4 mr-2 text-muted-foreground" />
                         {selectedMember.phone || 'N/A'}
                       </div>
+                      <div className="flex items-start text-sm">
+                        <MapPin className="w-4 h-4 mr-2 text-muted-foreground mt-0.5" />
+                        <span>{selectedMember.address || 'N/A'}</span>
+                      </div>
                     </div>
                   </div>
 
                   <div>
-                    <h4 className="font-medium text-sm text-muted-foreground mb-2">Work Info</h4>
+                    <h4 className="font-medium text-sm text-muted-foreground mb-2">Work</h4>
                     <div className="space-y-2">
-                      <div className="text-sm">
-                        <span className="text-muted-foreground">Department: </span>
+                      <div className="flex items-center text-sm">
+                        <Calendar className="w-4 h-4 mr-2 text-muted-foreground" />
                         {selectedMember.department || 'N/A'}
                       </div>
-                      <div className="text-sm">
-                        <span className="text-muted-foreground">Position: </span>
+                      <div className="flex items-center text-sm">
+                        <Award className="w-4 h-4 mr-2 text-muted-foreground" />
                         {selectedMember.position || 'N/A'}
                       </div>
                     </div>
@@ -1016,7 +960,7 @@ export default function Team() {
                 {selectedMember.skills && selectedMember.skills.length > 0 && (
                   <div>
                     <h4 className="font-medium text-sm text-muted-foreground mb-2">Skills</h4>
-                    <div className="flex flex-wrap gap-1">
+                    <div className="flex flex-wrap gap-2">
                       {selectedMember.skills.map((skill, index) => (
                         <Badge key={index} variant="outline" className="text-xs">
                           {skill}
@@ -1026,51 +970,32 @@ export default function Team() {
                   </div>
                 )}
 
-                <div>
-                  <h4 className="font-medium text-sm text-muted-foreground mb-2">Task Summary</h4>
-                  <div className="grid grid-cols-3 gap-4">
-                    {(() => {
-                      const memberTasks = getMemberTasks(selectedMember.id);
-                      const activeTasks = memberTasks.filter(task => task.status !== 'completed');
-                      const completedTasks = memberTasks.filter(task => task.status === 'completed');
-                      
-                      return (
-                        <>
-                          <div className="text-center">
-                            <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                              {activeTasks.length}
-                            </div>
-                            <div className="text-xs text-muted-foreground">Active</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                              {completedTasks.length}
-                            </div>
-                            <div className="text-xs text-muted-foreground">Completed</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="text-2xl font-bold">
-                              {memberTasks.length}
-                            </div>
-                            <div className="text-xs text-muted-foreground">Total</div>
-                          </div>
-                        </>
-                      );
-                    })()}
-                  </div>
-                </div>
+                {(() => {
+                  const memberTasks = getMemberTasks(selectedMember.id);
+                  const activeTasks = memberTasks.filter(task => task.status !== 'completed');
 
-                {selectedMember.address && (
-                  <div>
-                    <h4 className="font-medium text-sm text-muted-foreground mb-2">Address</h4>
-                    <div className="flex items-start text-sm">
-                      <MapPin className="w-4 h-4 mr-2 text-muted-foreground mt-0.5" />
-                      {selectedMember.address}
-                    </div>
-                  </div>
-                )}
-
-            </div>
+                  if (activeTasks.length > 0) {
+                    return (
+                      <div>
+                        <h4 className="font-medium text-sm text-muted-foreground mb-2">
+                          Active Tasks ({activeTasks.length})
+                        </h4>
+                        <div className="space-y-2 max-h-32 overflow-y-auto">
+                          {activeTasks.map((task) => (
+                            <div key={task.id} className="flex items-center justify-between text-sm bg-muted/50 rounded p-2">
+                              <span className="truncate">{task.title}</span>
+                              <Badge variant="outline" className="text-xs">
+                                {task.status}
+                              </Badge>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
             )}
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsDetailsDialogOpen(false)}>
@@ -1083,61 +1008,19 @@ export default function Team() {
                     if (selectedMember) {
                       setIsDetailsDialogOpen(false);
                       // Delete functionality - implement API call
-                      const deleteMember = async () => {
-                        try {
-                          const response = await fetch(`/api/users/${selectedMember.id}`, {
-                            method: 'DELETE'
-                          });
-                          if (response.ok) {
-                            setIsDetailsDialogOpen(false);
-                            queryClient.invalidateQueries({ queryKey: ["/api/users"] });
-                            toast({
-                              title: "Success",
-                              description: "Team member deleted successfully!",
-                            });
-                          } else {
-                            const errorData = await response.text();
-                            let errorMessage = 'Failed to delete team member';
-                            try {
-                              const parsedError = JSON.parse(errorData);
-                              errorMessage = parsedError.message || errorMessage;
-                            } catch {
-                              errorMessage = response.status === 401 ? 'Unauthorized - please log in again' :
-                                         response.status === 403 ? 'Permission denied - admin role required' :
-                                         errorMessage;
-                            }
-                            toast({
-                              title: "Error",
-                              description: errorMessage,
-                              variant: "destructive",
-                            });
-                          }
-                        } catch (error) {
-                          console.error('Failed to delete member:', error);
-                          toast({
-                            title: "Error",
-                            description: "Failed to delete team member. Please try again.",
-                            variant: "destructive",
-                          });
-                        }
-                      };
-
-                      if (confirm(`Are you sure you want to delete ${getUserDisplayName(selectedMember)}? This action cannot be undone.`)) {
-                        deleteMember();
-                      }
                     }
                   }}
                 >
-                  <Trash2 className="w-4 h-4 mr-2" />
                   Delete
                 </Button>
-                <Button onClick={() => {
-                  if (selectedMember) {
-                    setIsDetailsDialogOpen(false);
-                    setEditingMember(selectedMember);
-                  }
-                }}>
-                  <Edit className="w-4 h-4 mr-2" />
+                <Button
+                  onClick={() => {
+                    if (selectedMember) {
+                      setEditingMember(selectedMember);
+                      setIsDetailsDialogOpen(false);
+                    }
+                  }}
+                >
                   Edit
                 </Button>
               </div>
@@ -1198,7 +1081,7 @@ export default function Team() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Role</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                      <Select onValueChange={field.onChange} value={field.value ?? undefined}>
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Select role" />
@@ -1241,6 +1124,32 @@ export default function Team() {
                     </FormItem>
                   )}
                 />
+                <FormField
+                  control={editForm.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Phone</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Enter phone number" {...field} value={field.value ?? ""} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={editForm.control}
+                  name="address"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Address</FormLabel>
+                      <FormControl>
+                        <Textarea placeholder="Enter address" {...field} value={field.value ?? ""} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <div className="flex gap-2 pt-4">
                   <Button
                     type="button"
@@ -1263,6 +1172,7 @@ export default function Team() {
           </DialogContent>
         </Dialog>
       </div>
+    </div>
     </Layout>
   );
 }

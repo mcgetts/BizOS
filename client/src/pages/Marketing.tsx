@@ -93,26 +93,6 @@ export default function Marketing() {
   return (
     <Layout title="Marketing" breadcrumbs={["Marketing"]}>
       <div className="space-y-6">
-        {/* Header Actions */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search campaigns..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 w-80"
-                data-testid="input-search-marketing"
-              />
-            </div>
-          </div>
-          <Button data-testid="button-create-campaign">
-            <Plus className="w-4 h-4 mr-2" />
-            Create Campaign
-          </Button>
-        </div>
-
         {/* Marketing Overview Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <Card className="glassmorphism">
@@ -192,6 +172,26 @@ export default function Marketing() {
               </div>
             </CardContent>
           </Card>
+        </div>
+
+        {/* Header Actions */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search campaigns..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 w-80"
+                data-testid="input-search-marketing"
+              />
+            </div>
+          </div>
+          <Button data-testid="button-create-campaign">
+            <Plus className="w-4 h-4 mr-2" />
+            Create Campaign
+          </Button>
         </div>
 
         {/* Campaigns List */}
