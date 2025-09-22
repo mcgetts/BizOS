@@ -701,6 +701,58 @@ is_port_available() {
 - ✅ Smart startup script detects and resolves port conflicts automatically
 - ✅ Process verification confirms no zombie processes remain
 
+### Select.Item Error & Final Port Configuration Fix (Current Session)
+**Date: 2025-09-22**
+
+#### ✅ Select Component Runtime Error Resolution
+**Objective**: Fix "Select.Item must have a value prop that is not an empty string" error in Next Steps editing.
+
+**1. Root Cause Identified** ✅
+- **Error Location**: `OpportunityDetail.tsx` line 845: `<SelectItem value="">Unassigned</SelectItem>`
+- **Problem**: React Select components cannot have empty string values
+- **Impact**: Prevented Next Steps editing functionality and caused runtime overlay errors
+
+**2. Select Component Fix** ✅
+- **Value Change**: Updated `<SelectItem value="">Unassigned</SelectItem>` to `<SelectItem value="unassigned">Unassigned</SelectItem>`
+- **Form Handling**: Updated both create and edit form handlers to treat "unassigned" as null for backend
+- **Data Consistency**: Ensures proper null handling in database while maintaining UI functionality
+
+**3. Port Configuration Standardization** ✅
+- **Server Issue**: Server was hardcoded to force port 5000 in development mode
+- **Fix Applied**: Restored proper `process.env.PORT` handling in `server/index.ts`
+- **Script Update**: Updated `start-dev-server.sh` to use 3001 as default port
+- **Consistency**: All development tooling now uses port 3001 uniformly
+
+**Technical Changes:**
+```javascript
+// Before (causing error):
+<SelectItem value="">Unassigned</SelectItem>
+assignedTo: formData.get('assignedTo') || null
+
+// After (working):
+<SelectItem value="unassigned">Unassigned</SelectItem>
+assignedTo: formData.get('assignedTo') && formData.get('assignedTo') !== 'unassigned'
+  ? formData.get('assignedTo') : null
+```
+
+**Files Modified:**
+- `/client/src/components/OpportunityDetail.tsx`: Fixed SelectItem value and form handling
+- `/server/index.ts`: Restored proper PORT environment variable handling
+- `/scripts/start-dev-server.sh`: Updated default port to 3001
+
+**Impact:**
+- ✅ **No More Runtime Errors**: Select component errors eliminated
+- ✅ **Next Steps Editing**: Fully functional without crashes or overlays
+- ✅ **Port Consistency**: All development tools use port 3001 uniformly
+- ✅ **Proper Data Handling**: "Unassigned" values correctly convert to null in database
+- ✅ **User Experience**: No more disruptive error overlays during development
+
+**Final Verification:**
+- ✅ Server starts cleanly on port 3001 using `npm run dev:safe`
+- ✅ Next Steps editing works without Select.Item errors
+- ✅ Form validation and data handling working correctly
+- ✅ No runtime error overlays appear during normal operation
+
 ---
 *Last updated: 2025-09-22 (Port Conflict Resolution & Enhanced Strategy Tab Complete)*
 *Phase 1 Status: **100% Complete** ✅*

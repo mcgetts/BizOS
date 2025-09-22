@@ -466,7 +466,7 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
     createNextStepMutation.mutate({
       title: formData.get('title'),
       description: formData.get('description'),
-      assignedTo: formData.get('assignedTo') || null,
+      assignedTo: formData.get('assignedTo') && formData.get('assignedTo') !== 'unassigned' ? formData.get('assignedTo') : null,
       dueDate,
       priority: formData.get('priority') || 'medium',
       status: 'pending'
@@ -761,7 +761,7 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
                           dueDate: dueDateValue && dueDateValue.toString().trim()
                             ? dueDateValue.toString().trim()
                             : null,
-                          assignedTo: assignedToValue && assignedToValue.toString().trim()
+                          assignedTo: assignedToValue && assignedToValue.toString().trim() && assignedToValue.toString() !== 'unassigned'
                             ? assignedToValue.toString()
                             : null,
                         };
@@ -842,7 +842,7 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
                                     <SelectValue placeholder="Select user" />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="">Unassigned</SelectItem>
+                                    <SelectItem value="unassigned">Unassigned</SelectItem>
                                     {users?.map((user) => (
                                       <SelectItem key={user.id} value={user.id}>
                                         {user.firstName} {user.lastName}
