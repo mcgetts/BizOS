@@ -40,7 +40,10 @@
       "Bash(xargs -r kill -9)",
       "Bash(rm:*)",
       "WebSearch",
-      "Bash(npx drizzle-kit:*)"
+      "Bash(npx drizzle-kit:*)",
+      "Bash(awk:*)",
+      "Bash(chmod:*)",
+      "Bash(bash:*)"
     ],
     "deny": [],
     "ask": []

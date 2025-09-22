@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "PORT=3001 NODE_ENV=development tsx server/index.ts",
     "dev:clean": "bash scripts/cleanup-processes.sh && npm run dev",
+    "dev:safe": "bash scripts/start-dev-server.sh",
     "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc",

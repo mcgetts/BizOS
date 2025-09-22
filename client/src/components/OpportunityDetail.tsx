@@ -461,7 +461,7 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
     const formData = new FormData(form);
 
     const dueDateValue = formData.get('dueDate') as string;
-    const dueDate = dueDateValue ? new Date(dueDateValue).toISOString() : null;
+    const dueDate = dueDateValue && dueDateValue.trim() ? dueDateValue.trim() : null;
 
     createNextStepMutation.mutate({
       title: formData.get('title'),
@@ -759,7 +759,7 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
                           priority: priorityValue?.toString() || 'medium',
                           status: statusValue?.toString() || 'pending',
                           dueDate: dueDateValue && dueDateValue.toString().trim()
-                            ? new Date(dueDateValue.toString())
+                            ? dueDateValue.toString().trim()
                             : null,
                           assignedTo: assignedToValue && assignedToValue.toString().trim()
                             ? assignedToValue.toString()
