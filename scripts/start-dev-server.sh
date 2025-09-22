@@ -6,7 +6,7 @@
 echo "🚀 Starting development server with conflict prevention..."
 
 # Default port
-DEFAULT_PORT=3001
+DEFAULT_PORT=5000
 PORT=${PORT:-$DEFAULT_PORT}
 
 # Function to check if a port is available
