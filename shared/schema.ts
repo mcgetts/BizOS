@@ -120,6 +120,7 @@ export const tasks = pgTable("tasks", {
   priority: varchar("priority").default("medium").$type<Priority>(),
   estimatedHours: decimal("estimated_hours", { precision: 5, scale: 2 }),
   actualHours: decimal("actual_hours", { precision: 5, scale: 2 }).default("0"),
+  startDate: timestamp("start_date"), // Planned start date for Gantt chart
   dueDate: timestamp("due_date"),
   completedAt: timestamp("completed_at"),
   tags: text("tags").array(),
