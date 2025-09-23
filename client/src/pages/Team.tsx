@@ -467,28 +467,27 @@ export default function Team() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>Team Members</CardTitle>
-              <div className="flex items-center gap-4">
-                <div className="flex justify-center gap-2">
-                  <Button
-                    variant={viewMode === "grid" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setViewMode("grid")}
-                    className="gap-2"
-                  >
-                    <LayoutGrid className="h-4 w-4" />
-                    Grid
-                  </Button>
-                  <Button
-                    variant={viewMode === "table" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setViewMode("table")}
-                    className="gap-2"
-                  >
-                    <Table className="h-4 w-4" />
-                    Table
-                  </Button>
-                </div>
-                <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+              <div className="flex justify-center gap-2">
+                <Button
+                  variant={viewMode === "grid" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setViewMode("grid")}
+                  className="gap-2"
+                >
+                  <LayoutGrid className="h-4 w-4" />
+                  Grid
+                </Button>
+                <Button
+                  variant={viewMode === "table" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setViewMode("table")}
+                  className="gap-2"
+                >
+                  <Table className="h-4 w-4" />
+                  Table
+                </Button>
+              </div>
+              <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
                   <DialogTrigger asChild>
                     <Button data-testid="button-add-member">
                       <Plus className="w-4 h-4 mr-2" />
