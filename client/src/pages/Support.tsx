@@ -420,447 +420,186 @@ export default function Support() {
           </Select>
         </div>
 
-        {/* Support Tickets Section */}
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Support Tickets</h2>
-          <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
-            <DialogTrigger asChild>
-              <Button data-testid="button-create-ticket">
-                <Plus className="w-4 h-4 mr-2" />
-                New Ticket
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Create Support Ticket</DialogTitle>
-              </DialogHeader>
-              <Form {...createForm}>
-                <form onSubmit={createForm.handleSubmit(onCreateSubmit)} className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField
-                      control={createForm.control}
-                      name="category"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Category</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
-                            <FormControl>
-                              <SelectTrigger data-testid="input-category">
-                                <SelectValue placeholder="Select category" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="technical">Technical</SelectItem>
-                              <SelectItem value="billing">Billing</SelectItem>
-                              <SelectItem value="general">General</SelectItem>
-                              <SelectItem value="feature">Feature Request</SelectItem>
-                              <SelectItem value="bug">Bug Report</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={createForm.control}
-                      name="priority"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Priority</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
-                            <FormControl>
-                              <SelectTrigger data-testid="input-priority">
-                                <SelectValue placeholder="Select priority" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="low">Low</SelectItem>
-                              <SelectItem value="medium">Medium</SelectItem>
-                              <SelectItem value="high">High</SelectItem>
-                              <SelectItem value="urgent">Urgent</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField
-                      control={createForm.control}
-                      name="clientId"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Client (Optional)</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value ?? undefined}>
-                            <FormControl>
-                              <SelectTrigger data-testid="input-client">
-                                <SelectValue placeholder="Select client" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {clients?.map((client) => (
-                                <SelectItem key={client.id} value={client.id}>
-                                  {client.name} - {client.company}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={createForm.control}
-                      name="assignedTo"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Assign To (Optional)</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value ?? undefined}>
-                            <FormControl>
-                              <SelectTrigger data-testid="input-assigned-to">
-                                <SelectValue placeholder="Assign to agent" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {users?.filter(user => user.role === 'employee' || user.role === 'manager' || user.role === 'admin').map((user) => (
-                                <SelectItem key={user.id} value={user.id}>
-                                  {user.firstName} {user.lastName}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
-                  <FormField
-                    control={createForm.control}
-                    name="title"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Title</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Brief description of the issue" {...field} data-testid="input-title" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={createForm.control}
-                    name="description"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Description</FormLabel>
-                        <FormControl>
-                          <Textarea 
-                            placeholder="Detailed description of the issue, steps to reproduce, expected behavior..."
-                            className="min-h-[120px]"
-                            {...field} 
-                            data-testid="input-description"
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          Provide as much detail as possible to help us resolve your issue quickly.
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <div className="flex justify-end space-x-4">
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      onClick={() => setCreateModalOpen(false)}
-                      data-testid="button-cancel-create"
-                    >
-                      Cancel
-                    </Button>
-                    <Button 
-                      type="submit" 
-                      disabled={createTicketMutation.isPending}
-                      data-testid="button-submit-create"
-                    >
-                      {createTicketMutation.isPending ? "Creating..." : "Create Ticket"}
-                    </Button>
-                  </div>
-                </form>
-              </Form>
-            </DialogContent>
-          </Dialog>
-        </div>
-
-        {/* Support Overview Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <Card className="glassmorphism">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Open Tickets</p>
-                  <p className="text-2xl font-bold text-destructive" data-testid="text-open-tickets">
-                    {openTickets}
-                  </p>
-                </div>
-                <div className="p-2 bg-destructive/10 rounded-lg">
-                  <AlertTriangle className="w-6 h-6 text-destructive" />
-                </div>
-              </div>
-              <div className="text-sm text-muted-foreground mt-2">
-                Requires immediate attention
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="glassmorphism">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">In Progress</p>
-                  <p className="text-2xl font-bold text-warning" data-testid="text-progress-tickets">
-                    {inProgressTickets}
-                  </p>
-                </div>
-                <div className="p-2 bg-warning/10 rounded-lg">
-                  <Clock className="w-6 h-6 text-warning" />
-                </div>
-              </div>
-              <div className="text-sm text-muted-foreground mt-2">
-                Being worked on
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="glassmorphism">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Resolved</p>
-                  <p className="text-2xl font-bold text-success" data-testid="text-resolved-tickets">
-                    {resolvedTickets}
-                  </p>
-                </div>
-                <div className="p-2 bg-success/10 rounded-lg">
-                  <CheckCircle className="w-6 h-6 text-success" />
-                </div>
-              </div>
-              <div className="text-sm text-muted-foreground mt-2">
-                Awaiting feedback
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="glassmorphism">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Satisfaction</p>
-                  <p className="text-2xl font-bold text-primary" data-testid="text-satisfaction">
-                    {avgRating.toFixed(1)}/5
-                  </p>
-                </div>
-                <div className="p-2 bg-primary/10 rounded-lg">
-                  <Star className="w-6 h-6 text-primary" />
-                </div>
-              </div>
-              <div className="flex text-sm text-warning mt-2">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <Star 
-                    key={i} 
-                    className={`w-3 h-3 ${i < Math.floor(avgRating) ? 'fill-current' : ''}`} 
-                  />
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Support Tickets Section */}
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Support Tickets</h2>
-          <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
-            <DialogTrigger asChild>
-              <Button data-testid="button-create-ticket">
-                <Plus className="w-4 h-4 mr-2" />
-                New Ticket
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Create Support Ticket</DialogTitle>
-              </DialogHeader>
-              <Form {...createForm}>
-                <form onSubmit={createForm.handleSubmit(onCreateSubmit)} className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField
-                      control={createForm.control}
-                      name="category"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Category</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
-                            <FormControl>
-                              <SelectTrigger data-testid="input-category">
-                                <SelectValue placeholder="Select category" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="technical">Technical</SelectItem>
-                              <SelectItem value="billing">Billing</SelectItem>
-                              <SelectItem value="general">General</SelectItem>
-                              <SelectItem value="feature">Feature Request</SelectItem>
-                              <SelectItem value="bug">Bug Report</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={createForm.control}
-                      name="priority"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Priority</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
-                            <FormControl>
-                              <SelectTrigger data-testid="input-priority">
-                                <SelectValue placeholder="Select priority" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="low">Low</SelectItem>
-                              <SelectItem value="medium">Medium</SelectItem>
-                              <SelectItem value="high">High</SelectItem>
-                              <SelectItem value="urgent">Urgent</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField
-                      control={createForm.control}
-                      name="clientId"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Client (Optional)</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value ?? undefined}>
-                            <FormControl>
-                              <SelectTrigger data-testid="input-client">
-                                <SelectValue placeholder="Select client" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {clients?.map((client) => (
-                                <SelectItem key={client.id} value={client.id}>
-                                  {client.name} - {client.company}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={createForm.control}
-                      name="assignedTo"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Assign To (Optional)</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value ?? undefined}>
-                            <FormControl>
-                              <SelectTrigger data-testid="input-assigned-to">
-                                <SelectValue placeholder="Assign to agent" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {users?.filter(user => user.role === 'employee' || user.role === 'manager' || user.role === 'admin').map((user) => (
-                                <SelectItem key={user.id} value={user.id}>
-                                  {user.firstName} {user.lastName}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
-                  <FormField
-                    control={createForm.control}
-                    name="title"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Title</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Brief description of the issue" {...field} data-testid="input-title" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={createForm.control}
-                    name="description"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Description</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder="Detailed description of the issue, steps to reproduce, expected behavior..."
-                            className="min-h-[120px]"
-                            {...field}
-                            data-testid="input-description"
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          Provide as much detail as possible to help us resolve your issue quickly.
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <div className="flex justify-end space-x-4">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setCreateModalOpen(false)}
-                      data-testid="button-cancel-create"
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      type="submit"
-                      disabled={createTicketMutation.isPending}
-                      data-testid="button-submit-create"
-                    >
-                      {createTicketMutation.isPending ? "Creating..." : "Create Ticket"}
-                    </Button>
-                  </div>
-                </form>
-              </Form>
-            </DialogContent>
-          </Dialog>
-        </div>
 
         {/* Support Content */}
         <Card className="glassmorphism">
           <CardHeader>
-            <CardTitle>Support Tickets</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>Support Tickets</CardTitle>
+              <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
+                <DialogTrigger asChild>
+                  <Button data-testid="button-create-ticket">
+                    <Plus className="w-4 h-4 mr-2" />
+                    New Ticket
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl">
+                  <DialogHeader>
+                    <DialogTitle>Create Support Ticket</DialogTitle>
+                  </DialogHeader>
+                  <Form {...createForm}>
+                    <form onSubmit={createForm.handleSubmit(onCreateSubmit)} className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormField
+                          control={createForm.control}
+                          name="category"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Category</FormLabel>
+                              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <FormControl>
+                                  <SelectTrigger data-testid="input-category">
+                                    <SelectValue placeholder="Select category" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="technical">Technical</SelectItem>
+                                  <SelectItem value="billing">Billing</SelectItem>
+                                  <SelectItem value="general">General</SelectItem>
+                                  <SelectItem value="feature">Feature Request</SelectItem>
+                                  <SelectItem value="bug">Bug Report</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={createForm.control}
+                          name="priority"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Priority</FormLabel>
+                              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <FormControl>
+                                  <SelectTrigger data-testid="input-priority">
+                                    <SelectValue placeholder="Select priority" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="low">Low</SelectItem>
+                                  <SelectItem value="medium">Medium</SelectItem>
+                                  <SelectItem value="high">High</SelectItem>
+                                  <SelectItem value="urgent">Urgent</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormField
+                          control={createForm.control}
+                          name="clientId"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Client (Optional)</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value ?? undefined}>
+                                <FormControl>
+                                  <SelectTrigger data-testid="input-client">
+                                    <SelectValue placeholder="Select client" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {clients?.map((client) => (
+                                    <SelectItem key={client.id} value={client.id}>
+                                      {client.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={createForm.control}
+                          name="assignedTo"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Assign To (Optional)</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value ?? undefined}>
+                                <FormControl>
+                                  <SelectTrigger data-testid="input-assigned-to">
+                                    <SelectValue placeholder="Assign to agent" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {users?.filter(user => user.role === 'employee' || user.role === 'manager' || user.role === 'admin').map((user) => (
+                                    <SelectItem key={user.id} value={user.id}>
+                                      {`${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email || 'Unknown User'}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
+                      <FormField
+                        control={createForm.control}
+                        name="title"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Title</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Brief description of the issue" {...field} data-testid="input-title" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={createForm.control}
+                        name="description"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Description</FormLabel>
+                            <FormControl>
+                              <Textarea
+                                placeholder="Detailed description of the issue, steps to reproduce, expected behavior..."
+                                className="min-h-[120px]"
+                                {...field}
+                                data-testid="input-description"
+                              />
+                            </FormControl>
+                            <FormDescription>
+                              Provide as much detail as possible to help us resolve your issue quickly.
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <div className="flex justify-end space-x-4">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setCreateModalOpen(false)}
+                          data-testid="button-cancel-create"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="submit"
+                          disabled={createTicketMutation.isPending}
+                          data-testid="button-submit-create"
+                        >
+                          {createTicketMutation.isPending ? "Creating..." : "Create Ticket"}
+                        </Button>
+                      </div>
+                    </form>
+                  </Form>
+                </DialogContent>
+              </Dialog>
+            </div>
           </CardHeader>
           <CardContent>
             {ticketsLoading ? (

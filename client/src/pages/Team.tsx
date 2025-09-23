@@ -67,6 +67,9 @@ export default function Team() {
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState<User | null>(null);
+  const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
+  const [selectedRole, setSelectedRole] = useState<string>("all");
+  const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<User | null>(null);
 
@@ -280,12 +283,41 @@ export default function Team() {
     const department = (member.department || '').toLowerCase();
     const email = (member.email || '').toLowerCase();
     const searchLower = searchTerm.toLowerCase();
-    
-    return displayName.includes(searchLower) ||
-           role.includes(searchLower) ||
-           department.includes(searchLower) ||
-           email.includes(searchLower);
+
+    // Search filter
+    const matchesSearch = displayName.includes(searchLower) ||
+                         role.includes(searchLower) ||
+                         department.includes(searchLower) ||
+                         email.includes(searchLower);
+
+    // Department filter
+    const matchesDepartment = selectedDepartment === "all" ||
+                             (member.department || '').toLowerCase() === selectedDepartment;
+
+    // Role filter
+    const matchesRole = selectedRole === "all" ||
+                       (member.role || '').toLowerCase() === selectedRole;
+
+    // Status filter
+    const matchesStatus = selectedStatus === "all" ||
+                         (selectedStatus === "active" && member.isActive) ||
+                         (selectedStatus === "inactive" && !member.isActive);
+
+    return matchesSearch && matchesDepartment && matchesRole && matchesStatus;
   });
+
+  // Get unique departments and roles for filter options
+  const uniqueDepartments = Array.from(new Set(actualTeamMembers
+    .map(member => member.department)
+    .filter(Boolean)
+    .map(dept => dept!.toLowerCase())
+  )).sort();
+
+  const uniqueRoles = Array.from(new Set(actualTeamMembers
+    .map(member => member.role)
+    .filter(Boolean)
+    .map(role => role!.toLowerCase())
+  )).sort();
 
   // Sorting configuration
   const sortConfigs: SortConfig[] = [
@@ -380,7 +412,7 @@ export default function Team() {
           </Card>
         </div>
 
-        {/* Search Bar */}
+        {/* Search and Filters */}
         <div className="flex items-center space-x-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -392,39 +424,77 @@ export default function Team() {
               data-testid="input-search-team"
             />
           </div>
+          <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
+            <SelectTrigger className="w-48" data-testid="select-department-filter">
+              <SelectValue placeholder="Filter by department" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Departments</SelectItem>
+              {uniqueDepartments.map((department) => (
+                <SelectItem key={department} value={department}>
+                  {department.charAt(0).toUpperCase() + department.slice(1)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={selectedRole} onValueChange={setSelectedRole}>
+            <SelectTrigger className="w-40" data-testid="select-role-filter">
+              <SelectValue placeholder="Filter by role" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Roles</SelectItem>
+              {uniqueRoles.map((role) => (
+                <SelectItem key={role} value={role}>
+                  {role.charAt(0).toUpperCase() + role.slice(1)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+            <SelectTrigger className="w-32" data-testid="select-status-filter">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="inactive">Inactive</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
-        {/* Team Members Section */}
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Team Members</h2>
-          <div className="flex items-center gap-4">
-            <div className="flex justify-center gap-2">
-              <Button
-                variant={viewMode === "grid" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setViewMode("grid")}
-                className="gap-2"
-              >
-                <LayoutGrid className="h-4 w-4" />
-                Grid
-              </Button>
-              <Button
-                variant={viewMode === "table" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setViewMode("table")}
-                className="gap-2"
-              >
-                <Table className="h-4 w-4" />
-                Table
-              </Button>
-            </div>
-            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-              <DialogTrigger asChild>
-                <Button data-testid="button-add-member">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Team Member
-                </Button>
-              </DialogTrigger>
+        {/* Team Members Content */}
+        <Card className="glassmorphism">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Team Members</CardTitle>
+              <div className="flex items-center gap-4">
+                <div className="flex justify-center gap-2">
+                  <Button
+                    variant={viewMode === "grid" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setViewMode("grid")}
+                    className="gap-2"
+                  >
+                    <LayoutGrid className="h-4 w-4" />
+                    Grid
+                  </Button>
+                  <Button
+                    variant={viewMode === "table" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setViewMode("table")}
+                    className="gap-2"
+                  >
+                    <Table className="h-4 w-4" />
+                    Table
+                  </Button>
+                </div>
+                <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button data-testid="button-add-member">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Team Member
+                    </Button>
+                  </DialogTrigger>
               <DialogContent className="max-w-md">
                 <DialogHeader>
                   <DialogTitle>Add Team Member</DialogTitle>
@@ -541,10 +611,12 @@ export default function Team() {
                 </form>
               </Form>
             </DialogContent>
-          </Dialog>
-        </div>
-
-        {/* Team Members Views */}
+                </Dialog>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {/* Team Members Views */}
         {viewMode === "grid" ? (
           /* Grid View */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -886,9 +958,9 @@ export default function Team() {
               </TableComponent>
             </CardContent>
           </Card>
-        )}
+            )}
 
-        {filteredMembers.length === 0 && (
+            {filteredMembers.length === 0 && (
           <Card className="glassmorphism">
             <CardContent className="text-center py-8">
               <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
@@ -897,7 +969,9 @@ export default function Team() {
               </p>
             </CardContent>
           </Card>
-        )}
+            )}
+          </CardContent>
+        </Card>
 
         {/* View Details Dialog */}
         <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
@@ -1172,7 +1246,6 @@ export default function Team() {
           </DialogContent>
         </Dialog>
       </div>
-    </div>
     </Layout>
   );
 }

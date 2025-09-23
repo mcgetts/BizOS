@@ -1116,7 +1116,8 @@ export default function Finance() {
         </div>
 
         {/* View Toggle with Action Buttons */}
-        <div className="flex items-center justify-center gap-4">
+        <div className="flex items-center justify-between">
+          <div></div>
           <div className="flex justify-center gap-2">
             <Button
               variant={viewMode === "board" ? "default" : "outline"}
@@ -1137,7 +1138,7 @@ export default function Finance() {
               Table
             </Button>
           </div>
-          <div className="flex space-x-2 ml-auto">
+          <div className="flex space-x-2">
             <ExpenseForm onSuccess={() => {}} />
             <InvoiceForm onSuccess={() => {}} />
           </div>

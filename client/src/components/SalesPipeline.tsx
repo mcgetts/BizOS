@@ -808,16 +808,16 @@ export function SalesPipeline() {
       {/* Centered View Toggle Buttons */}
       <div className="absolute left-1/2 transform -translate-x-1/2 flex space-x-2">
         <Button
-          variant={viewMode === "table" ? "default" : "outline"}
-          onClick={() => setViewMode("table")}
-        >
-          Table
-        </Button>
-        <Button
           variant={viewMode === "kanban" ? "default" : "outline"}
           onClick={() => setViewMode("kanban")}
         >
           Board
+        </Button>
+        <Button
+          variant={viewMode === "table" ? "default" : "outline"}
+          onClick={() => setViewMode("table")}
+        >
+          Table
         </Button>
       </div>
 

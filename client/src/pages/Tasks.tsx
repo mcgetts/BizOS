@@ -716,44 +716,45 @@ export default function Tasks() {
         </div>
 
         {/* View Toggle with Tasks Label and Create Button */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between relative">
           <h2 className="text-lg font-semibold">Tasks</h2>
-          <div className="flex items-center gap-4">
-            <div className="flex justify-center gap-2">
-              <Button
-                variant={viewMode === "kanban" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setViewMode("kanban")}
-                className="gap-2"
-              >
-                <LayoutGrid className="h-4 w-4" />
-                Board
-              </Button>
-              <Button
-                variant={viewMode === "table" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setViewMode("table")}
-                className="gap-2"
-              >
-                <Table className="h-4 w-4" />
-                Table
-              </Button>
-            </div>
-            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-              <DialogTrigger asChild>
-                <Button data-testid="button-create-task">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Task
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>Create New Task</DialogTitle>
-                </DialogHeader>
-                <TaskForm onSuccess={handleCreateSuccess} />
-              </DialogContent>
-            </Dialog>
+
+          {/* Centered View Toggle Buttons */}
+          <div className="absolute left-1/2 transform -translate-x-1/2 flex gap-2">
+            <Button
+              variant={viewMode === "kanban" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setViewMode("kanban")}
+              className="gap-2"
+            >
+              <LayoutGrid className="h-4 w-4" />
+              Board
+            </Button>
+            <Button
+              variant={viewMode === "table" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setViewMode("table")}
+              className="gap-2"
+            >
+              <Table className="h-4 w-4" />
+              Table
+            </Button>
           </div>
+
+          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+            <DialogTrigger asChild>
+              <Button data-testid="button-create-task">
+                <Plus className="h-4 w-4 mr-2" />
+                Create Task
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Create New Task</DialogTitle>
+              </DialogHeader>
+              <TaskForm onSuccess={handleCreateSuccess} />
+            </DialogContent>
+          </Dialog>
         </div>
 
         {/* Tasks Views */}

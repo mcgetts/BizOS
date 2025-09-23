@@ -188,22 +188,22 @@ export default function Marketing() {
               />
             </div>
           </div>
-          <Button data-testid="button-create-campaign">
-            <Plus className="w-4 h-4 mr-2" />
-            Create Campaign
-          </Button>
+          <div className="flex items-center gap-4">
+            <Button variant="outline" size="sm">
+              <BarChart3 className="w-4 h-4 mr-2" />
+              Analytics
+            </Button>
+            <Button data-testid="button-create-campaign">
+              <Plus className="w-4 h-4 mr-2" />
+              Create Campaign
+            </Button>
+          </div>
         </div>
 
         {/* Campaigns List */}
         <Card className="glassmorphism">
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Marketing Campaigns</CardTitle>
-              <Button variant="outline" size="sm">
-                <BarChart3 className="w-4 h-4 mr-2" />
-                Analytics
-              </Button>
-            </div>
+            <CardTitle>Marketing Campaigns</CardTitle>
           </CardHeader>
           <CardContent>
             {campaignsLoading ? (
