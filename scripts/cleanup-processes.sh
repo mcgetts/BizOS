@@ -93,6 +93,12 @@ else
 fi
 
 echo ""
+echo "🔄 Clearing Node.js cache and build artifacts..."
+rm -rf node_modules/.cache dist .tsx_cache 2>/dev/null || true
+rm -f .server.lock 2>/dev/null || true
+echo "✅ Cache and lock files cleared"
+
+echo ""
 echo "✅ Enhanced process cleanup completed!"
 echo "🚀 You can now run 'npm run dev' safely"
 echo "💡 For best results, use 'npm run dev:clean' which runs this script automatically"

@@ -95,6 +95,18 @@ echo "🌐 Application will be available at: http://localhost:$PORT"
 echo "ℹ️  Server will respect PORT environment variable (currently: $PORT)"
 echo ""
 
+# Force kill any remaining processes one more time
+echo "🔄 Final aggressive cleanup..."
+pkill -f "tsx.*server/index.ts" 2>/dev/null || true
+pkill -f "node.*server/index.ts" 2>/dev/null || true
+pkill -f "npm.*dev" 2>/dev/null || true
+sleep 1
+
+# Clear module cache to prevent stale code
+echo "🔄 Clearing module cache..."
+rm -rf node_modules/.cache 2>/dev/null || true
+
 # Export the port and start the server
 export PORT=$PORT
+echo "🚀 Starting fresh server instance on port $PORT..."
 exec npm run dev

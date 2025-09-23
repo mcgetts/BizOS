@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Table as TableComponent, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -38,9 +39,28 @@ import {
   Edit,
   Trash2,
   Table,
-  LayoutGrid
+  LayoutGrid,
+  Activity,
+  Target,
+  TrendingUp,
+  AlertTriangle,
+  BarChart3
 } from "lucide-react";
 import { z } from "zod";
+import {
+  BarChart,
+  Bar,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell
+} from "recharts";
 
 // Form schema for adding team members
 const insertUserSchema = createInsertSchema(users).omit({
@@ -72,6 +92,7 @@ export default function Team() {
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<User | null>(null);
+  const [activeTab, setActiveTab] = useState<string>("members");
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -95,6 +116,17 @@ export default function Team() {
 
   const { data: teamMembers, isLoading: isLoadingTeam } = useQuery<User[]>({
     queryKey: ["/api/users"],
+    enabled: isAuthenticated,
+  });
+
+  // Workload and capacity data
+  const { data: workloadSnapshots } = useQuery({
+    queryKey: ["/api/workload-snapshots"],
+    enabled: isAuthenticated && activeTab === "capacity",
+  });
+
+  const { data: resourceAllocations } = useQuery({
+    queryKey: ["/api/resource-allocations"],
     enabled: isAuthenticated,
   });
 
@@ -277,6 +309,106 @@ export default function Team() {
     }
   };
 
+  // Capacity and workload calculations
+  const calculateTeamMetrics = () => {
+    const activeMembers = actualTeamMembers.filter(m => m.isActive);
+    const allocations = resourceAllocations || [];
+    const snapshots = workloadSnapshots || [];
+
+    // Calculate average team utilization
+    const totalUtilization = snapshots.reduce((sum: number, snapshot: any) =>
+      sum + (parseFloat(snapshot.utilizationPercentage) || 0), 0);
+    const avgUtilization = snapshots.length > 0 ? totalUtilization / snapshots.length : 0;
+
+    // Count overallocated team members
+    const overallocatedCount = snapshots.filter((snapshot: any) =>
+      parseFloat(snapshot.overallocationHours) > 0).length;
+
+    // Calculate total allocated hours
+    const totalAllocatedHours = allocations
+      .filter((alloc: any) => alloc.status === 'active')
+      .reduce((sum: number, alloc: any) => sum + (parseFloat(alloc.allocatedHours) || 0), 0);
+
+    return {
+      activeMembers: activeMembers.length,
+      avgUtilization: Math.round(avgUtilization),
+      overallocatedCount,
+      totalAllocatedHours: Math.round(totalAllocatedHours)
+    };
+  };
+
+  const teamMetrics = calculateTeamMetrics();
+
+  // Chart data generation
+  const generateUtilizationChartData = () => {
+    const snapshots = workloadSnapshots || [];
+    const activeMembers = actualTeamMembers.filter(m => m.isActive);
+
+    return activeMembers.map(member => {
+      const memberSnapshots = snapshots.filter((ws: any) => ws.userId === member.id);
+      const latestSnapshot = memberSnapshots.sort((a: any, b: any) =>
+        new Date(b.snapshotDate).getTime() - new Date(a.snapshotDate).getTime()
+      )[0];
+
+      const utilization = latestSnapshot ? parseFloat(latestSnapshot.utilizationPercentage) : 0;
+      const allocatedHours = latestSnapshot ? parseFloat(latestSnapshot.totalAllocatedHours) : 0;
+      const availableHours = latestSnapshot ? parseFloat(latestSnapshot.availableHours) : 40;
+
+      return {
+        name: getUserDisplayName(member).split(' ')[0], // First name only for charts
+        utilization: Math.round(utilization),
+        allocated: Math.round(allocatedHours),
+        available: Math.round(availableHours),
+        overallocated: utilization > 100
+      };
+    });
+  };
+
+  const generateCapacityTrendData = () => {
+    // Generate mock trend data for demonstration
+    const weeks = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
+    return weeks.map((week, index) => ({
+      week,
+      teamUtilization: Math.round(75 + Math.random() * 30),
+      targetUtilization: 85,
+      overallocatedMembers: Math.floor(Math.random() * 3)
+    }));
+  };
+
+  const generateWorkloadDistributionData = () => {
+    const data = [
+      { name: 'Under 50%', value: 0, count: 0, color: '#10b981' },
+      { name: '50-80%', value: 0, count: 0, color: '#3b82f6' },
+      { name: '80-100%', value: 0, count: 0, color: '#f59e0b' },
+      { name: 'Over 100%', value: 0, count: 0, color: '#ef4444' }
+    ];
+
+    const snapshots = workloadSnapshots || [];
+    const activeMembers = actualTeamMembers.filter(m => m.isActive);
+
+    activeMembers.forEach(member => {
+      const memberSnapshots = snapshots.filter((ws: any) => ws.userId === member.id);
+      const latestSnapshot = memberSnapshots[0];
+      const utilization = latestSnapshot ? parseFloat(latestSnapshot.utilizationPercentage) : 0;
+
+      if (utilization < 50) data[0].count++;
+      else if (utilization < 80) data[1].count++;
+      else if (utilization <= 100) data[2].count++;
+      else data[3].count++;
+    });
+
+    const total = activeMembers.length;
+    data.forEach(item => {
+      item.value = total > 0 ? Math.round((item.count / total) * 100) : 0;
+    });
+
+    return data.filter(item => item.count > 0);
+  };
+
+  const utilizationData = generateUtilizationChartData();
+  const capacityTrendData = generateCapacityTrendData();
+  const workloadDistributionData = generateWorkloadDistributionData();
+
   const filteredMembers = actualTeamMembers.filter((member) => {
     const displayName = getUserDisplayName(member).toLowerCase();
     const role = (member.role || '').toLowerCase();
@@ -357,7 +489,7 @@ export default function Team() {
     <Layout title="Team Management" breadcrumbs={["Team"]}>
       <div className="space-y-6">
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6">
           <Card className="glassmorphism">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -410,59 +542,106 @@ export default function Team() {
               </div>
             </CardContent>
           </Card>
+
+          {/* New Capacity Management KPIs */}
+          <Card className="glassmorphism">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Avg Utilization</p>
+                  <p className="text-2xl font-bold" data-testid="text-avg-utilization">
+                    {teamMetrics.avgUtilization}%
+                  </p>
+                </div>
+                <Target className="w-8 h-8 text-primary" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="glassmorphism">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Overallocated</p>
+                  <p className="text-2xl font-bold" data-testid="text-overallocated">
+                    {teamMetrics.overallocatedCount}
+                  </p>
+                </div>
+                <AlertTriangle className={`w-8 h-8 ${teamMetrics.overallocatedCount > 0 ? 'text-destructive' : 'text-success'}`} />
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
-        {/* Search and Filters */}
-        <div className="flex items-center space-x-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search team members..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 w-80"
-              data-testid="input-search-team"
-            />
-          </div>
-          <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
-            <SelectTrigger className="w-48" data-testid="select-department-filter">
-              <SelectValue placeholder="Filter by department" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Departments</SelectItem>
-              {uniqueDepartments.map((department) => (
-                <SelectItem key={department} value={department}>
-                  {department.charAt(0).toUpperCase() + department.slice(1)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={selectedRole} onValueChange={setSelectedRole}>
-            <SelectTrigger className="w-40" data-testid="select-role-filter">
-              <SelectValue placeholder="Filter by role" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Roles</SelectItem>
-              {uniqueRoles.map((role) => (
-                <SelectItem key={role} value={role}>
-                  {role.charAt(0).toUpperCase() + role.slice(1)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-            <SelectTrigger className="w-32" data-testid="select-status-filter">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="inactive">Inactive</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        {/* Main Content Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="members" className="gap-2">
+              <Users className="h-4 w-4" />
+              Team Members
+            </TabsTrigger>
+            <TabsTrigger value="capacity" className="gap-2">
+              <BarChart3 className="h-4 w-4" />
+              Capacity Dashboard
+            </TabsTrigger>
+            <TabsTrigger value="analytics" className="gap-2">
+              <TrendingUp className="h-4 w-4" />
+              Analytics
+            </TabsTrigger>
+          </TabsList>
 
-        {/* Team Members Content */}
+          <TabsContent value="members" className="mt-6 space-y-6">
+            {/* Search and Filters */}
+            <div className="flex items-center space-x-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search team members..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 w-80"
+                  data-testid="input-search-team"
+                />
+              </div>
+              <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
+                <SelectTrigger className="w-48" data-testid="select-department-filter">
+                  <SelectValue placeholder="Filter by department" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Departments</SelectItem>
+                  {uniqueDepartments.map((department) => (
+                    <SelectItem key={department} value={department}>
+                      {department.charAt(0).toUpperCase() + department.slice(1)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={selectedRole} onValueChange={setSelectedRole}>
+                <SelectTrigger className="w-40" data-testid="select-role-filter">
+                  <SelectValue placeholder="Filter by role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Roles</SelectItem>
+                  {uniqueRoles.map((role) => (
+                    <SelectItem key={role} value={role}>
+                      {role.charAt(0).toUpperCase() + role.slice(1)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+                <SelectTrigger className="w-32" data-testid="select-status-filter">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Team Members Content */}
         <Card className="glassmorphism">
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -1243,6 +1422,388 @@ export default function Team() {
             </Form>
           </DialogContent>
         </Dialog>
+          </TabsContent>
+
+          <TabsContent value="capacity" className="mt-6 space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Team Workload Summary */}
+              <Card className="glassmorphism">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Activity className="h-5 w-5" />
+                    Team Workload Summary
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {actualTeamMembers
+                    .filter(member => member.isActive)
+                    .map(member => {
+                      const memberSnapshots = workloadSnapshots?.filter((ws: any) => ws.userId === member.id) || [];
+                      const latestSnapshot = memberSnapshots.sort((a: any, b: any) =>
+                        new Date(b.snapshotDate).getTime() - new Date(a.snapshotDate).getTime()
+                      )[0];
+
+                      const utilization = latestSnapshot ? parseFloat(latestSnapshot.utilizationPercentage) : 0;
+                      const isOverallocated = latestSnapshot ? parseFloat(latestSnapshot.overallocationHours) > 0 : false;
+
+                      return (
+                        <div key={member.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-8 w-8">
+                              <AvatarImage src={member.profileImageUrl} />
+                              <AvatarFallback>{getUserInitials(member)}</AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="font-medium text-sm">{getUserDisplayName(member)}</p>
+                              <p className="text-xs text-muted-foreground">{member.role}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-medium">{Math.round(utilization)}%</p>
+                            {isOverallocated && (
+                              <Badge variant="destructive" className="text-xs">
+                                Overallocated
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                </CardContent>
+              </Card>
+
+              {/* Resource Allocation Interface */}
+              <Card className="glassmorphism">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5" />
+                    Resource Allocation Interface
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {user?.role === 'admin' || user?.role === 'manager' ? (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm text-muted-foreground">
+                          Drag team members to allocate them to projects and tasks
+                        </p>
+                        <Button size="sm" variant="outline">
+                          <Plus className="h-4 w-4 mr-2" />
+                          New Allocation
+                        </Button>
+                      </div>
+
+                      {/* Available Team Members */}
+                      <div className="border-2 border-dashed border-muted rounded-lg p-4">
+                        <h4 className="font-medium text-sm mb-3 text-muted-foreground">Available Team Members</h4>
+                        <div className="grid grid-cols-1 gap-2">
+                          {actualTeamMembers
+                            .filter(member => member.isActive)
+                            .map(member => {
+                              const memberSnapshots = workloadSnapshots?.filter((ws: any) => ws.userId === member.id) || [];
+                              const latestSnapshot = memberSnapshots[0];
+                              const utilization = latestSnapshot ? parseFloat(latestSnapshot.utilizationPercentage) : 0;
+
+                              return (
+                                <div
+                                  key={member.id}
+                                  className="flex items-center justify-between p-2 bg-background rounded border cursor-move hover:bg-muted/50 transition-colors"
+                                  draggable
+                                  onDragStart={(e) => {
+                                    e.dataTransfer.setData('text/plain', JSON.stringify({
+                                      type: 'team-member',
+                                      memberId: member.id,
+                                      memberName: getUserDisplayName(member),
+                                      utilization
+                                    }));
+                                  }}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <Avatar className="h-6 w-6">
+                                      <AvatarImage src={member.profileImageUrl} />
+                                      <AvatarFallback className="text-xs">{getUserInitials(member)}</AvatarFallback>
+                                    </Avatar>
+                                    <span className="text-sm font-medium">{getUserDisplayName(member)}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs text-muted-foreground">{Math.round(utilization)}%</span>
+                                    <div className={`w-2 h-2 rounded-full ${
+                                      utilization > 100 ? 'bg-destructive' :
+                                      utilization > 80 ? 'bg-warning' : 'bg-success'
+                                    }`} />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                        </div>
+                      </div>
+
+                      {/* Drop Zone for Project Allocation */}
+                      <div
+                        className="border-2 border-dashed border-primary/50 rounded-lg p-6 text-center transition-colors hover:border-primary hover:bg-primary/5"
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.currentTarget.classList.add('border-primary', 'bg-primary/10');
+                        }}
+                        onDragLeave={(e) => {
+                          e.currentTarget.classList.remove('border-primary', 'bg-primary/10');
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          e.currentTarget.classList.remove('border-primary', 'bg-primary/10');
+
+                          const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+                          if (data.type === 'team-member') {
+                            toast({
+                              title: "Resource Allocation",
+                              description: `${data.memberName} has been marked for project allocation. Full allocation interface coming soon!`,
+                            });
+                          }
+                        }}
+                      >
+                        <div className="space-y-2">
+                          <Target className="h-8 w-8 mx-auto text-muted-foreground" />
+                          <p className="font-medium">Drop here to allocate to projects</p>
+                          <p className="text-xs text-muted-foreground">
+                            Drag team members here to create new project allocations
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Badge variant="outline" className="mb-4">Manager Access Required</Badge>
+                      <p>Resource allocation is available to managers and administrators</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Current Resource Allocations */}
+            <Card className="glassmorphism">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5" />
+                  Current Resource Allocations
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {resourceAllocations && resourceAllocations.length > 0 ? (
+                  <div className="space-y-4">
+                    {resourceAllocations
+                      .filter((alloc: any) => alloc.status === 'active')
+                      .map((allocation: any) => {
+                        const member = actualTeamMembers.find(m => m.id === allocation.userId);
+                        if (!member) return null;
+
+                        return (
+                          <div key={allocation.id} className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border">
+                            <div className="flex items-center gap-4">
+                              <Avatar className="h-8 w-8">
+                                <AvatarImage src={member.profileImageUrl} />
+                                <AvatarFallback className="text-xs">{getUserInitials(member)}</AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <p className="font-medium text-sm">{getUserDisplayName(member)}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {allocation.allocatedHours}h allocated • {allocation.priority} priority
+                                </p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <Badge variant="outline" className="text-xs">
+                                {allocation.allocationType}
+                              </Badge>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {allocation.utilizationTarget}% target
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Target className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No active resource allocations</p>
+                    <p className="text-sm">Start by allocating team members to projects above</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="analytics" className="mt-6 space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Team Utilization Chart */}
+              <Card className="glassmorphism">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <BarChart3 className="h-5 w-5" />
+                    Team Utilization
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={utilizationData}>
+                        <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                        <XAxis dataKey="name" className="text-xs" />
+                        <YAxis className="text-xs" />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: 'hsl(var(--background))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '6px'
+                          }}
+                          formatter={(value, name) => [
+                            `${value}${name === 'utilization' ? '%' : 'h'}`,
+                            name === 'utilization' ? 'Utilization' :
+                            name === 'allocated' ? 'Allocated Hours' : 'Available Hours'
+                          ]}
+                        />
+                        <Bar
+                          dataKey="utilization"
+                          fill="hsl(var(--primary))"
+                          radius={[4, 4, 0, 0]}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Workload Distribution Pie Chart */}
+              <Card className="glassmorphism">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Activity className="h-5 w-5" />
+                    Workload Distribution
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={workloadDistributionData}
+                          cx="50%"
+                          cy="50%"
+                          outerRadius={80}
+                          dataKey="value"
+                          label={({ name, value }) => `${name}: ${value}%`}
+                          labelLine={false}
+                        >
+                          {workloadDistributionData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: 'hsl(var(--background))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '6px'
+                          }}
+                          formatter={(value, name, props) => [
+                            `${props.payload.count} members (${value}%)`,
+                            'Team Members'
+                          ]}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Capacity Trend Chart */}
+              <Card className="glassmorphism lg:col-span-2">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5" />
+                    Capacity Trends
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={capacityTrendData}>
+                        <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                        <XAxis dataKey="week" className="text-xs" />
+                        <YAxis className="text-xs" />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: 'hsl(var(--background))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '6px'
+                          }}
+                          formatter={(value, name) => [
+                            `${value}${name === 'overallocatedMembers' ? ' members' : '%'}`,
+                            name === 'teamUtilization' ? 'Team Utilization' :
+                            name === 'targetUtilization' ? 'Target Utilization' : 'Overallocated Members'
+                          ]}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="teamUtilization"
+                          stroke="hsl(var(--primary))"
+                          strokeWidth={2}
+                          dot={{ fill: 'hsl(var(--primary))', strokeWidth: 2, r: 4 }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="targetUtilization"
+                          stroke="hsl(var(--muted-foreground))"
+                          strokeWidth={2}
+                          strokeDasharray="5 5"
+                          dot={{ fill: 'hsl(var(--muted-foreground))', strokeWidth: 2, r: 4 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Analytics Insights */}
+            <Card className="glassmorphism">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Eye className="h-5 w-5" />
+                  Analytics Insights
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="p-4 bg-muted/30 rounded-lg">
+                    <h4 className="font-medium text-sm mb-2">Capacity Utilization</h4>
+                    <p className="text-xs text-muted-foreground">
+                      {teamMetrics.avgUtilization > 90 ? 'Team is highly utilized. Consider capacity planning.' :
+                       teamMetrics.avgUtilization > 70 ? 'Good utilization levels. Monitor for overallocation.' :
+                       'Capacity available for new projects.'}
+                    </p>
+                  </div>
+                  <div className="p-4 bg-muted/30 rounded-lg">
+                    <h4 className="font-medium text-sm mb-2">Resource Balance</h4>
+                    <p className="text-xs text-muted-foreground">
+                      {teamMetrics.overallocatedCount > 0 ?
+                       `${teamMetrics.overallocatedCount} members overallocated. Rebalance workload.` :
+                       'All team members within capacity limits.'}
+                    </p>
+                  </div>
+                  <div className="p-4 bg-muted/30 rounded-lg">
+                    <h4 className="font-medium text-sm mb-2">Workload Distribution</h4>
+                    <p className="text-xs text-muted-foreground">
+                      {workloadDistributionData.length > 0 ?
+                       `Most common utilization: ${workloadDistributionData[0]?.name}` :
+                       'No workload data available.'}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </Layout>
   );
