@@ -23,6 +23,8 @@ import type { Task, InsertTask, Project, User, Company, TaskDependency } from "@
 import { useTableSort, SortConfig } from "@/hooks/useTableSort";
 import { SortableTableHead } from "@/components/SortableHeader";
 import { z } from "zod";
+import { GanttChart } from "@/components/GanttChart";
+import { getStatusBadge, getPriorityBadge, statusConfig } from "@/lib/statusUtils";
 import { 
   Plus,
   Search,
@@ -65,37 +67,6 @@ const taskFormSchema = z.object({
 
 type TaskFormData = z.infer<typeof taskFormSchema>;
 
-// Status configuration with colors for kanban headers
-const statusConfig = [
-  { key: "todo", label: "To Do", color: "bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100" },
-  { key: "in_progress", label: "In Progress", color: "bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-100" },
-  { key: "blocked", label: "Blocked", color: "bg-red-100 dark:bg-red-800 text-red-800 dark:text-red-100" },
-  { key: "review", label: "Review", color: "bg-yellow-100 dark:bg-yellow-800 text-yellow-800 dark:text-yellow-100" },
-  { key: "completed", label: "Completed", color: "bg-green-100 dark:bg-green-800 text-green-800 dark:text-green-100" },
-];
-
-// Helper functions for status and priority styling
-const getStatusBadge = (status: string) => {
-  const statusItem = statusConfig.find(s => s.key === status);
-  if (statusItem) {
-    return statusItem.color;
-  }
-  // Fallback for any status not in statusConfig
-  const styles = {
-    blocked: "bg-red-100 dark:bg-red-800 text-red-800 dark:text-red-100",
-  };
-  return styles[status as keyof typeof styles] || statusConfig[0].color; // Default to todo color
-};
-
-const getPriorityBadge = (priority: string) => {
-  const styles = {
-    low: "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300",
-    medium: "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300",
-    high: "bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300",
-    urgent: "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300",
-  };
-  return styles[priority as keyof typeof styles] || styles.medium;
-};
 
 const getStatusIcon = (status: string) => {
   const icons = {
@@ -1135,127 +1106,13 @@ export default function Tasks() {
             })}
           </div>
         ) : viewMode === "gantt" ? (
-          /* Gantt Chart View - Simplified Timeline */
-          <div className="space-y-4">
-            <Card className="glassmorphism">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>Task Timeline & Dependencies</CardTitle>
-                  <div className="flex items-center gap-4 text-sm">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-blue-500 rounded"></div>
-                      <span>In Progress</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-green-500 rounded"></div>
-                      <span>Completed</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-orange-400 rounded"></div>
-                      <span>Has Dependencies</span>
-                    </div>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-6">
-                  {/* Timeline Header */}
-                  <div className="grid grid-cols-12 gap-2 text-xs font-medium text-muted-foreground border-b pb-2">
-                    <div className="col-span-4">Task</div>
-                    <div className="col-span-2">Assignee</div>
-                    <div className="col-span-2">Start</div>
-                    <div className="col-span-2">Due</div>
-                    <div className="col-span-2">Duration</div>
-                  </div>
-
-                  {/* Timeline Rows */}
-                  <div className="space-y-3">
-                    {filteredTasks.map((task) => {
-                      const startDate = task.createdAt ? new Date(task.createdAt) : new Date();
-                      const dueDate = task.dueDate ? new Date(task.dueDate) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-                      const duration = Math.max(1, Math.ceil((dueDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
-                      const dependencies = taskDependencies?.filter(dep => dep.taskId === task.id) || [];
-
-                      return (
-                        <div key={task.id} className="space-y-2">
-                          {/* Task Info Row */}
-                          <div className="grid grid-cols-12 gap-2 items-center text-sm">
-                            <div className="col-span-4 space-y-1">
-                              <div className="font-medium truncate">{task.title}</div>
-                              <div className="flex items-center gap-2">
-                                <Badge className={getStatusBadge(task.status || 'todo')} variant="outline">
-                                  {task.status}
-                                </Badge>
-                                <Badge className={getPriorityBadge(task.priority || "medium")}>
-                                  {task.priority}
-                                </Badge>
-                                {dependencies.length > 0 && (
-                                  <Badge variant="outline" className="text-xs">
-                                    <GitBranch className="h-3 w-3 mr-1" />
-                                    {dependencies.length} deps
-                                  </Badge>
-                                )}
-                              </div>
-                            </div>
-                            <div className="col-span-2 text-muted-foreground truncate">
-                              {getAssigneeName(task.assignedTo)}
-                            </div>
-                            <div className="col-span-2 text-muted-foreground">
-                              {startDate.toLocaleDateString()}
-                            </div>
-                            <div className="col-span-2 text-muted-foreground">
-                              {dueDate.toLocaleDateString()}
-                            </div>
-                            <div className="col-span-2 text-muted-foreground">
-                              {duration} days
-                            </div>
-                          </div>
-
-                          {/* Timeline Bar */}
-                          <div className="relative h-6 bg-muted rounded-md overflow-hidden">
-                            <div
-                              className={`absolute top-0 left-0 h-full rounded-md flex items-center px-2 text-xs font-medium text-white ${
-                                task.status === 'completed' ? 'bg-green-500' :
-                                task.status === 'in_progress' ? 'bg-blue-500' :
-                                task.status === 'review' ? 'bg-yellow-500' :
-                                'bg-gray-400'
-                              }`}
-                              style={{
-                                width: `${Math.min(100, Math.max(10, (duration / 30) * 100))}%`
-                              }}
-                            >
-                              <span className="truncate">{task.title}</span>
-                            </div>
-
-                            {/* Dependency Indicators */}
-                            {dependencies.length > 0 && (
-                              <div className="absolute top-0 -left-2 w-2 h-full bg-orange-400 opacity-75" />
-                            )}
-                          </div>
-
-                          {/* Dependencies List */}
-                          {dependencies.length > 0 && (
-                            <div className="ml-4 text-xs text-muted-foreground">
-                              <span className="font-medium">Dependencies: </span>
-                              {dependencies.map((dep, depIndex) => {
-                                const prereqTask = filteredTasks.find(t => t.id === dep.dependsOnTaskId);
-                                return (
-                                  <span key={dep.id}>
-                                    {prereqTask?.title || 'Unknown Task'}
-                                    {depIndex < dependencies.length - 1 ? ', ' : ''}
-                                  </span>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          /* Professional Gantt Chart View */
+          <GanttChart
+            tasks={filteredTasks}
+            projects={projects || []}
+            users={users || []}
+            dependencies={taskDependencies || []}
+          />
         ) : null}
 
         {filteredTasks.length === 0 && (
