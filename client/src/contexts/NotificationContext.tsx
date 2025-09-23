@@ -42,10 +42,20 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
 
     const connect = () => {
       try {
-        // Use the current protocol and host for WebSocket connection
+        // Robust WebSocket URL construction for development environments
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const host = window.location.host;
-        ws = new WebSocket(`${protocol}//${host}/ws`);
+        const hostname = window.location.hostname;
+        const port = window.location.port;
+        
+        // Construct URL with explicit port handling
+        let wsUrl = `${protocol}//${hostname}`;
+        if (port && port !== '80' && port !== '443') {
+          wsUrl += `:${port}`;
+        }
+        wsUrl += '/ws';
+        
+        console.log('Connecting to WebSocket:', wsUrl);
+        ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {
           console.log('WebSocket connected for notifications');
