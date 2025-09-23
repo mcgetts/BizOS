@@ -510,7 +510,7 @@ export default function Projects() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedStatus, setSelectedStatus] = useState<string>("all");
+  const [selectedCompany, setSelectedCompany] = useState<string>("all");
   const [selectedPriority, setSelectedPriority] = useState<string>("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -641,9 +641,9 @@ export default function Projects() {
   const filteredProjects = projects?.filter((project: Project) => {
     const matchesSearch = project.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       project.description?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = selectedStatus === "all" || project.status === selectedStatus;
+    const matchesCompany = selectedCompany === "all" || (project as any).companyId === selectedCompany;
     const matchesPriority = selectedPriority === "all" || project.priority === selectedPriority;
-    return matchesSearch && matchesStatus && matchesPriority;
+    return matchesSearch && matchesCompany && matchesPriority;
   }) || [];
 
   // Sorting configuration
@@ -792,18 +792,17 @@ export default function Projects() {
               data-testid="input-search-projects"
             />
           </div>
-          <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-            <SelectTrigger className="w-40" data-testid="select-filter-status">
-              <SelectValue placeholder="Status" />
+          <Select value={selectedCompany} onValueChange={setSelectedCompany}>
+            <SelectTrigger className="w-40" data-testid="select-filter-company">
+              <SelectValue placeholder="Company" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="planning">Planning</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="review">Review</SelectItem>
-              <SelectItem value="paused">Paused</SelectItem>
-              <SelectItem value="completed">Completed</SelectItem>
-              <SelectItem value="cancelled">Cancelled</SelectItem>
+              <SelectItem value="all">All Companies</SelectItem>
+              {companies?.map((company) => (
+                <SelectItem key={company.id} value={company.id}>
+                  {company.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
           <Select value={selectedPriority} onValueChange={setSelectedPriority}>
@@ -823,26 +822,25 @@ export default function Projects() {
         {/* View Toggle with Pipeline Label and Action Buttons */}
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Projects Pipeline</h2>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center border rounded-lg p-1">
-              <Button
-                variant={viewMode === "kanban" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setViewMode("kanban")}
-                data-testid="button-kanban-view"
-              >
-                Board
-              </Button>
-              <Button
-                variant={viewMode === "table" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setViewMode("table")}
-                data-testid="button-table-view"
-              >
-                Table
-              </Button>
-            </div>
-            <div className="flex items-center gap-3">
+          <div className="flex items-center border rounded-lg p-1">
+            <Button
+              variant={viewMode === "kanban" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setViewMode("kanban")}
+              data-testid="button-kanban-view"
+            >
+              Board
+            </Button>
+            <Button
+              variant={viewMode === "table" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setViewMode("table")}
+              data-testid="button-table-view"
+            >
+              Table
+            </Button>
+          </div>
+          <div className="flex items-center gap-3">
               <ProjectTemplateSelector
                 onProjectCreated={() => {
                   queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
@@ -872,7 +870,6 @@ export default function Projects() {
                 </Dialog>
             </div>
           </div>
-        </div>
 
         {/* Loading and Error States */}
         {projectsLoading ? (

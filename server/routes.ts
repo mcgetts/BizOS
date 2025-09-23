@@ -51,7 +51,30 @@ import {
   insertTaskDependencySchema,
   insertProjectCommentSchema,
   insertProjectActivitySchema,
+  // Resource management tables
+  userCapacity,
+  userAvailability,
+  userSkills,
+  resourceAllocations,
+  budgetCategories,
+  projectBudgets,
+  timeEntryApprovals,
+  workloadSnapshots,
+  insertUserCapacitySchema,
+  insertUserAvailabilitySchema,
+  insertUserSkillsSchema,
+  insertResourceAllocationSchema,
+  insertBudgetCategorySchema,
+  insertProjectBudgetSchema,
+  insertTimeEntryApprovalSchema,
+  insertWorkloadSnapshotSchema,
 } from "@shared/schema";
+import {
+  calculateUserWorkload,
+  calculateTeamUtilization,
+  findOptimalResourceAllocations,
+  generateTeamWorkloadSnapshots,
+} from "./utils/resourceCalculations.js";
 
 // Helper function to log activity history
 async function logActivityHistory(
@@ -1443,6 +1466,339 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching project activity:", error);
       res.status(500).json({ message: "Failed to fetch project activity" });
+    }
+  });
+
+  // Resource Management routes
+
+  // User Capacity Management
+  app.get('/api/users/:id/capacity', isAuthenticated, async (req, res) => {
+    try {
+      const capacity = await db
+        .select()
+        .from(userCapacity)
+        .where(eq(userCapacity.userId, req.params.id))
+        .orderBy(desc(userCapacity.effectiveFrom));
+      res.json(capacity);
+    } catch (error) {
+      console.error("Error fetching user capacity:", error);
+      res.status(500).json({ message: "Failed to fetch user capacity" });
+    }
+  });
+
+  app.post('/api/users/:id/capacity', isAuthenticated, requireRole(['admin', 'manager']), async (req, res) => {
+    try {
+      const validatedData = insertUserCapacitySchema.parse({
+        ...req.body,
+        userId: req.params.id,
+      });
+      const capacity = await db.insert(userCapacity).values(validatedData).returning();
+      res.status(201).json(capacity[0]);
+    } catch (error) {
+      console.error("Error creating user capacity:", error);
+      res.status(400).json({ message: "Failed to create user capacity" });
+    }
+  });
+
+  // User Availability Management
+  app.get('/api/users/:id/availability', isAuthenticated, async (req, res) => {
+    try {
+      const availability = await db
+        .select()
+        .from(userAvailability)
+        .where(eq(userAvailability.userId, req.params.id))
+        .orderBy(desc(userAvailability.startDate));
+      res.json(availability);
+    } catch (error) {
+      console.error("Error fetching user availability:", error);
+      res.status(500).json({ message: "Failed to fetch user availability" });
+    }
+  });
+
+  app.post('/api/users/:id/availability', isAuthenticated, async (req, res) => {
+    try {
+      const validatedData = insertUserAvailabilitySchema.parse({
+        ...req.body,
+        userId: req.params.id,
+        approvedBy: req.user.role === 'admin' || req.user.role === 'manager' ? req.user.id : null,
+        approvedAt: req.user.role === 'admin' || req.user.role === 'manager' ? new Date() : null,
+      });
+      const availability = await db.insert(userAvailability).values(validatedData).returning();
+      res.status(201).json(availability[0]);
+    } catch (error) {
+      console.error("Error creating user availability:", error);
+      res.status(400).json({ message: "Failed to create user availability" });
+    }
+  });
+
+  // User Skills Management
+  app.get('/api/users/:id/skills', isAuthenticated, async (req, res) => {
+    try {
+      const skills = await db
+        .select()
+        .from(userSkills)
+        .where(eq(userSkills.userId, req.params.id))
+        .orderBy(desc(userSkills.proficiencyLevel));
+      res.json(skills);
+    } catch (error) {
+      console.error("Error fetching user skills:", error);
+      res.status(500).json({ message: "Failed to fetch user skills" });
+    }
+  });
+
+  app.post('/api/users/:id/skills', isAuthenticated, async (req, res) => {
+    try {
+      const validatedData = insertUserSkillsSchema.parse({
+        ...req.body,
+        userId: req.params.id,
+      });
+      const skill = await db.insert(userSkills).values(validatedData).returning();
+      res.status(201).json(skill[0]);
+    } catch (error) {
+      console.error("Error creating user skill:", error);
+      res.status(400).json({ message: "Failed to create user skill" });
+    }
+  });
+
+  app.delete('/api/users/:userId/skills/:skillId', isAuthenticated, async (req, res) => {
+    try {
+      await db
+        .delete(userSkills)
+        .where(and(eq(userSkills.id, req.params.skillId), eq(userSkills.userId, req.params.userId)));
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting user skill:", error);
+      res.status(500).json({ message: "Failed to delete user skill" });
+    }
+  });
+
+  // Workload and Utilization
+  app.get('/api/users/:id/workload', isAuthenticated, async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+      const start = startDate ? new Date(startDate as string) : new Date();
+      const end = endDate ? new Date(endDate as string) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+      const workload = await calculateUserWorkload(req.params.id, start, end);
+      res.json(workload);
+    } catch (error) {
+      console.error("Error calculating user workload:", error);
+      res.status(500).json({ message: "Failed to calculate user workload" });
+    }
+  });
+
+  app.get('/api/team/utilization', isAuthenticated, requireRole(['admin', 'manager']), async (req, res) => {
+    try {
+      const { startDate, endDate, teamUserIds } = req.query;
+      const start = startDate ? new Date(startDate as string) : new Date();
+      const end = endDate ? new Date(endDate as string) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const userIds = teamUserIds ? (teamUserIds as string).split(',') : undefined;
+
+      const utilization = await calculateTeamUtilization(start, end, userIds);
+      res.json(utilization);
+    } catch (error) {
+      console.error("Error calculating team utilization:", error);
+      res.status(500).json({ message: "Failed to calculate team utilization" });
+    }
+  });
+
+  // Resource Allocation Management
+  app.get('/api/resource-allocations', isAuthenticated, async (req, res) => {
+    try {
+      const { userId, projectId, status } = req.query;
+      let query = db.select().from(resourceAllocations);
+
+      const conditions = [];
+      if (userId) conditions.push(eq(resourceAllocations.userId, userId as string));
+      if (projectId) conditions.push(eq(resourceAllocations.projectId, projectId as string));
+      if (status) conditions.push(eq(resourceAllocations.status, status as string));
+
+      if (conditions.length > 0) {
+        query = query.where(and(...conditions));
+      }
+
+      const allocations = await query.orderBy(desc(resourceAllocations.startDate));
+      res.json(allocations);
+    } catch (error) {
+      console.error("Error fetching resource allocations:", error);
+      res.status(500).json({ message: "Failed to fetch resource allocations" });
+    }
+  });
+
+  app.post('/api/resource-allocations', isAuthenticated, requireRole(['admin', 'manager']), async (req, res) => {
+    try {
+      const validatedData = insertResourceAllocationSchema.parse({
+        ...req.body,
+        createdBy: req.user.id,
+      });
+      const allocation = await db.insert(resourceAllocations).values(validatedData).returning();
+      res.status(201).json(allocation[0]);
+    } catch (error) {
+      console.error("Error creating resource allocation:", error);
+      res.status(400).json({ message: "Failed to create resource allocation" });
+    }
+  });
+
+  app.put('/api/resource-allocations/:id', isAuthenticated, requireRole(['admin', 'manager']), async (req, res) => {
+    try {
+      const validatedData = insertResourceAllocationSchema.parse(req.body);
+      const allocation = await db
+        .update(resourceAllocations)
+        .set({ ...validatedData, updatedAt: new Date() })
+        .where(eq(resourceAllocations.id, req.params.id))
+        .returning();
+
+      if (allocation.length === 0) {
+        return res.status(404).json({ message: "Resource allocation not found" });
+      }
+
+      res.json(allocation[0]);
+    } catch (error) {
+      console.error("Error updating resource allocation:", error);
+      res.status(400).json({ message: "Failed to update resource allocation" });
+    }
+  });
+
+  app.delete('/api/resource-allocations/:id', isAuthenticated, requireRole(['admin', 'manager']), async (req, res) => {
+    try {
+      await db.delete(resourceAllocations).where(eq(resourceAllocations.id, req.params.id));
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting resource allocation:", error);
+      res.status(500).json({ message: "Failed to delete resource allocation" });
+    }
+  });
+
+  // Budget Categories Management
+  app.get('/api/budget-categories', isAuthenticated, async (req, res) => {
+    try {
+      const categories = await db
+        .select()
+        .from(budgetCategories)
+        .where(eq(budgetCategories.isActive, true))
+        .orderBy(budgetCategories.name);
+      res.json(categories);
+    } catch (error) {
+      console.error("Error fetching budget categories:", error);
+      res.status(500).json({ message: "Failed to fetch budget categories" });
+    }
+  });
+
+  app.post('/api/budget-categories', isAuthenticated, requireRole(['admin', 'manager']), async (req, res) => {
+    try {
+      const validatedData = insertBudgetCategorySchema.parse(req.body);
+      const category = await db.insert(budgetCategories).values(validatedData).returning();
+      res.status(201).json(category[0]);
+    } catch (error) {
+      console.error("Error creating budget category:", error);
+      res.status(400).json({ message: "Failed to create budget category" });
+    }
+  });
+
+  // Project Budget Management
+  app.get('/api/projects/:id/budgets', isAuthenticated, async (req, res) => {
+    try {
+      const budgets = await db
+        .select({
+          id: projectBudgets.id,
+          budgetedAmount: projectBudgets.budgetedAmount,
+          spentAmount: projectBudgets.spentAmount,
+          committedAmount: projectBudgets.committedAmount,
+          forecastAmount: projectBudgets.forecastAmount,
+          notes: projectBudgets.notes,
+          categoryId: projectBudgets.categoryId,
+          categoryName: budgetCategories.name,
+          categoryType: budgetCategories.categoryType,
+        })
+        .from(projectBudgets)
+        .leftJoin(budgetCategories, eq(projectBudgets.categoryId, budgetCategories.id))
+        .where(eq(projectBudgets.projectId, req.params.id));
+      res.json(budgets);
+    } catch (error) {
+      console.error("Error fetching project budgets:", error);
+      res.status(500).json({ message: "Failed to fetch project budgets" });
+    }
+  });
+
+  app.post('/api/projects/:id/budgets', isAuthenticated, requireRole(['admin', 'manager']), async (req, res) => {
+    try {
+      const validatedData = insertProjectBudgetSchema.parse({
+        ...req.body,
+        projectId: req.params.id,
+      });
+      const budget = await db.insert(projectBudgets).values(validatedData).returning();
+      res.status(201).json(budget[0]);
+    } catch (error) {
+      console.error("Error creating project budget:", error);
+      res.status(400).json({ message: "Failed to create project budget" });
+    }
+  });
+
+  // Workload Snapshots
+  app.get('/api/workload-snapshots', isAuthenticated, requireRole(['admin', 'manager']), async (req, res) => {
+    try {
+      const { userId, startDate, endDate } = req.query;
+      let query = db.select().from(workloadSnapshots);
+
+      const conditions = [];
+      if (userId) conditions.push(eq(workloadSnapshots.userId, userId as string));
+      if (startDate && endDate) {
+        conditions.push(
+          and(
+            sql`${workloadSnapshots.snapshotDate} >= ${new Date(startDate as string)}`,
+            sql`${workloadSnapshots.snapshotDate} <= ${new Date(endDate as string)}`
+          )
+        );
+      }
+
+      if (conditions.length > 0) {
+        query = query.where(and(...conditions));
+      }
+
+      const snapshots = await query.orderBy(desc(workloadSnapshots.snapshotDate));
+      res.json(snapshots);
+    } catch (error) {
+      console.error("Error fetching workload snapshots:", error);
+      res.status(500).json({ message: "Failed to fetch workload snapshots" });
+    }
+  });
+
+  app.post('/api/workload-snapshots/generate', isAuthenticated, requireRole(['admin', 'manager']), async (req, res) => {
+    try {
+      const { snapshotDate } = req.body;
+      const date = snapshotDate ? new Date(snapshotDate) : new Date();
+
+      await generateTeamWorkloadSnapshots(date);
+      res.json({ message: "Workload snapshots generated successfully", snapshotDate: date });
+    } catch (error) {
+      console.error("Error generating workload snapshots:", error);
+      res.status(500).json({ message: "Failed to generate workload snapshots" });
+    }
+  });
+
+  // Resource Optimization
+  app.post('/api/projects/:id/optimize-resources', isAuthenticated, requireRole(['admin', 'manager']), async (req, res) => {
+    try {
+      const { requiredSkills, estimatedHours, startDate, endDate } = req.body;
+
+      if (!requiredSkills || !estimatedHours || !startDate || !endDate) {
+        return res.status(400).json({
+          message: "Required fields: requiredSkills, estimatedHours, startDate, endDate"
+        });
+      }
+
+      const suggestions = await findOptimalResourceAllocations(
+        req.params.id,
+        requiredSkills,
+        estimatedHours,
+        new Date(startDate),
+        new Date(endDate)
+      );
+
+      res.json(suggestions);
+    } catch (error) {
+      console.error("Error finding optimal resource allocations:", error);
+      res.status(500).json({ message: "Failed to find optimal resource allocations" });
     }
   });
 

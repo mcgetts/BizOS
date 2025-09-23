@@ -468,6 +468,122 @@ export const projectActivity = pgTable("project_activity", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// User capacity and availability tracking
+export const userCapacity = pgTable("user_capacity", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id),
+  hoursPerDay: decimal("hours_per_day", { precision: 4, scale: 2 }).default("8.00"), // Standard working hours per day
+  hoursPerWeek: decimal("hours_per_week", { precision: 4, scale: 2 }).default("40.00"), // Standard working hours per week
+  overtimeMultiplier: decimal("overtime_multiplier", { precision: 3, scale: 2 }).default("1.50"), // Overtime rate multiplier
+  effectiveFrom: timestamp("effective_from").defaultNow(),
+  effectiveTo: timestamp("effective_to"), // null means current
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// User availability periods (vacations, holidays, sick days, etc.)
+export const userAvailability = pgTable("user_availability", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id),
+  type: varchar("type").notNull(), // vacation, sick, holiday, training, partial_day
+  status: varchar("status").default("approved"), // pending, approved, denied
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date").notNull(),
+  hoursPerDay: decimal("hours_per_day", { precision: 4, scale: 2 }), // for partial days
+  description: text("description"),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// User skills and competencies for resource allocation
+export const userSkills = pgTable("user_skills", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id),
+  skillName: varchar("skill_name").notNull(),
+  category: varchar("category"), // technical, soft_skills, domain_knowledge, tools
+  proficiencyLevel: integer("proficiency_level").default(1), // 1-5 scale
+  yearsExperience: decimal("years_experience", { precision: 3, scale: 1 }),
+  isCertified: boolean("is_certified").default(false),
+  certificationName: varchar("certification_name"),
+  lastUsed: timestamp("last_used"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Resource allocations for projects and tasks
+export const resourceAllocations = pgTable("resource_allocations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id),
+  projectId: varchar("project_id").references(() => projects.id),
+  taskId: varchar("task_id").references(() => tasks.id), // optional - can be project-level
+  allocationType: varchar("allocation_type").default("project"), // project, task, milestone
+  allocatedHours: decimal("allocated_hours", { precision: 6, scale: 2 }).notNull(),
+  hourlyRate: decimal("hourly_rate", { precision: 8, scale: 2 }),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date").notNull(),
+  utilizationTarget: integer("utilization_target").default(100), // % of capacity to allocate
+  priority: varchar("priority").default("medium").$type<Priority>(),
+  status: varchar("status").default("active"), // active, completed, cancelled, on_hold
+  notes: text("notes"),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Budget categories for more granular budget tracking
+export const budgetCategories = pgTable("budget_categories", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name").notNull(),
+  description: text("description"),
+  categoryType: varchar("category_type").notNull(), // labor, materials, software, travel, overhead
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Project budget breakdown by category
+export const projectBudgets = pgTable("project_budgets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").references(() => projects.id),
+  categoryId: varchar("category_id").references(() => budgetCategories.id),
+  budgetedAmount: decimal("budgeted_amount", { precision: 10, scale: 2 }).notNull(),
+  spentAmount: decimal("spent_amount", { precision: 10, scale: 2 }).default("0"),
+  committedAmount: decimal("committed_amount", { precision: 10, scale: 2 }).default("0"), // POs, contracts
+  forecastAmount: decimal("forecast_amount", { precision: 10, scale: 2 }).default("0"), // projected final cost
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Enhanced time entry approval workflow
+export const timeEntryApprovals = pgTable("time_entry_approvals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  timeEntryId: varchar("time_entry_id").references(() => timeEntries.id, { onDelete: "cascade" }),
+  status: varchar("status").default("pending"), // pending, approved, rejected, needs_revision
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  rejectionReason: text("rejection_reason"),
+  approverNotes: text("approver_notes"),
+  submittedAt: timestamp("submitted_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Workload snapshots for historical tracking and reporting
+export const workloadSnapshots = pgTable("workload_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id),
+  snapshotDate: timestamp("snapshot_date").notNull(),
+  totalAllocatedHours: decimal("total_allocated_hours", { precision: 6, scale: 2 }).notNull(),
+  actualWorkedHours: decimal("actual_worked_hours", { precision: 6, scale: 2 }).default("0"),
+  availableHours: decimal("available_hours", { precision: 6, scale: 2 }).notNull(),
+  utilizationPercentage: decimal("utilization_percentage", { precision: 5, scale: 2 }),
+  overallocationHours: decimal("overallocation_hours", { precision: 6, scale: 2 }).default("0"),
+  activeProjectsCount: integer("active_projects_count").default(0),
+  activeTasksCount: integer("active_tasks_count").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Relations
 export const userRelations = relations(users, ({ many }) => ({
   managedProjects: many(projects, { relationName: "manager" }),
@@ -481,6 +597,13 @@ export const userRelations = relations(users, ({ many }) => ({
   assignedTickets: many(supportTickets, { relationName: "assignee" }),
   createdTickets: many(supportTickets, { relationName: "creator" }),
   clientInteractions: many(clientInteractions),
+  // Resource management relations
+  capacity: many(userCapacity),
+  availability: many(userAvailability),
+  skills: many(userSkills),
+  resourceAllocations: many(resourceAllocations),
+  workloadSnapshots: many(workloadSnapshots),
+  approvedTimeEntries: many(timeEntryApprovals, { relationName: "approver" }),
 }));
 
 export const clientRelations = relations(clients, ({ one, many }) => ({
@@ -829,6 +952,52 @@ export const insertProjectActivitySchema = createInsertSchema(projectActivity).o
   createdAt: true,
 });
 
+// Resource Management Insert Schemas
+export const insertUserCapacitySchema = createInsertSchema(userCapacity).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertUserAvailabilitySchema = createInsertSchema(userAvailability).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertUserSkillsSchema = createInsertSchema(userSkills).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertResourceAllocationSchema = createInsertSchema(resourceAllocations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertBudgetCategorySchema = createInsertSchema(budgetCategories).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertProjectBudgetSchema = createInsertSchema(projectBudgets).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertTimeEntryApprovalSchema = createInsertSchema(timeEntryApprovals).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertWorkloadSnapshotSchema = createInsertSchema(workloadSnapshots).omit({
+  id: true,
+  createdAt: true,
+});
+
 // New relations
 export const opportunityNextStepRelations = relations(opportunityNextSteps, ({ one }) => ({
   opportunity: one(salesOpportunities, {
@@ -933,6 +1102,86 @@ export const projectActivityRelations = relations(projectActivity, ({ one }) => 
   }),
 }));
 
+// Resource Management Relations
+export const userCapacityRelations = relations(userCapacity, ({ one }) => ({
+  user: one(users, {
+    fields: [userCapacity.userId],
+    references: [users.id],
+  }),
+}));
+
+export const userAvailabilityRelations = relations(userAvailability, ({ one }) => ({
+  user: one(users, {
+    fields: [userAvailability.userId],
+    references: [users.id],
+  }),
+  approvedBy: one(users, {
+    fields: [userAvailability.approvedBy],
+    references: [users.id],
+    relationName: "approver",
+  }),
+}));
+
+export const userSkillsRelations = relations(userSkills, ({ one }) => ({
+  user: one(users, {
+    fields: [userSkills.userId],
+    references: [users.id],
+  }),
+}));
+
+export const resourceAllocationsRelations = relations(resourceAllocations, ({ one }) => ({
+  user: one(users, {
+    fields: [resourceAllocations.userId],
+    references: [users.id],
+  }),
+  project: one(projects, {
+    fields: [resourceAllocations.projectId],
+    references: [projects.id],
+  }),
+  task: one(tasks, {
+    fields: [resourceAllocations.taskId],
+    references: [tasks.id],
+  }),
+  createdBy: one(users, {
+    fields: [resourceAllocations.createdBy],
+    references: [users.id],
+    relationName: "creator",
+  }),
+}));
+
+export const budgetCategoriesRelations = relations(budgetCategories, ({ many }) => ({
+  projectBudgets: many(projectBudgets),
+}));
+
+export const projectBudgetsRelations = relations(projectBudgets, ({ one }) => ({
+  project: one(projects, {
+    fields: [projectBudgets.projectId],
+    references: [projects.id],
+  }),
+  category: one(budgetCategories, {
+    fields: [projectBudgets.categoryId],
+    references: [budgetCategories.id],
+  }),
+}));
+
+export const timeEntryApprovalsRelations = relations(timeEntryApprovals, ({ one }) => ({
+  timeEntry: one(timeEntries, {
+    fields: [timeEntryApprovals.timeEntryId],
+    references: [timeEntries.id],
+  }),
+  approvedBy: one(users, {
+    fields: [timeEntryApprovals.approvedBy],
+    references: [users.id],
+  }),
+}));
+
+export const workloadSnapshotsRelations = relations(workloadSnapshots, ({ one }) => ({
+  user: one(users, {
+    fields: [workloadSnapshots.userId],
+    references: [users.id],
+  }),
+}));
+
 // Types
 export type UpsertUser = z.infer<typeof upsertUserSchema>;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -1033,4 +1282,43 @@ export type TaskWithDependencies = Task & {
 export type ProjectWithActivity = Project & {
   comments: ProjectComment[];
   activities: ProjectActivity[];
+};
+
+// Resource Management Types
+export type InsertUserCapacity = z.infer<typeof insertUserCapacitySchema>;
+export type UserCapacity = typeof userCapacity.$inferSelect;
+export type InsertUserAvailability = z.infer<typeof insertUserAvailabilitySchema>;
+export type UserAvailability = typeof userAvailability.$inferSelect;
+export type InsertUserSkills = z.infer<typeof insertUserSkillsSchema>;
+export type UserSkills = typeof userSkills.$inferSelect;
+export type InsertResourceAllocation = z.infer<typeof insertResourceAllocationSchema>;
+export type ResourceAllocation = typeof resourceAllocations.$inferSelect;
+export type InsertBudgetCategory = z.infer<typeof insertBudgetCategorySchema>;
+export type BudgetCategory = typeof budgetCategories.$inferSelect;
+export type InsertProjectBudget = z.infer<typeof insertProjectBudgetSchema>;
+export type ProjectBudget = typeof projectBudgets.$inferSelect;
+export type InsertTimeEntryApproval = z.infer<typeof insertTimeEntryApprovalSchema>;
+export type TimeEntryApproval = typeof timeEntryApprovals.$inferSelect;
+export type InsertWorkloadSnapshot = z.infer<typeof insertWorkloadSnapshotSchema>;
+export type WorkloadSnapshot = typeof workloadSnapshots.$inferSelect;
+
+// Enhanced resource management types with relations
+export type UserWithCapacityAndSkills = User & {
+  capacity: UserCapacity[];
+  availability: UserAvailability[];
+  skills: UserSkills[];
+  resourceAllocations: ResourceAllocation[];
+  workloadSnapshots: WorkloadSnapshot[];
+};
+
+export type ProjectWithBudgetBreakdown = Project & {
+  budgets: (ProjectBudget & {
+    category: BudgetCategory;
+  })[];
+};
+
+export type ResourceAllocationWithDetails = ResourceAllocation & {
+  user: User;
+  project: Project;
+  task?: Task;
 };
