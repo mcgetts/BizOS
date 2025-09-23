@@ -66,9 +66,17 @@ app.use((req, res, next) => {
   // It is the only port that is not firewalled.
   
   // Detect Replit environment and force port 5000 in development to match workflow expectations
-  const isReplit = Boolean(process.env.REPL_ID || process.env.REPL_SLUG || process.env.REPL_OWNER || process.env.REPLIT_DB_URL);
+  const isReplit = Boolean(process.env.REPL_ID);
   const isDevMode = process.env.NODE_ENV === 'development';
-  const port = (isReplit && isDevMode) ? 5000 : parseInt(process.env.PORT || '5000', 10);
+  
+  let port: number;
+  if (isReplit && isDevMode) {
+    port = 5000;
+    log("Replit dev detected – forcing port 5000");
+  } else {
+    const rawPort = Number(process.env.PORT);
+    port = Number.isFinite(rawPort) && rawPort > 0 ? rawPort : 5000;
+  }
   server.listen({
     port,
     host: "0.0.0.0",
