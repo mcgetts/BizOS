@@ -45,7 +45,8 @@ import {
   Table,
   LayoutGrid,
   ArrowRight,
-  GitBranch
+  GitBranch,
+  BarChart3
 } from "lucide-react";
 
 // Form validation schema for task creation/editing
@@ -383,10 +384,12 @@ export default function Tasks() {
   const [projectFilter, setProjectFilter] = useState("all");
   const [assigneeFilter, setAssigneeFilter] = useState("all");
   const [companyFilter, setCompanyFilter] = useState("all");
-  const [viewMode, setViewMode] = useState<"table" | "kanban">("table");
+  const [viewMode, setViewMode] = useState<"table" | "kanban" | "gantt">("table");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [viewingTask, setViewingTask] = useState<Task | null>(null);
+  const [draggedTask, setDraggedTask] = useState<Task | null>(null);
+  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
 
   // Fetch tasks
   const { data: tasks, isLoading, error } = useQuery<Task[]>({
@@ -437,6 +440,59 @@ export default function Tasks() {
       });
     }
   }, [error, toast]);
+
+  // Drag and Drop Handlers
+  const handleDragStart = (e: React.DragEvent, task: Task) => {
+    setDraggedTask(task);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', task.id);
+  };
+
+  const handleDragOver = (e: React.DragEvent, status: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverColumn(status);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOverColumn(null);
+  };
+
+  const handleDrop = async (e: React.DragEvent, newStatus: string) => {
+    e.preventDefault();
+    setDragOverColumn(null);
+
+    if (!draggedTask || draggedTask.status === newStatus) {
+      setDraggedTask(null);
+      return;
+    }
+
+    try {
+      // Update task status via API
+      await apiRequest("PUT", `/api/tasks/${draggedTask.id}`, {
+        ...draggedTask,
+        status: newStatus
+      });
+
+      // Invalidate queries to refetch data
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+
+      toast({
+        title: "Task Updated",
+        description: `"${draggedTask.title}" moved to ${newStatus.replace('_', ' ')}`,
+      });
+    } catch (error) {
+      console.error('Failed to update task status:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update task status",
+        variant: "destructive",
+      });
+    }
+
+    setDraggedTask(null);
+  };
 
   if (authLoading || isLoading) {
     return (
@@ -739,6 +795,15 @@ export default function Tasks() {
               <Table className="h-4 w-4" />
               Table
             </Button>
+            <Button
+              variant={viewMode === "gantt" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setViewMode("gantt")}
+              className="gap-2"
+            >
+              <BarChart3 className="h-4 w-4" />
+              Gantt
+            </Button>
           </div>
 
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
@@ -945,7 +1010,7 @@ export default function Tasks() {
               </TableBody>
             </TableComponent>
           </div>
-        ) : (
+        ) : viewMode === "kanban" ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
             {statusConfig.map((statusItem) => {
               const statusTasks = filteredTasks.filter(task => task.status === statusItem.key);
@@ -956,9 +1021,26 @@ export default function Tasks() {
                       {statusItem.label} ({statusTasks.length})
                     </h3>
                   </div>
-                  <div className="space-y-3 flex-1 bg-gray-50 dark:bg-gray-800 rounded-b-lg p-2 min-h-[140px]">
+                  <div
+                    className={`space-y-3 flex-1 rounded-b-lg p-2 min-h-[140px] transition-colors ${
+                      dragOverColumn === statusItem.key
+                        ? 'bg-blue-100 dark:bg-blue-900 border-2 border-blue-300 dark:border-blue-700'
+                        : 'bg-gray-50 dark:bg-gray-800'
+                    }`}
+                    onDragOver={(e) => handleDragOver(e, statusItem.key)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, statusItem.key)}
+                  >
                     {statusTasks.map((task) => (
-                      <Card key={task.id} className={`${isOverdue(task.dueDate) && task.status !== "completed" ? "border-red-200 dark:border-red-800" : ""}`} data-testid={`card-task-${task.id}`}>
+                      <Card
+                        key={task.id}
+                        className={`${isOverdue(task.dueDate) && task.status !== "completed" ? "border-red-200 dark:border-red-800" : ""}
+                                   ${draggedTask?.id === task.id ? 'opacity-50' : 'cursor-move hover:shadow-md'}
+                                   transition-all`}
+                        data-testid={`card-task-${task.id}`}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, task)}
+                      >
                         <CardHeader className="pb-2">
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
@@ -1052,7 +1134,129 @@ export default function Tasks() {
               );
             })}
           </div>
-        )}
+        ) : viewMode === "gantt" ? (
+          /* Gantt Chart View - Simplified Timeline */
+          <div className="space-y-4">
+            <Card className="glassmorphism">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Task Timeline & Dependencies</CardTitle>
+                  <div className="flex items-center gap-4 text-sm">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-blue-500 rounded"></div>
+                      <span>In Progress</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-green-500 rounded"></div>
+                      <span>Completed</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-orange-400 rounded"></div>
+                      <span>Has Dependencies</span>
+                    </div>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-6">
+                  {/* Timeline Header */}
+                  <div className="grid grid-cols-12 gap-2 text-xs font-medium text-muted-foreground border-b pb-2">
+                    <div className="col-span-4">Task</div>
+                    <div className="col-span-2">Assignee</div>
+                    <div className="col-span-2">Start</div>
+                    <div className="col-span-2">Due</div>
+                    <div className="col-span-2">Duration</div>
+                  </div>
+
+                  {/* Timeline Rows */}
+                  <div className="space-y-3">
+                    {filteredTasks.map((task) => {
+                      const startDate = task.createdAt ? new Date(task.createdAt) : new Date();
+                      const dueDate = task.dueDate ? new Date(task.dueDate) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+                      const duration = Math.max(1, Math.ceil((dueDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
+                      const dependencies = taskDependencies?.filter(dep => dep.taskId === task.id) || [];
+
+                      return (
+                        <div key={task.id} className="space-y-2">
+                          {/* Task Info Row */}
+                          <div className="grid grid-cols-12 gap-2 items-center text-sm">
+                            <div className="col-span-4 space-y-1">
+                              <div className="font-medium truncate">{task.title}</div>
+                              <div className="flex items-center gap-2">
+                                <Badge className={getStatusBadge(task.status || 'todo')} variant="outline">
+                                  {task.status}
+                                </Badge>
+                                <Badge className={getPriorityBadge(task.priority || "medium")}>
+                                  {task.priority}
+                                </Badge>
+                                {dependencies.length > 0 && (
+                                  <Badge variant="outline" className="text-xs">
+                                    <GitBranch className="h-3 w-3 mr-1" />
+                                    {dependencies.length} deps
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                            <div className="col-span-2 text-muted-foreground truncate">
+                              {getAssigneeName(task.assignedTo)}
+                            </div>
+                            <div className="col-span-2 text-muted-foreground">
+                              {startDate.toLocaleDateString()}
+                            </div>
+                            <div className="col-span-2 text-muted-foreground">
+                              {dueDate.toLocaleDateString()}
+                            </div>
+                            <div className="col-span-2 text-muted-foreground">
+                              {duration} days
+                            </div>
+                          </div>
+
+                          {/* Timeline Bar */}
+                          <div className="relative h-6 bg-muted rounded-md overflow-hidden">
+                            <div
+                              className={`absolute top-0 left-0 h-full rounded-md flex items-center px-2 text-xs font-medium text-white ${
+                                task.status === 'completed' ? 'bg-green-500' :
+                                task.status === 'in_progress' ? 'bg-blue-500' :
+                                task.status === 'review' ? 'bg-yellow-500' :
+                                'bg-gray-400'
+                              }`}
+                              style={{
+                                width: `${Math.min(100, Math.max(10, (duration / 30) * 100))}%`
+                              }}
+                            >
+                              <span className="truncate">{task.title}</span>
+                            </div>
+
+                            {/* Dependency Indicators */}
+                            {dependencies.length > 0 && (
+                              <div className="absolute top-0 -left-2 w-2 h-full bg-orange-400 opacity-75" />
+                            )}
+                          </div>
+
+                          {/* Dependencies List */}
+                          {dependencies.length > 0 && (
+                            <div className="ml-4 text-xs text-muted-foreground">
+                              <span className="font-medium">Dependencies: </span>
+                              {dependencies.map((dep, depIndex) => {
+                                const prereqTask = filteredTasks.find(t => t.id === dep.dependsOnTaskId);
+                                return (
+                                  <span key={dep.id}>
+                                    {prereqTask?.title || 'Unknown Task'}
+                                    {depIndex < dependencies.length - 1 ? ', ' : ''}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        ) : null}
 
         {filteredTasks.length === 0 && (
           <div className="text-center py-12">

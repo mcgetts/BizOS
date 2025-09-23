@@ -43,7 +43,8 @@
       "Bash(npx drizzle-kit:*)",
       "Bash(awk:*)",
       "Bash(chmod:*)",
-      "Bash(bash:*)"
+      "Bash(bash:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

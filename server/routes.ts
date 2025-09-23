@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, sql } from "drizzle-orm";
 import { setupAuth, isAuthenticated, requireRole } from "./replitAuth";
 import {
   insertUserSchema,
@@ -68,6 +68,9 @@ import {
   insertProjectBudgetSchema,
   insertTimeEntryApprovalSchema,
   insertWorkloadSnapshotSchema,
+  // Notifications
+  notifications,
+  insertNotificationSchema,
 } from "@shared/schema";
 import {
   calculateUserWorkload,
@@ -75,6 +78,7 @@ import {
   findOptimalResourceAllocations,
   generateTeamWorkloadSnapshots,
 } from "./utils/resourceCalculations.js";
+import { wsManager } from "./websocketManager";
 
 // Helper function to log activity history
 async function logActivityHistory(
@@ -288,6 +292,92 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error deleting user:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to delete user";
       res.status(400).json({ message: errorMessage });
+    }
+  });
+
+  // Notification routes
+  app.get('/api/notifications', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 20;
+      const offset = (page - 1) * limit;
+
+      const userNotifications = await db
+        .select()
+        .from(notifications)
+        .where(eq(notifications.userId, userId))
+        .orderBy(desc(notifications.createdAt))
+        .limit(limit)
+        .offset(offset);
+
+      res.json(userNotifications);
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+      res.status(500).json({ message: "Failed to fetch notifications" });
+    }
+  });
+
+  app.put('/api/notifications/:id/read', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const notificationId = req.params.id;
+
+      const [updatedNotification] = await db
+        .update(notifications)
+        .set({ read: true, updatedAt: new Date() })
+        .where(and(
+          eq(notifications.id, notificationId),
+          eq(notifications.userId, userId)
+        ))
+        .returning();
+
+      if (!updatedNotification) {
+        return res.status(404).json({ message: "Notification not found" });
+      }
+
+      res.json(updatedNotification);
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+      res.status(500).json({ message: "Failed to mark notification as read" });
+    }
+  });
+
+  app.put('/api/notifications/mark-all-read', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+
+      await db
+        .update(notifications)
+        .set({ read: true, updatedAt: new Date() })
+        .where(and(
+          eq(notifications.userId, userId),
+          eq(notifications.read, false)
+        ));
+
+      res.json({ message: "All notifications marked as read" });
+    } catch (error) {
+      console.error("Error marking all notifications as read:", error);
+      res.status(500).json({ message: "Failed to mark all notifications as read" });
+    }
+  });
+
+  app.get('/api/notifications/unread-count', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+
+      const [result] = await db
+        .select({ count: sql`count(*)` })
+        .from(notifications)
+        .where(and(
+          eq(notifications.userId, userId),
+          eq(notifications.read, false)
+        ));
+
+      res.json({ count: parseInt(result.count as string) || 0 });
+    } catch (error) {
+      console.error("Error fetching unread count:", error);
+      res.status(500).json({ message: "Failed to fetch unread count" });
     }
   });
 
@@ -1198,10 +1288,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/tasks', isAuthenticated, async (req, res) => {
+  app.post('/api/tasks', isAuthenticated, async (req: any, res) => {
     try {
       const validatedData = insertTaskSchema.parse(req.body);
       const task = await storage.createTask(validatedData);
+
+      // Send notifications for new task creation
+      const currentUser = req.user;
+      const notifications = [];
+
+      // Notify assignee if different from creator
+      if (task.assignedTo && task.assignedTo !== currentUser.id) {
+        notifications.push({
+          userId: task.assignedTo,
+          type: 'task_created',
+          title: 'New Task Assigned',
+          message: `You have been assigned a new task: "${task.title}"`,
+          data: { taskId: task.id, projectId: task.projectId, createdBy: currentUser.id }
+        });
+      }
+
+      // Notify project manager if task is in a project
+      if (task.projectId) {
+        const project = await db.select().from(projects).where(eq(projects.id, task.projectId)).limit(1);
+        if (project.length && project[0].managerId && project[0].managerId !== currentUser.id && project[0].managerId !== task.assignedTo) {
+          notifications.push({
+            userId: project[0].managerId,
+            type: 'task_created',
+            title: 'New Task Created',
+            message: `A new task "${task.title}" was created in ${project[0].name}`,
+            data: { taskId: task.id, projectId: task.projectId, createdBy: currentUser.id }
+          });
+        }
+      }
+
+      // Send all notifications
+      for (const notification of notifications) {
+        try {
+          await wsManager.broadcastNotification(notification);
+        } catch (error) {
+          console.error('Error sending task creation notification:', error);
+        }
+      }
+
       res.status(201).json(task);
     } catch (error) {
       console.error("Error creating task:", error);
@@ -1209,10 +1338,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/tasks/:id', isAuthenticated, async (req, res) => {
+  app.put('/api/tasks/:id', isAuthenticated, async (req: any, res) => {
     try {
       const validatedData = insertTaskSchema.partial().parse(req.body);
+
+      // Get original task to compare changes
+      const originalTask = await storage.getTask(req.params.id);
+      if (!originalTask) {
+        return res.status(404).json({ message: "Task not found" });
+      }
+
       const task = await storage.updateTask(req.params.id, validatedData);
+
+      // Send notifications for significant changes
+      const currentUser = req.user;
+      const taskId = req.params.id;
+
+      // Notify on status changes
+      if (validatedData.status && validatedData.status !== originalTask.status) {
+        const statusNotifications = [];
+
+        // Notify assignee if different from current user
+        if (task.assignedTo && task.assignedTo !== currentUser.id) {
+          statusNotifications.push({
+            userId: task.assignedTo,
+            type: validatedData.status === 'completed' ? 'task_completed' : 'task_updated',
+            title: validatedData.status === 'completed' ? 'Task Completed' : 'Task Status Updated',
+            message: `"${task.title}" is now ${validatedData.status.replace('_', ' ')}`,
+            data: { taskId, projectId: task.projectId, oldStatus: originalTask.status, newStatus: validatedData.status }
+          });
+        }
+
+        // Notify project manager if task is in a project
+        if (task.projectId) {
+          const project = await db.select().from(projects).where(eq(projects.id, task.projectId)).limit(1);
+          if (project.length && project[0].managerId && project[0].managerId !== currentUser.id && project[0].managerId !== task.assignedTo) {
+            statusNotifications.push({
+              userId: project[0].managerId,
+              type: validatedData.status === 'completed' ? 'task_completed' : 'task_updated',
+              title: validatedData.status === 'completed' ? 'Task Completed' : 'Task Status Updated',
+              message: `"${task.title}" in ${project[0].name} is now ${validatedData.status.replace('_', ' ')}`,
+              data: { taskId, projectId: task.projectId, oldStatus: originalTask.status, newStatus: validatedData.status }
+            });
+          }
+        }
+
+        // Send all status change notifications
+        for (const notification of statusNotifications) {
+          try {
+            await wsManager.broadcastNotification(notification);
+          } catch (error) {
+            console.error('Error sending task status notification:', error);
+          }
+        }
+      }
+
+      // Notify on assignee changes
+      if (validatedData.assignedTo && validatedData.assignedTo !== originalTask.assignedTo) {
+        if (validatedData.assignedTo !== currentUser.id) {
+          try {
+            await wsManager.broadcastNotification({
+              userId: validatedData.assignedTo,
+              type: 'task_updated',
+              title: 'Task Assigned',
+              message: `You have been assigned to "${task.title}"`,
+              data: { taskId, projectId: task.projectId, assignedBy: currentUser.id }
+            });
+          } catch (error) {
+            console.error('Error sending task assignment notification:', error);
+          }
+        }
+      }
+
       res.json(task);
     } catch (error) {
       console.error("Error updating task:", error);
@@ -1429,7 +1626,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/projects/:id/comments', isAuthenticated, async (req, res) => {
+  app.post('/api/projects/:id/comments', isAuthenticated, async (req: any, res) => {
     try {
       const validatedData = insertProjectCommentSchema.parse(req.body);
       const comment = await db.insert(projectComments).values({
@@ -1447,6 +1644,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
         entityId: comment[0].id,
         details: { content: validatedData.content.substring(0, 100) + '...' }
       });
+
+      // Get project details for notifications
+      const project = await db.select().from(projects).where(eq(projects.id, req.params.id)).limit(1);
+      if (project.length) {
+        const currentUser = req.user;
+        const notifications = [];
+
+        // Notify project manager if different from commenter
+        if (project[0].managerId && project[0].managerId !== currentUser.id) {
+          notifications.push({
+            userId: project[0].managerId,
+            type: 'comment_added',
+            title: 'New Project Comment',
+            message: `${currentUser.firstName} ${currentUser.lastName} commented on ${project[0].name}`,
+            data: { projectId: req.params.id, commentId: comment[0].id, commentBy: currentUser.id }
+          });
+        }
+
+        // Notify client/primary contact if available
+        if (project[0].clientId && project[0].clientId !== currentUser.id) {
+          notifications.push({
+            userId: project[0].clientId,
+            type: 'comment_added',
+            title: 'Project Update',
+            message: `New comment added to project ${project[0].name}`,
+            data: { projectId: req.params.id, commentId: comment[0].id, commentBy: currentUser.id }
+          });
+        }
+
+        // Send all notifications
+        for (const notification of notifications) {
+          try {
+            await wsManager.broadcastNotification(notification);
+          } catch (error) {
+            console.error('Error sending project comment notification:', error);
+          }
+        }
+      }
 
       res.status(201).json(comment[0]);
     } catch (error) {

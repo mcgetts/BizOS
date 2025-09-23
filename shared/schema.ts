@@ -584,6 +584,19 @@ export const workloadSnapshots = pgTable("workload_snapshots", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Notifications table for real-time notifications
+export const notifications = pgTable("notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  type: varchar("type").notNull(), // task_created, task_updated, task_completed, project_updated, comment_added, dependency_changed
+  title: varchar("title").notNull(),
+  message: text("message").notNull(),
+  data: jsonb("data"), // Additional context data (task ID, project ID, etc.)
+  read: boolean("read").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Relations
 export const userRelations = relations(users, ({ many }) => ({
   managedProjects: many(projects, { relationName: "manager" }),
@@ -604,6 +617,7 @@ export const userRelations = relations(users, ({ many }) => ({
   resourceAllocations: many(resourceAllocations),
   workloadSnapshots: many(workloadSnapshots),
   approvedTimeEntries: many(timeEntryApprovals, { relationName: "approver" }),
+  notifications: many(notifications),
 }));
 
 export const clientRelations = relations(clients, ({ one, many }) => ({
@@ -998,6 +1012,12 @@ export const insertWorkloadSnapshotSchema = createInsertSchema(workloadSnapshots
   createdAt: true,
 });
 
+export const insertNotificationSchema = createInsertSchema(notifications).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // New relations
 export const opportunityNextStepRelations = relations(opportunityNextSteps, ({ one }) => ({
   opportunity: one(salesOpportunities, {
@@ -1182,6 +1202,13 @@ export const workloadSnapshotsRelations = relations(workloadSnapshots, ({ one })
   }),
 }));
 
+export const notificationRelations = relations(notifications, ({ one }) => ({
+  user: one(users, {
+    fields: [notifications.userId],
+    references: [users.id],
+  }),
+}));
+
 // Types
 export type UpsertUser = z.infer<typeof upsertUserSchema>;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -1301,6 +1328,8 @@ export type InsertTimeEntryApproval = z.infer<typeof insertTimeEntryApprovalSche
 export type TimeEntryApproval = typeof timeEntryApprovals.$inferSelect;
 export type InsertWorkloadSnapshot = z.infer<typeof insertWorkloadSnapshotSchema>;
 export type WorkloadSnapshot = typeof workloadSnapshots.$inferSelect;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type Notification = typeof notifications.$inferSelect;
 
 // Enhanced resource management types with relations
 export type UserWithCapacityAndSkills = User & {
