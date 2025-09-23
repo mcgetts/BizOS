@@ -612,7 +612,6 @@ export default function Team() {
             </DialogContent>
                 </Dialog>
               </div>
-            </div>
           </CardHeader>
           <CardContent>
             {/* Team Members Views */}
