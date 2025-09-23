@@ -43,24 +43,41 @@ echo "🔄 Additional cleanup of Node.js processes..."
 ps aux | grep -E "(node.*tsx.*server|node.*--require.*tsx)" | grep -v grep | awk '{print $2}' | xargs -r kill -9 2>/dev/null
 sleep 1
 
+# Kill processes by port if available tools exist
+echo "🔄 Killing processes by port..."
+if command -v lsof >/dev/null 2>&1; then
+  # Kill anything on ports 3001 and 5000
+  for port in 3001 5000; do
+    pids=$(lsof -ti :$port 2>/dev/null)
+    if [ ! -z "$pids" ]; then
+      echo "🔄 Killing processes on port $port..."
+      echo "$pids" | xargs -r kill -9 2>/dev/null
+    fi
+  done
+elif command -v fuser >/dev/null 2>&1; then
+  # Alternative using fuser
+  fuser -k 3001/tcp 5000/tcp 2>/dev/null || true
+fi
+
 # Verify ports are free (using alternative methods since fuser/lsof might not be available)
 echo "🔍 Checking port availability..."
 
 # Check if anything is listening on our ports using netstat alternative
 check_port() {
   local port=$1
+  local description=$2
   # Try to connect to the port to see if it's in use
   if timeout 1 bash -c "</dev/tcp/localhost/$port" 2>/dev/null; then
-    echo "⚠️  Port $port appears to be in use"
+    echo "⚠️  Port $port ($description) appears to be in use"
     return 1
   else
-    echo "✅ Port $port is available"
+    echo "✅ Port $port ($description) is available"
     return 0
   fi
 }
 
-check_port 3001
-check_port 5000
+check_port 3001 "development"
+check_port 5000 "legacy/fallback"
 
 # Final verification - check for any remaining development processes
 echo "🔍 Final process verification..."

@@ -65,21 +65,20 @@ app.use((req, res, next) => {
   }
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  
-  // Detect Replit environment and force port 5000 in development to match workflow expectations
-  const isReplit = Boolean(process.env.REPL_ID);
+  // Default to 3001 for development, 5000 for production if not specified.
+  // This serves both the API and the client.
+
+  const rawPort = Number(process.env.PORT);
   const isDevMode = process.env.NODE_ENV === 'development';
-  
+
+  // Use PORT env var if valid, otherwise default to 3001 for dev, 5000 for production
   let port: number;
-  if (isReplit && isDevMode) {
-    port = 5000;
-    log("Replit dev detected – forcing port 5000");
+  if (Number.isFinite(rawPort) && rawPort > 0) {
+    port = rawPort;
+    log(`Using PORT environment variable: ${port}`);
   } else {
-    const rawPort = Number(process.env.PORT);
-    port = Number.isFinite(rawPort) && rawPort > 0 ? rawPort : 5000;
+    port = isDevMode ? 3001 : 5000;
+    log(`Using default port for ${isDevMode ? 'development' : 'production'}: ${port}`);
   }
   server.listen({
     port,

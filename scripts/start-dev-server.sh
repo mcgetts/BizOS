@@ -42,27 +42,57 @@ bash "$(dirname "$0")/cleanup-processes.sh"
 echo ""
 echo "🔍 Checking port availability..."
 
-# Check if the desired port is available
+# Check both potential ports that could conflict
+echo "🔍 Checking for potential port conflicts..."
+
+# First check if our target port is available
 if is_port_available $PORT; then
   echo "✅ Port $PORT is available"
 else
-  echo "⚠️  Port $PORT is in use, finding alternative..."
-  AVAILABLE_PORT=$(find_available_port $PORT)
-
-  if [ $? -eq 0 ]; then
-    echo "✅ Found available port: $AVAILABLE_PORT"
-    PORT=$AVAILABLE_PORT
-  else
-    echo "❌ Could not find an available port starting from $PORT"
-    echo "💡 Try running the cleanup script manually: bash scripts/cleanup-processes.sh"
-    exit 1
+  echo "⚠️  Port $PORT is in use, attempting cleanup..."
+  # Run additional cleanup for this specific port
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -ti :$PORT 2>/dev/null | xargs -r kill -9 2>/dev/null || true
+  elif command -v fuser >/dev/null 2>&1; then
+    fuser -k $PORT/tcp 2>/dev/null || true
   fi
+
+  sleep 2
+
+  # Check again after cleanup
+  if is_port_available $PORT; then
+    echo "✅ Port $PORT is now available after cleanup"
+  else
+    echo "⚠️  Port $PORT still in use, finding alternative..."
+    AVAILABLE_PORT=$(find_available_port $PORT)
+
+    if [ $? -eq 0 ]; then
+      echo "✅ Found available port: $AVAILABLE_PORT"
+      PORT=$AVAILABLE_PORT
+    else
+      echo "❌ Could not find an available port starting from $PORT"
+      echo "💡 Try running the cleanup script manually: bash scripts/cleanup-processes.sh"
+      exit 1
+    fi
+  fi
+fi
+
+# Also check legacy port 5000 that might be conflicting
+if ! is_port_available 5000; then
+  echo "⚠️  Legacy port 5000 is in use, cleaning up..."
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -ti :5000 2>/dev/null | xargs -r kill -9 2>/dev/null || true
+  elif command -v fuser >/dev/null 2>&1; then
+    fuser -k 5000/tcp 2>/dev/null || true
+  fi
+  echo "✅ Legacy port 5000 cleaned up"
 fi
 
 # Set the PORT environment variable and start the server
 echo ""
 echo "🌟 Starting development server on port $PORT..."
 echo "🌐 Application will be available at: http://localhost:$PORT"
+echo "ℹ️  Server will respect PORT environment variable (currently: $PORT)"
 echo ""
 
 # Export the port and start the server
