@@ -353,6 +353,140 @@ Project Management Team
 
     return { to: userEmail, subject, text, html };
   }
+
+  // Authentication email methods
+
+  public async sendEmailVerification(
+    userEmail: string,
+    userName: string,
+    verificationToken: string,
+    protocol: string,
+    host: string
+  ) {
+    const verificationUrl = `${protocol}://${host}/verify-email?token=${verificationToken}`;
+
+    const subject = 'Verify Your Email Address';
+
+    const text = `
+Hello ${userName},
+
+Welcome! Please verify your email address to complete your account setup.
+
+Click the following link to verify your email:
+${verificationUrl}
+
+If you didn't create this account, you can safely ignore this email.
+
+Best regards,
+Your Team
+    `.trim();
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background-color: #4CAF50; color: white; padding: 20px; text-align: center; }
+    .content { background-color: #f9f9f9; padding: 20px; border: 1px solid #ddd; }
+    .button { display: inline-block; padding: 12px 24px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 4px; margin: 20px 0; }
+    .footer { background-color: #f4f4f4; padding: 15px; text-align: center; font-size: 14px; color: #666; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h2>Verify Your Email Address</h2>
+    </div>
+    <div class="content">
+      <p>Hello <strong>${userName}</strong>,</p>
+      <p>Welcome! Please verify your email address to complete your account setup and start using the platform.</p>
+      <div style="text-align: center;">
+        <a href="${verificationUrl}" class="button">Verify Email Address</a>
+      </div>
+      <p>If the button doesn't work, copy and paste this link into your browser:</p>
+      <p style="word-break: break-all; color: #666;">${verificationUrl}</p>
+      <p><strong>Note:</strong> If you didn't create this account, you can safely ignore this email.</p>
+    </div>
+    <div class="footer">
+      <p>Best regards,<br>Your Team</p>
+    </div>
+  </div>
+</body>
+</html>
+    `.trim();
+
+    return this.sendEmail({ to: userEmail, subject, text, html });
+  }
+
+  public async sendPasswordReset(
+    userEmail: string,
+    userName: string,
+    resetToken: string,
+    protocol: string,
+    host: string
+  ) {
+    const resetUrl = `${protocol}://${host}/reset-password?token=${resetToken}`;
+
+    const subject = 'Reset Your Password';
+
+    const text = `
+Hello ${userName},
+
+You requested to reset your password. Click the link below to set a new password:
+${resetUrl}
+
+This link will expire in 1 hour for security reasons.
+
+If you didn't request this password reset, you can safely ignore this email.
+
+Best regards,
+Your Team
+    `.trim();
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background-color: #ff9800; color: white; padding: 20px; text-align: center; }
+    .content { background-color: #f9f9f9; padding: 20px; border: 1px solid #ddd; }
+    .button { display: inline-block; padding: 12px 24px; background-color: #ff9800; color: white; text-decoration: none; border-radius: 4px; margin: 20px 0; }
+    .footer { background-color: #f4f4f4; padding: 15px; text-align: center; font-size: 14px; color: #666; }
+    .warning { background-color: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; border-radius: 4px; margin: 15px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h2>Reset Your Password</h2>
+    </div>
+    <div class="content">
+      <p>Hello <strong>${userName}</strong>,</p>
+      <p>You requested to reset your password. Click the button below to set a new password:</p>
+      <div style="text-align: center;">
+        <a href="${resetUrl}" class="button">Reset Password</a>
+      </div>
+      <p>If the button doesn't work, copy and paste this link into your browser:</p>
+      <p style="word-break: break-all; color: #666;">${resetUrl}</p>
+      <div class="warning">
+        <p><strong>Important:</strong> This link will expire in 1 hour for security reasons.</p>
+      </div>
+      <p>If you didn't request this password reset, you can safely ignore this email.</p>
+    </div>
+    <div class="footer">
+      <p>Best regards,<br>Your Team</p>
+    </div>
+  </div>
+</body>
+</html>
+    `.trim();
+
+    return this.sendEmail({ to: userEmail, subject, text, html });
+  }
 }
 
 export const emailService = new EmailService();

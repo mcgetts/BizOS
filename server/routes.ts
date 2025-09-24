@@ -9,6 +9,11 @@ import { eq, desc, and, sql } from "drizzle-orm";
 import { setupAuth, isAuthenticated, requireRole } from "./replitAuth";
 import {
   insertUserSchema,
+  registerUserSchema,
+  loginUserSchema,
+  requestPasswordResetSchema,
+  resetPasswordSchema,
+  changePasswordSchema,
   insertClientSchema,
   insertCompanySchema,
   insertSalesOpportunitySchema,
@@ -85,6 +90,9 @@ import {
   generateTeamWorkloadSnapshots,
 } from "./utils/resourceCalculations.js";
 import { wsManager } from "./websocketManager";
+import { PasswordUtils, AuthRateLimiter } from "./utils/authUtils";
+import { emailService } from "./emailService";
+import passport from "passport";
 
 // Helper function to log activity history
 async function logActivityHistory(
@@ -232,12 +240,440 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Auth routes
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
+      let userId: string;
+      let user: any;
+
+      if (req.user.isLocal) {
+        // Local authentication user
+        userId = req.user.id;
+        user = await storage.getUser(userId);
+      } else {
+        // OAuth authentication user
+        userId = req.user.claims.sub;
+        user = await storage.getUser(userId);
+      }
+
       res.json(user);
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  // Local authentication endpoints
+
+  // User registration
+  app.post('/api/auth/register', async (req: any, res) => {
+    try {
+      const validatedData = registerUserSchema.parse(req.body);
+      const { email, password, firstName, lastName, phone, department, position } = validatedData;
+
+      // Rate limiting check
+      const identifier = req.ip + ':register';
+      if (AuthRateLimiter.isRateLimited(identifier)) {
+        const resetTime = AuthRateLimiter.getResetTime(identifier);
+        return res.status(429).json({
+          message: `Too many registration attempts. Try again in ${Math.ceil(resetTime / 60)} minutes.`
+        });
+      }
+
+      // Check if user already exists
+      const [existingUser] = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, email.toLowerCase()))
+        .limit(1);
+
+      if (existingUser) {
+        AuthRateLimiter.recordFailedAttempt(identifier);
+        return res.status(409).json({
+          message: 'An account with this email already exists.'
+        });
+      }
+
+      // Check team size limit
+      const currentUsers = await storage.getUsers();
+      const TEAM_SIZE_LIMIT = 50; // You can adjust this or use BUSINESS_LIMITS
+      if (currentUsers.length >= TEAM_SIZE_LIMIT) {
+        return res.status(409).json({
+          message: `Team size limit reached. Maximum ${TEAM_SIZE_LIMIT} team members allowed.`
+        });
+      }
+
+      // Hash password
+      const passwordHash = await PasswordUtils.hashPassword(password);
+
+      // Generate email verification token
+      const emailVerificationToken = PasswordUtils.generateEmailVerificationToken();
+
+      // Create user
+      const [newUser] = await db
+        .insert(users)
+        .values({
+          email: email.toLowerCase(),
+          firstName,
+          lastName,
+          phone: phone || null,
+          department: department || null,
+          position: position || null,
+          passwordHash,
+          authProvider: 'local',
+          emailVerified: false, // Require email verification
+          emailVerificationToken,
+          role: 'employee', // Default role
+          isActive: true
+        })
+        .returning();
+
+      // Ensure first user gets admin privileges
+      if (currentUsers.length === 0) {
+        await db
+          .update(users)
+          .set({ role: 'admin' })
+          .where(eq(users.id, newUser.id));
+      }
+
+      // Send verification email
+      try {
+        await emailService.sendEmailVerification(
+          email,
+          firstName,
+          emailVerificationToken,
+          req.protocol,
+          req.get('host')
+        );
+      } catch (emailError) {
+        console.error('Failed to send verification email:', emailError);
+        // Continue with registration even if email fails
+      }
+
+      // Clear rate limiting on successful registration
+      AuthRateLimiter.clearAttempts(identifier);
+
+      res.status(201).json({
+        message: 'Registration successful! Please check your email to verify your account.',
+        user: {
+          id: newUser.id,
+          email: newUser.email,
+          firstName: newUser.firstName,
+          lastName: newUser.lastName,
+          emailVerified: newUser.emailVerified
+        }
+      });
+
+    } catch (error: any) {
+      console.error('Registration error:', error);
+
+      if (error.name === 'ZodError') {
+        return res.status(400).json({
+          message: 'Validation error',
+          errors: error.errors
+        });
+      }
+
+      res.status(500).json({
+        message: 'Registration failed. Please try again.'
+      });
+    }
+  });
+
+  // Local login
+  app.post('/api/auth/login', (req: any, res, next) => {
+    try {
+      const validatedData = loginUserSchema.parse(req.body);
+
+      passport.authenticate('local', (err: any, user: any, info: any) => {
+        if (err) {
+          console.error('Login authentication error:', err);
+          return res.status(500).json({ message: 'Authentication failed' });
+        }
+
+        if (!user) {
+          return res.status(401).json({
+            message: info?.message || 'Invalid credentials'
+          });
+        }
+
+        req.logIn(user, (err: any) => {
+          if (err) {
+            console.error('Login session error:', err);
+            return res.status(500).json({ message: 'Login failed' });
+          }
+
+          res.json({
+            message: 'Login successful',
+            user: {
+              id: user.id,
+              email: user.email,
+              firstName: user.firstName,
+              lastName: user.lastName,
+              role: user.role
+            }
+          });
+        });
+      })(req, res, next);
+
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({
+          message: 'Validation error',
+          errors: error.errors
+        });
+      }
+
+      res.status(400).json({
+        message: 'Invalid request data'
+      });
+    }
+  });
+
+  // Email verification
+  app.post('/api/auth/verify-email', async (req: any, res) => {
+    try {
+      const { token } = req.body;
+
+      if (!token) {
+        return res.status(400).json({ message: 'Verification token required' });
+      }
+
+      // Find user by verification token
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.emailVerificationToken, token))
+        .limit(1);
+
+      if (!user) {
+        return res.status(400).json({ message: 'Invalid or expired verification token' });
+      }
+
+      if (user.emailVerified) {
+        return res.status(400).json({ message: 'Email already verified' });
+      }
+
+      // Update user as verified
+      await db
+        .update(users)
+        .set({
+          emailVerified: true,
+          emailVerificationToken: null
+        })
+        .where(eq(users.id, user.id));
+
+      res.json({ message: 'Email verified successfully! You can now log in.' });
+
+    } catch (error) {
+      console.error('Email verification error:', error);
+      res.status(500).json({ message: 'Verification failed' });
+    }
+  });
+
+  // Password reset request
+  app.post('/api/auth/forgot-password', async (req: any, res) => {
+    try {
+      const validatedData = requestPasswordResetSchema.parse(req.body);
+      const { email } = validatedData;
+
+      // Rate limiting check
+      const identifier = req.ip + ':password-reset';
+      if (AuthRateLimiter.isRateLimited(identifier)) {
+        const resetTime = AuthRateLimiter.getResetTime(identifier);
+        return res.status(429).json({
+          message: `Too many password reset attempts. Try again in ${Math.ceil(resetTime / 60)} minutes.`
+        });
+      }
+
+      // Find user by email
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(and(
+          eq(users.email, email.toLowerCase()),
+          eq(users.isActive, true)
+        ))
+        .limit(1);
+
+      // Always return success for security (don't reveal if email exists)
+      res.json({
+        message: 'If an account with that email exists, you will receive a password reset link shortly.'
+      });
+
+      // Only send email if user exists and has local auth
+      if (user && user.passwordHash) {
+        try {
+          // Generate password reset token
+          const { token, expires } = PasswordUtils.generatePasswordResetToken();
+
+          // Save token to database
+          await db
+            .update(users)
+            .set({
+              passwordResetToken: token,
+              passwordResetExpires: expires
+            })
+            .where(eq(users.id, user.id));
+
+          // Send reset email
+          await emailService.sendPasswordReset(
+            user.email!,
+            user.firstName!,
+            token,
+            req.protocol,
+            req.get('host')
+          );
+
+          console.log(`Password reset email sent to ${user.email}`);
+        } catch (emailError) {
+          console.error('Failed to send password reset email:', emailError);
+          // Don't fail the request - user already got success message
+        }
+      } else {
+        // Record failed attempt for non-existent users to prevent enumeration
+        AuthRateLimiter.recordFailedAttempt(identifier);
+      }
+
+    } catch (error: any) {
+      console.error('Password reset request error:', error);
+
+      if (error.name === 'ZodError') {
+        return res.status(400).json({
+          message: 'Invalid email address'
+        });
+      }
+
+      res.status(500).json({
+        message: 'Failed to process password reset request'
+      });
+    }
+  });
+
+  // Password reset confirmation
+  app.post('/api/auth/reset-password', async (req: any, res) => {
+    try {
+      const validatedData = resetPasswordSchema.parse(req.body);
+      const { token, password } = validatedData;
+
+      // Find user by reset token
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(and(
+          eq(users.passwordResetToken, token),
+          eq(users.isActive, true)
+        ))
+        .limit(1);
+
+      if (!user) {
+        return res.status(400).json({ message: 'Invalid or expired reset token' });
+      }
+
+      // Check if token has expired
+      if (PasswordUtils.isTokenExpired(user.passwordResetExpires)) {
+        // Clean up expired token
+        await db
+          .update(users)
+          .set({
+            passwordResetToken: null,
+            passwordResetExpires: null
+          })
+          .where(eq(users.id, user.id));
+
+        return res.status(400).json({ message: 'Reset token has expired. Please request a new one.' });
+      }
+
+      // Hash new password
+      const passwordHash = await PasswordUtils.hashPassword(password);
+
+      // Update user with new password and clear reset token
+      await db
+        .update(users)
+        .set({
+          passwordHash,
+          passwordResetToken: null,
+          passwordResetExpires: null,
+          emailVerified: true // Ensure user is verified after password reset
+        })
+        .where(eq(users.id, user.id));
+
+      res.json({ message: 'Password reset successfully! You can now log in with your new password.' });
+
+    } catch (error: any) {
+      console.error('Password reset error:', error);
+
+      if (error.name === 'ZodError') {
+        return res.status(400).json({
+          message: 'Invalid request data',
+          errors: error.errors
+        });
+      }
+
+      res.status(500).json({
+        message: 'Failed to reset password'
+      });
+    }
+  });
+
+  // Change password (for authenticated users)
+  app.post('/api/auth/change-password', isAuthenticated, async (req: any, res) => {
+    try {
+      const validatedData = changePasswordSchema.parse(req.body);
+      const { currentPassword, newPassword } = validatedData;
+
+      let userId: string;
+      if (req.user.isLocal) {
+        userId = req.user.id;
+      } else {
+        userId = req.user.claims.sub;
+      }
+
+      // Get current user
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      // Check if user has a password (might be OAuth-only)
+      if (!user.passwordHash) {
+        return res.status(400).json({
+          message: 'This account uses OAuth login and cannot change password through this method.'
+        });
+      }
+
+      // Verify current password
+      const isCurrentPasswordValid = await PasswordUtils.verifyPassword(currentPassword, user.passwordHash);
+      if (!isCurrentPasswordValid) {
+        return res.status(400).json({ message: 'Current password is incorrect' });
+      }
+
+      // Hash new password
+      const newPasswordHash = await PasswordUtils.hashPassword(newPassword);
+
+      // Update password
+      await db
+        .update(users)
+        .set({ passwordHash: newPasswordHash })
+        .where(eq(users.id, userId));
+
+      res.json({ message: 'Password changed successfully' });
+
+    } catch (error: any) {
+      console.error('Change password error:', error);
+
+      if (error.name === 'ZodError') {
+        return res.status(400).json({
+          message: 'Validation error',
+          errors: error.errors
+        });
+      }
+
+      res.status(500).json({
+        message: 'Failed to change password'
+      });
     }
   });
 

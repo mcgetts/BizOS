@@ -48,6 +48,16 @@ export const users = pgTable("users", {
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
+  // Authentication fields
+  passwordHash: varchar("password_hash"), // For local authentication
+  authProvider: varchar("auth_provider").default("local"), // local, replit, google, github
+  providerUserId: varchar("provider_user_id"), // ID from OAuth provider
+  emailVerified: boolean("email_verified").default(false),
+  emailVerificationToken: varchar("email_verification_token"),
+  passwordResetToken: varchar("password_reset_token"),
+  passwordResetExpires: timestamp("password_reset_expires"),
+  lastLoginAt: timestamp("last_login_at"),
+  // User profile
   role: varchar("role").default("employee").$type<UserRole>(),
   department: varchar("department"),
   position: varchar("position"),
@@ -743,14 +753,58 @@ export const upsertUserSchema = createInsertSchema(users).pick({
   firstName: true,
   lastName: true,
   profileImageUrl: true,
+  authProvider: true,
+  providerUserId: true,
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
+  passwordHash: true, // Never allow client to set password hash directly
+  emailVerificationToken: true, // Server-generated
+  passwordResetToken: true, // Server-generated
+  passwordResetExpires: true, // Server-generated
   createdAt: true,
   updatedAt: true,
 }).extend({
   skills: z.array(z.string()).optional(),
+  password: z.string().min(8, "Password must be at least 8 characters").optional(),
+});
+
+// Registration schema for new users
+export const registerUserSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(8, "Password must be at least 8 characters")
+    .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, "Password must contain at least one lowercase letter, one uppercase letter, and one number"),
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+  phone: z.string().optional(),
+  department: z.string().optional(),
+  position: z.string().optional(),
+});
+
+// Login schema
+export const loginUserSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(1, "Password is required"),
+  rememberMe: z.boolean().optional().default(false),
+});
+
+// Password reset schemas
+export const requestPasswordResetSchema = z.object({
+  email: z.string().email("Invalid email address"),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1, "Reset token is required"),
+  password: z.string().min(8, "Password must be at least 8 characters")
+    .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, "Password must contain at least one lowercase letter, one uppercase letter, and one number"),
+});
+
+// Change password schema
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Current password is required"),
+  newPassword: z.string().min(8, "Password must be at least 8 characters")
+    .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, "Password must contain at least one lowercase letter, one uppercase letter, and one number"),
 });
 
 export const insertClientSchema = createInsertSchema(clients).omit({
@@ -1272,6 +1326,12 @@ export const notificationRelations = relations(notifications, ({ one }) => ({
 export type UpsertUser = z.infer<typeof upsertUserSchema>;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+// Authentication types
+export type RegisterUser = z.infer<typeof registerUserSchema>;
+export type LoginUser = z.infer<typeof loginUserSchema>;
+export type RequestPasswordReset = z.infer<typeof requestPasswordResetSchema>;
+export type ResetPassword = z.infer<typeof resetPasswordSchema>;
+export type ChangePassword = z.infer<typeof changePasswordSchema>;
 export type InsertClient = z.infer<typeof insertClientSchema>;
 export type Client = typeof clients.$inferSelect;
 export type ClientWithCompany = Omit<Client, 'company'> & {

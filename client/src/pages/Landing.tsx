@@ -1,12 +1,15 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, Users, FolderOpen, PoundSterling, BookOpen, Megaphone } from "lucide-react";
+import { AuthContainer } from "@/components/auth/AuthContainer";
+import { Building2, Users, FolderOpen, PoundSterling, BookOpen, Megaphone, ArrowRight, Monitor } from "lucide-react";
 
 export default function Landing() {
-  const handleLogin = async () => {
-    // Use dev login only in development mode, otherwise use OAuth flow
+  const [showAuth, setShowAuth] = useState(false);
+
+  const handleDevLogin = async () => {
+    // Use dev login only in development mode
     if (import.meta.env.DEV && window.location.hostname.includes('replit.dev')) {
-      // In development, use dev login endpoint
       try {
         const response = await fetch("/api/auth/dev-login", {
           method: "POST",
@@ -25,11 +28,53 @@ export default function Landing() {
       } catch (error) {
         console.error("Login error:", error);
       }
-    } else {
-      // For production/published app, use Replit OAuth flow
-      window.location.href = "/api/login";
     }
   };
+
+  // If showing auth, render the auth container
+  if (showAuth) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+              Welcome Back
+            </h1>
+            <p className="text-gray-600">
+              Sign in to your business management platform
+            </p>
+          </div>
+
+          <AuthContainer onSuccess={() => window.location.reload()} />
+
+          <div className="text-center mt-8">
+            <Button
+              variant="ghost"
+              onClick={() => setShowAuth(false)}
+              className="text-sm text-gray-600 hover:text-gray-800"
+            >
+              ← Back to homepage
+            </Button>
+          </div>
+
+          {/* Dev login button - only show in development */}
+          {import.meta.env.DEV && window.location.hostname.includes('replit.dev') && (
+            <div className="text-center mt-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDevLogin}
+                className="text-xs"
+              >
+                <Monitor className="mr-1 h-3 w-3" />
+                Dev Login
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   const features = [
     {
@@ -75,9 +120,21 @@ export default function Landing() {
             </div>
             <span className="text-2xl font-bold text-foreground">BizOS</span>
           </div>
-          <Button onClick={handleLogin} data-testid="button-login">
-            Sign In
-          </Button>
+          <div className="flex items-center space-x-4">
+            <Button
+              variant="ghost"
+              onClick={() => setShowAuth(true)}
+              data-testid="button-login"
+            >
+              Sign In
+            </Button>
+            <Button
+              onClick={() => setShowAuth(true)}
+              data-testid="button-signup"
+            >
+              Sign Up
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -92,9 +149,24 @@ export default function Landing() {
             into one unified, professional-grade system. Streamline your operations, enhance productivity, 
             and drive growth with BizOS.
           </p>
-          <Button size="lg" onClick={handleLogin} data-testid="button-get-started">
-            Get Started
-          </Button>
+          <div className="flex items-center justify-center space-x-4">
+            <Button
+              size="lg"
+              onClick={() => setShowAuth(true)}
+              data-testid="button-get-started"
+            >
+              Get Started
+              <ArrowRight className="ml-2 h-5 w-5" />
+            </Button>
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={() => setShowAuth(true)}
+              data-testid="button-sign-in"
+            >
+              Sign In
+            </Button>
+          </div>
         </div>
 
         {/* Features Grid */}
@@ -128,7 +200,7 @@ export default function Landing() {
                 Join thousands of businesses that have streamlined their operations with BizOS. 
                 Get started today and experience the difference.
               </p>
-              <Button size="lg" onClick={handleLogin} data-testid="button-start-free">
+              <Button size="lg" onClick={() => setShowAuth(true)} data-testid="button-start-free">
                 Start Your Journey
               </Button>
             </CardContent>

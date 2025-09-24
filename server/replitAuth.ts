@@ -1,5 +1,6 @@
 import * as client from "openid-client";
 import { Strategy, type VerifyFunction } from "openid-client/passport";
+import { Strategy as LocalStrategy } from "passport-local";
 
 import passport from "passport";
 import session from "express-session";
@@ -9,6 +10,10 @@ import connectPg from "connect-pg-simple";
 import { storage } from "./storage";
 import { BUSINESS_LIMITS } from "./config/constants";
 import { ensureFirstUserIsAdmin } from "./seed";
+import { PasswordUtils, AuthRateLimiter } from "./utils/authUtils";
+import { db } from "./db";
+import { users } from "../shared/schema";
+import { eq, and } from "drizzle-orm";
 
 if (!process.env.REPLIT_DOMAINS) {
   throw new Error("Environment variable REPLIT_DOMAINS not provided");
@@ -161,8 +166,90 @@ export async function setupAuth(app: Express) {
     passport.use(strategy);
   };
 
-  passport.serializeUser((user: Express.User, cb) => cb(null, user));
-  passport.deserializeUser((user: Express.User, cb) => cb(null, user));
+  // Local authentication strategy
+  passport.use(new LocalStrategy(
+    {
+      usernameField: 'email',
+      passwordField: 'password'
+    },
+    async (email: string, password: string, done) => {
+      try {
+        // Rate limiting check
+        const identifier = email.toLowerCase();
+        if (AuthRateLimiter.isRateLimited(identifier)) {
+          const resetTime = AuthRateLimiter.getResetTime(identifier);
+          return done(null, false, {
+            message: `Too many login attempts. Try again in ${Math.ceil(resetTime / 60)} minutes.`
+          });
+        }
+
+        // Find user by email
+        const [user] = await db
+          .select()
+          .from(users)
+          .where(and(
+            eq(users.email, email.toLowerCase()),
+            eq(users.isActive, true)
+          ))
+          .limit(1);
+
+        if (!user) {
+          AuthRateLimiter.recordFailedAttempt(identifier);
+          return done(null, false, { message: 'Invalid email or password.' });
+        }
+
+        // Check if user has a password (might be OAuth-only user)
+        if (!user.passwordHash) {
+          AuthRateLimiter.recordFailedAttempt(identifier);
+          return done(null, false, {
+            message: 'This account uses OAuth login. Please use the OAuth login button.'
+          });
+        }
+
+        // Verify password
+        const isValidPassword = await PasswordUtils.verifyPassword(password, user.passwordHash);
+        if (!isValidPassword) {
+          AuthRateLimiter.recordFailedAttempt(identifier);
+          return done(null, false, { message: 'Invalid email or password.' });
+        }
+
+        // Check email verification
+        if (!user.emailVerified) {
+          return done(null, false, {
+            message: 'Please verify your email address before logging in.'
+          });
+        }
+
+        // Clear rate limiting on successful login
+        AuthRateLimiter.clearAttempts(identifier);
+
+        // Update last login time
+        await db
+          .update(users)
+          .set({ lastLoginAt: new Date() })
+          .where(eq(users.id, user.id));
+
+        // Create user session object
+        const sessionUser = {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          role: user.role,
+          authProvider: user.authProvider,
+          isLocal: true
+        };
+
+        return done(null, sessionUser);
+      } catch (error) {
+        console.error('Local authentication error:', error);
+        return done(error);
+      }
+    }
+  ));
+
+  passport.serializeUser((user: any, cb) => cb(null, user));
+  passport.deserializeUser((user: any, cb) => cb(null, user));
 
   app.get("/api/login", async (req, res, next) => {
     const currentDomain = req.hostname;
