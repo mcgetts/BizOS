@@ -229,6 +229,24 @@ export const marketingCampaigns = pgTable("marketing_campaigns", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Opportunity file attachments table
+export const opportunityFileAttachments = pgTable("opportunity_file_attachments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  opportunityId: varchar("opportunity_id").references(() => salesOpportunities.id, { onDelete: "cascade" }),
+  communicationId: varchar("communication_id").references(() => opportunityCommunications.id, { onDelete: "cascade" }), // Optional - link to specific communication
+  fileName: varchar("file_name").notNull(),
+  originalFileName: varchar("original_file_name").notNull(),
+  fileSize: integer("file_size").notNull(), // in bytes
+  mimeType: varchar("mime_type").notNull(),
+  filePath: varchar("file_path").notNull(), // server storage path
+  uploadedBy: varchar("uploaded_by").references(() => users.id).notNull(),
+  description: text("description"), // Optional description of the file
+  isPublic: boolean("is_public").default(false), // Whether file is shared with client
+  uploadedAt: timestamp("uploaded_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Support tickets table
 export const supportTickets = pgTable("support_tickets", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -667,6 +685,7 @@ export const salesOpportunityRelations = relations(salesOpportunities, ({ one, m
   communications: many(opportunityCommunications),
   stakeholders: many(opportunityStakeholders),
   activityHistory: many(opportunityActivityHistory),
+  fileAttachments: many(opportunityFileAttachments),
 }));
 
 export const projectRelations = relations(projects, ({ one, many }) => ({
@@ -928,6 +947,21 @@ export const updateOpportunityStakeholderSchema = insertOpportunityStakeholderSc
   createdBy: true,
 });
 
+// Opportunity file attachment schemas
+export const insertOpportunityFileAttachmentSchema = createInsertSchema(opportunityFileAttachments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  uploadedAt: true,
+});
+
+export const updateOpportunityFileAttachmentSchema = insertOpportunityFileAttachmentSchema.partial().omit({
+  opportunityId: true,
+  uploadedBy: true,
+  fileName: true,
+  filePath: true,
+});
+
 // New project template schemas
 export const insertProjectTemplateSchema = createInsertSchema(projectTemplates).omit({
   id: true,
@@ -1040,7 +1074,7 @@ export const opportunityNextStepRelations = relations(opportunityNextSteps, ({ o
   }),
 }));
 
-export const opportunityCommunicationRelations = relations(opportunityCommunications, ({ one }) => ({
+export const opportunityCommunicationRelations = relations(opportunityCommunications, ({ one, many }) => ({
   opportunity: one(salesOpportunities, {
     fields: [opportunityCommunications.opportunityId],
     references: [salesOpportunities.id],
@@ -1049,6 +1083,7 @@ export const opportunityCommunicationRelations = relations(opportunityCommunicat
     fields: [opportunityCommunications.recordedBy],
     references: [users.id],
   }),
+  fileAttachments: many(opportunityFileAttachments),
 }));
 
 export const opportunityStakeholderRelations = relations(opportunityStakeholders, ({ one }) => ({
@@ -1069,6 +1104,22 @@ export const opportunityActivityHistoryRelations = relations(opportunityActivity
   }),
   performedByUser: one(users, {
     fields: [opportunityActivityHistory.performedBy],
+    references: [users.id],
+  }),
+}));
+
+// Opportunity file attachment relations
+export const opportunityFileAttachmentRelations = relations(opportunityFileAttachments, ({ one }) => ({
+  opportunity: one(salesOpportunities, {
+    fields: [opportunityFileAttachments.opportunityId],
+    references: [salesOpportunities.id],
+  }),
+  communication: one(opportunityCommunications, {
+    fields: [opportunityFileAttachments.communicationId],
+    references: [opportunityCommunications.id],
+  }),
+  uploadedByUser: one(users, {
+    fields: [opportunityFileAttachments.uploadedBy],
     references: [users.id],
   }),
 }));
@@ -1282,6 +1333,8 @@ export type InsertOpportunityNextStep = z.infer<typeof insertOpportunityNextStep
 export type OpportunityNextStep = typeof opportunityNextSteps.$inferSelect;
 export type InsertOpportunityCommunication = z.infer<typeof insertOpportunityCommunicationSchema>;
 export type OpportunityCommunication = typeof opportunityCommunications.$inferSelect;
+export type InsertOpportunityFileAttachment = z.infer<typeof insertOpportunityFileAttachmentSchema>;
+export type OpportunityFileAttachment = typeof opportunityFileAttachments.$inferSelect;
 export type InsertOpportunityStakeholder = z.infer<typeof insertOpportunityStakeholderSchema>;
 export type OpportunityStakeholder = typeof opportunityStakeholders.$inferSelect;
 export type OpportunityActivityHistory = typeof opportunityActivityHistory.$inferSelect;

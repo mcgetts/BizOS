@@ -5,6 +5,16 @@
 
 echo "🧹 Cleaning up existing development processes..."
 
+# Detect environment
+IS_REPLIT=${REPL_ID:+true}
+IS_REPLIT=${REPLIT_ENV:-$IS_REPLIT}
+
+if [ "$IS_REPLIT" = "true" ]; then
+    echo "🔧 Replit environment detected - using gentle cleanup to avoid conflicts"
+else
+    echo "🔧 Local development environment - using aggressive cleanup"
+fi
+
 # Function to kill processes by pattern with verification
 kill_processes_by_pattern() {
   local pattern="$1"
@@ -16,7 +26,18 @@ kill_processes_by_pattern() {
     # Get PIDs and kill them
     local pids=$(ps aux | grep "$pattern" | grep -v grep | awk '{print $2}')
     if [ ! -z "$pids" ]; then
-      echo "$pids" | xargs -r kill -9
+      # In Replit, use gentler SIGTERM first, then SIGKILL if necessary
+      if [ "$IS_REPLIT" = "true" ]; then
+        echo "$pids" | xargs -r kill -TERM 2>/dev/null || true
+        sleep 3
+        # Check if still running, then use SIGKILL
+        if pgrep -f "$pattern" > /dev/null; then
+          echo "$pids" | xargs -r kill -9 2>/dev/null || true
+        fi
+      else
+        echo "$pids" | xargs -r kill -9
+      fi
+
       sleep 2
 
       # Verify they're dead

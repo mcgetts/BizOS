@@ -64,12 +64,25 @@ export const queryClient = new QueryClient({
     queries: {
       queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
-      refetchOnWindowFocus: false,
-      staleTime: Infinity,
-      retry: false,
+      refetchOnWindowFocus: true, // Enable refetch on focus for fresh data
+      staleTime: 5 * 60 * 1000, // 5 minutes - allow some staleness but not infinite
+      gcTime: 10 * 60 * 1000, // 10 minutes - keep data in cache longer
+      retry: 1, // Allow one retry for network issues
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
     },
     mutations: {
-      retry: false,
+      retry: 1, // Allow one retry for mutations too
+      retryDelay: 1000,
+      onError: (error: any) => {
+        console.error('Mutation error:', error);
+      },
+      // Add optimistic update rollback support
+      onSettled: (data, error, variables, context) => {
+        if (error && context) {
+          // Log rollback info for debugging
+          console.log('Mutation failed, context available for rollback:', context);
+        }
+      },
     },
   },
 });

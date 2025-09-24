@@ -6,6 +6,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { ChevronDown, ChevronRight, Calendar, Clock, GitBranch, Users } from "lucide-react";
 import type { Task, Project, User, TaskDependency } from "@shared/schema";
 import { getStatusBadge, getPriorityBadge } from "@/lib/statusUtils";
+import { calculateCriticalPath, getCriticalTasksForProject, type CriticalPathResult } from "@/lib/criticalPathAnalysis";
 
 interface GanttChartProps {
   tasks: Task[];
@@ -32,6 +33,9 @@ interface TaskWithProject extends Task {
 export function GanttChart({ tasks, projects, users, dependencies }: GanttChartProps) {
   const [timeScale, setTimeScale] = useState<TimeScale>("month");
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
+  const [draggedTask, setDraggedTask] = useState<TaskWithProject | null>(null);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [showCriticalPath, setShowCriticalPath] = useState<boolean>(true);
 
   // Calculate timeline configuration
   const timelineConfig = useMemo((): TimelineConfig => {
@@ -115,6 +119,18 @@ export function GanttChart({ tasks, projects, users, dependencies }: GanttChartP
     return markers;
   }, [timelineConfig, timeScale]);
 
+  // Calculate critical path analysis for all projects
+  const criticalPathResults = useMemo(() => {
+    const results = new Map<string, CriticalPathResult>();
+
+    projects.forEach(project => {
+      const criticalPath = getCriticalTasksForProject(project.id, tasks, dependencies);
+      results.set(project.id, criticalPath);
+    });
+
+    return results;
+  }, [tasks, dependencies, projects]);
+
   // Group tasks by project
   const tasksByProject = useMemo(() => {
     const grouped = new Map<string, TaskWithProject[]>();
@@ -155,8 +171,16 @@ export function GanttChart({ tasks, projects, users, dependencies }: GanttChartP
     };
   };
 
-  // Get task bar color based on status
+  // Get task bar color based on status and critical path
   const getTaskBarColor = (task: TaskWithProject) => {
+    const projectId = task.projectId;
+    const criticalPath = projectId ? criticalPathResults.get(projectId) : null;
+    const isCritical = criticalPath?.nodes.get(task.id)?.isCritical || false;
+
+    if (showCriticalPath && isCritical) {
+      return 'bg-red-600 border-2 border-red-800'; // Critical path highlight
+    }
+
     switch (task.status) {
       case 'completed': return 'bg-green-500';
       case 'in_progress': return 'bg-blue-500';
@@ -166,6 +190,54 @@ export function GanttChart({ tasks, projects, users, dependencies }: GanttChartP
     }
   };
 
+  // Calculate dependency connections for SVG lines
+  const getDependencyConnections = useMemo(() => {
+    const connections: Array<{
+      from: { x: number, y: number, taskId: string };
+      to: { x: number, y: number, taskId: string };
+    }> = [];
+
+    const taskPositions = new Map<string, { x: number, y: number, width: number }>();
+
+    // Calculate task positions (simplified for dependency lines)
+    let yOffset = 120; // Start after header
+
+    Array.from(tasksByProject.entries()).forEach(([projectKey, projectTasks]) => {
+      const isCollapsed = collapsedProjects.has(projectKey);
+      yOffset += 60; // Project header height
+
+      if (!isCollapsed) {
+        projectTasks.forEach(task => {
+          const barStyle = getTaskBarStyle(task);
+          const xPos = parseFloat(barStyle.left.replace('px', ''));
+          const width = parseFloat(barStyle.width.replace('px', ''));
+
+          taskPositions.set(task.id, {
+            x: xPos + width / 2, // Center of task bar
+            y: yOffset + 30, // Middle of task row
+            width
+          });
+          yOffset += 70; // Task row height
+        });
+      }
+    });
+
+    // Generate connection lines
+    dependencies.forEach(dep => {
+      const fromTask = taskPositions.get(dep.dependencyId);
+      const toTask = taskPositions.get(dep.taskId);
+
+      if (fromTask && toTask) {
+        connections.push({
+          from: { x: fromTask.x + fromTask.width / 2, y: fromTask.y, taskId: dep.dependencyId },
+          to: { x: toTask.x - toTask.width / 2, y: toTask.y, taskId: dep.taskId }
+        });
+      }
+    });
+
+    return connections;
+  }, [tasksByProject, dependencies, collapsedProjects, timelineConfig]);
+
   const toggleProject = (projectId: string) => {
     const newCollapsed = new Set(collapsedProjects);
     if (newCollapsed.has(projectId)) {
@@ -174,6 +246,94 @@ export function GanttChart({ tasks, projects, users, dependencies }: GanttChartP
       newCollapsed.add(projectId);
     }
     setCollapsedProjects(newCollapsed);
+  };
+
+  // Drag & Drop handlers for task scheduling
+  const handleTaskMouseDown = (task: TaskWithProject, event: React.MouseEvent) => {
+    event.preventDefault();
+    setDraggedTask(task);
+
+    const rect = (event.target as HTMLElement).getBoundingClientRect();
+    setDragOffset({
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top
+    });
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleMouseMove = (event: MouseEvent) => {
+    if (!draggedTask) return;
+
+    // Calculate new start date based on mouse position
+    const timelineElement = document.querySelector('[data-timeline]');
+    if (!timelineElement) return;
+
+    const rect = timelineElement.getBoundingClientRect();
+    const relativeX = event.clientX - rect.left - dragOffset.x;
+    const daysFromStart = relativeX / timelineConfig.pixelsPerDay;
+
+    const newStartDate = new Date(timelineConfig.startDate);
+    newStartDate.setDate(newStartDate.getDate() + daysFromStart);
+
+    // Visual feedback would go here (ghost bar, etc.)
+  };
+
+  const handleMouseUp = async (event: MouseEvent) => {
+    if (!draggedTask) return;
+
+    document.removeEventListener('mousemove', handleMouseMove);
+    document.removeEventListener('mouseup', handleMouseUp);
+
+    // Calculate final position and update task
+    const timelineElement = document.querySelector('[data-timeline]');
+    if (!timelineElement) {
+      setDraggedTask(null);
+      return;
+    }
+
+    const rect = timelineElement.getBoundingClientRect();
+    const relativeX = event.clientX - rect.left - dragOffset.x;
+    const daysFromStart = Math.round(relativeX / timelineConfig.pixelsPerDay);
+
+    const newStartDate = new Date(timelineConfig.startDate);
+    newStartDate.setDate(newStartDate.getDate() + daysFromStart);
+
+    // Calculate new due date maintaining duration
+    const originalDuration = draggedTask.dueDate && draggedTask.startDate
+      ? (new Date(draggedTask.dueDate).getTime() - new Date(draggedTask.startDate).getTime()) / (1000 * 60 * 60 * 24)
+      : 7;
+
+    const newDueDate = new Date(newStartDate);
+    newDueDate.setDate(newDueDate.getDate() + originalDuration);
+
+    try {
+      // Update task with new dates
+      const response = await fetch(`/api/tasks/${draggedTask.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: JSON.stringify({
+          ...draggedTask,
+          startDate: newStartDate.toISOString(),
+          dueDate: newDueDate.toISOString(),
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to update task');
+
+      // Refresh tasks (assuming parent component handles this)
+      // queryClient.invalidateQueries(['tasks']);
+
+    } catch (error) {
+      console.error('Error updating task:', error);
+    } finally {
+      setDraggedTask(null);
+      setDragOffset({ x: 0, y: 0 });
+    }
   };
 
   const totalTimelineWidth = timeMarkers.length * timelineConfig.pixelsPerDay;
@@ -189,6 +349,16 @@ export function GanttChart({ tasks, projects, users, dependencies }: GanttChartP
             Project Timeline & Gantt Chart
           </CardTitle>
           <div className="flex items-center gap-2">
+            {/* Critical Path Toggle */}
+            <Button
+              variant={showCriticalPath ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowCriticalPath(!showCriticalPath)}
+              className="text-xs"
+            >
+              Critical Path
+            </Button>
+
             {/* Time Scale Controls */}
             <div className="flex rounded-md border">
               {(['week', 'month', 'quarter'] as TimeScale[]).map((scale) => (
@@ -215,7 +385,11 @@ export function GanttChart({ tasks, projects, users, dependencies }: GanttChartP
                 <div className="font-semibold">Project / Task</div>
               </div>
               <div className="flex-1 relative overflow-x-auto">
-                <div style={{ width: `${totalTimelineWidth}px`, minWidth: '800px' }} className="relative">
+                <div
+                  data-timeline
+                  style={{ width: `${totalTimelineWidth}px`, minWidth: '800px' }}
+                  className="relative"
+                >
                   {/* Time scale markers */}
                   <div className="flex border-b bg-muted/30 h-10">
                     {timeMarkers.map((marker, index) => (
@@ -245,6 +419,47 @@ export function GanttChart({ tasks, projects, users, dependencies }: GanttChartP
                       </div>
                     </div>
                   )}
+
+                  {/* SVG Dependency Connectors */}
+                  <svg
+                    className="absolute top-0 left-0 pointer-events-none z-10"
+                    style={{ width: `${totalTimelineWidth}px`, height: '100vh' }}
+                  >
+                    <defs>
+                      <marker
+                        id="arrowhead"
+                        markerWidth="10"
+                        markerHeight="7"
+                        refX="9"
+                        refY="3.5"
+                        orient="auto"
+                      >
+                        <polygon
+                          points="0 0, 10 3.5, 0 7"
+                          fill="#f97316"
+                          stroke="#f97316"
+                          strokeWidth="1"
+                        />
+                      </marker>
+                    </defs>
+                    {getDependencyConnections.map((connection, index) => {
+                      const { from, to } = connection;
+                      const midX = (from.x + to.x) / 2;
+                      const midY = from.y < to.y ? from.y + 20 : from.y - 20;
+
+                      return (
+                        <path
+                          key={index}
+                          d={`M ${from.x} ${from.y} Q ${midX} ${midY} ${to.x} ${to.y}`}
+                          stroke="#f97316"
+                          strokeWidth="2"
+                          fill="none"
+                          markerEnd="url(#arrowhead)"
+                          opacity="0.7"
+                        />
+                      );
+                    })}
+                  </svg>
                 </div>
               </div>
             </div>
@@ -321,6 +536,15 @@ export function GanttChart({ tasks, projects, users, dependencies }: GanttChartP
                                       {task.dependencies.length} deps
                                     </Badge>
                                   )}
+                                  {(() => {
+                                    const criticalPath = task.projectId ? criticalPathResults.get(task.projectId) : null;
+                                    const isCritical = criticalPath?.nodes.get(task.id)?.isCritical || false;
+                                    return showCriticalPath && isCritical && (
+                                      <Badge variant="destructive" className="text-xs">
+                                        Critical
+                                      </Badge>
+                                    );
+                                  })()}
                                 </div>
                                 <div className="text-xs text-muted-foreground">
                                   {task.startDate && (
@@ -336,8 +560,12 @@ export function GanttChart({ tasks, projects, users, dependencies }: GanttChartP
                             <div className="flex-1 relative p-3" style={{ minWidth: '800px' }}>
                               {/* Task bar */}
                               <div
-                                className={`absolute top-4 h-6 ${getTaskBarColor(task)} rounded flex items-center px-2 text-white text-xs font-medium shadow-sm`}
+                                className={`absolute top-4 h-6 ${getTaskBarColor(task)} rounded flex items-center px-2 text-white text-xs font-medium shadow-sm cursor-move hover:shadow-md transition-shadow ${
+                                  draggedTask?.id === task.id ? 'opacity-50' : ''
+                                }`}
                                 style={getTaskBarStyle(task)}
+                                onMouseDown={(e) => handleTaskMouseDown(task, e)}
+                                title="Drag to reschedule task"
                               >
                                 <span className="truncate">{task.title}</span>
                               </div>
@@ -383,6 +611,12 @@ export function GanttChart({ tasks, projects, users, dependencies }: GanttChartP
               <div className="w-3 h-3 bg-orange-400 rounded-l"></div>
               <span>Has Dependencies</span>
             </div>
+            {showCriticalPath && (
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-red-600 border border-red-800 rounded"></div>
+                <span>Critical Path</span>
+              </div>
+            )}
           </div>
         </div>
       </CardContent>

@@ -110,23 +110,21 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Default to 3001 for development, 5000 for production if not specified.
-  // This serves both the API and the client.
+  // Unified port strategy: respect the PORT environment variable
+  // In Replit: PORT is always 5000 (set in .replit config)
+  // In local dev: PORT defaults to 3001 (set in package.json script)
+  // In production: PORT defaults to 5000
 
   const rawPort = Number(process.env.PORT);
   const isDevMode = process.env.NODE_ENV === 'development';
-  const isReplit = process.env.REPL_ID !== undefined;
+  const isReplit = process.env.REPL_ID !== undefined || process.env.REPLIT_ENV === 'true';
 
-  // In Replit, always use port 5000 regardless of environment
   let port: number;
-  if (isReplit) {
-    port = 5000;
-    log(`Replit dev detected – forcing port 5000`);
-  } else if (Number.isFinite(rawPort) && rawPort > 0) {
+  if (Number.isFinite(rawPort) && rawPort > 0) {
     port = rawPort;
-    log(`Using PORT environment variable: ${port}`);
+    log(`Using PORT environment variable: ${port}${isReplit ? ' (Replit)' : ''}`);
   } else {
+    // Fallback logic
     port = isDevMode ? 3001 : 5000;
     log(`Using default port for ${isDevMode ? 'development' : 'production'}: ${port}`);
   }

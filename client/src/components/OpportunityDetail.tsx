@@ -27,6 +27,7 @@ import {
   Target,
 } from "lucide-react";
 import { format } from "date-fns";
+import { FileAttachment } from "./FileAttachment";
 
 import { SalesOpportunityWithRelations } from "@shared/schema";
 
@@ -944,6 +945,19 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
                 </Button>
               </div>
 
+              {/* General Opportunity Files */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Shared Files</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <FileAttachment
+                    opportunityId={opportunity.id}
+                    showUploadButton={true}
+                  />
+                </CardContent>
+              </Card>
+
               {isAddingCommunication && (
                 <Card>
                   <CardHeader>
@@ -1232,6 +1246,15 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
                               <Trash2 className="w-3 h-3" />
                             </Button>
                           </div>
+                        </div>
+
+                        {/* Communication-specific file attachments */}
+                        <div className="mt-4 pt-4 border-t">
+                          <FileAttachment
+                            opportunityId={opportunity.id}
+                            communicationId={comm.id}
+                            showUploadButton={true}
+                          />
                         </div>
                       </CardContent>
                     </Card>

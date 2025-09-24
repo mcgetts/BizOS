@@ -17,6 +17,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useOptimisticMutation, optimisticCreators } from "@/hooks/useOptimisticMutation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertProjectSchema } from "@shared/schema";
@@ -114,34 +115,40 @@ function ProjectForm({ project, onSuccess }: { project?: Project; onSuccess: () 
     select: (allTasks) => allTasks?.filter(task => task.projectId === project?.id) || [],
   });
 
-  const createMutation = useMutation({
+  const createMutation = useOptimisticMutation({
     mutationFn: async (data: InsertProject) => {
       const response = await apiRequest("POST", "/api/projects", data);
       return response.json();
     },
+    optimisticUpdates: [
+      {
+        queryKey: ["/api/projects"],
+        ...optimisticCreators.addToList<Project>()
+      }
+    ],
+    successMessage: "Project created successfully",
+    errorMessage: "Failed to create project",
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
-      toast({ title: "Success", description: "Project created successfully" });
       onSuccess();
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to create project", variant: "destructive" });
-    },
+    }
   });
 
-  const updateMutation = useMutation({
+  const updateMutation = useOptimisticMutation({
     mutationFn: async (data: Partial<InsertProject>) => {
       const response = await apiRequest("PUT", `/api/projects/${project?.id}`, data);
       return response.json();
     },
+    optimisticUpdates: project ? [
+      {
+        queryKey: ["/api/projects"],
+        ...optimisticCreators.updateInList<Project>(project.id || '')
+      }
+    ] : [],
+    successMessage: "Project updated successfully",
+    errorMessage: "Failed to update project",
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
-      toast({ title: "Success", description: "Project updated successfully" });
       onSuccess();
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to update project", variant: "destructive" });
-    },
+    }
   });
 
   const onSubmit = (data: ProjectFormData) => {
@@ -557,18 +564,22 @@ export default function Projects() {
   });
 
   // Delete mutation
-  const deleteMutation = useMutation({
+  const deleteMutation = useOptimisticMutation({
     mutationFn: async (id: string) => {
       const response = await apiRequest("DELETE", `/api/projects/${id}`);
       return response;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
-      toast({ title: "Success", description: "Project deleted successfully" });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to delete project", variant: "destructive" });
-    },
+    optimisticUpdates: [
+      {
+        queryKey: ["/api/projects"],
+        updater: (old: Project[] | undefined, deletedId: string) => {
+          if (!old) return old;
+          return old.filter(project => project.id !== deletedId);
+        }
+      }
+    ],
+    successMessage: "Project deleted successfully",
+    errorMessage: "Failed to delete project"
   });
 
   if (isLoading || !isAuthenticated) {
@@ -946,12 +957,12 @@ export default function Projects() {
                     </Badge>
                   </div>
                 </div>
-                <CardContent className="space-y-3 bg-gray-50 dark:bg-gray-800 rounded-b-lg min-h-[140px]">
+                <CardContent className="space-y-3 bg-gray-50 dark:bg-gray-800 rounded-b-lg min-h-[140px] p-3">
                   {statusProjects.map((project) => {
                     const projectTasks = getProjectTasks(project.id || '');
                     return (
-                      <Card key={project.id} className="cursor-pointer hover:shadow-md transition-shadow">
-                        <CardContent className="p-4">
+                      <Card key={project.id} className="w-full cursor-pointer hover:shadow-md transition-shadow">
+                        <CardContent className="p-4 w-full">
                           <div className="space-y-3">
                             <div>
                               <h3
@@ -1350,15 +1361,19 @@ export default function Projects() {
                       // For now, we'll trigger the existing delete process
                       const deleteProject = async () => {
                         try {
-                          const response = await fetch(`/api/projects/${viewingProject.id}`, {
-                            method: 'DELETE'
-                          });
+                          const response = await apiRequest('DELETE', `/api/projects/${viewingProject.id}`);
                           if (response.ok) {
-                            // Refresh projects list
-                            window.location.reload();
+                            // Use React Query's cache invalidation instead of page reload
+                            queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+                            toast({ title: "Success", description: "Project deleted successfully" });
                           }
                         } catch (error) {
                           console.error('Failed to delete project:', error);
+                          toast({
+                            title: "Error",
+                            description: "Failed to delete project",
+                            variant: "destructive"
+                          });
                         }
                       };
 

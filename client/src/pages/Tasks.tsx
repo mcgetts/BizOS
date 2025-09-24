@@ -1226,14 +1226,19 @@ export default function Tasks() {
                       // Use the existing delete mutation
                       const deleteTask = async () => {
                         try {
-                          const response = await fetch(`/api/tasks/${viewingTask.id}`, {
-                            method: 'DELETE'
-                          });
+                          const response = await apiRequest('DELETE', `/api/tasks/${viewingTask.id}`);
                           if (response.ok) {
-                            window.location.reload();
+                            // Use React Query's cache invalidation instead of page reload
+                            queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+                            toast({ title: "Success", description: "Task deleted successfully" });
                           }
                         } catch (error) {
                           console.error('Failed to delete task:', error);
+                          toast({
+                            title: "Error",
+                            description: "Failed to delete task",
+                            variant: "destructive"
+                          });
                         }
                       };
 

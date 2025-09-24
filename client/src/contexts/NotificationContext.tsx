@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
+import { useRealTimeSync } from '@/hooks/useRealTimeSync';
 
 export interface Notification {
   id: string;
@@ -32,6 +33,9 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
   const [isConnected, setIsConnected] = useState(false);
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
+
+  // Initialize real-time data synchronization
+  useRealTimeSync();
 
   useEffect(() => {
     if (!isAuthenticated || !user) return;

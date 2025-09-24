@@ -5,8 +5,19 @@
 
 echo "🚀 Starting development server with conflict prevention..."
 
-# Default port
-DEFAULT_PORT=3001
+# Detect environment
+IS_REPLIT=${REPL_ID:+true}
+IS_REPLIT=${REPLIT_ENV:-$IS_REPLIT}
+
+# Set appropriate defaults based on environment
+if [ "$IS_REPLIT" = "true" ]; then
+    DEFAULT_PORT=5000
+    echo "🔧 Replit environment detected"
+else
+    DEFAULT_PORT=3001
+    echo "🔧 Local development environment detected"
+fi
+
 PORT=${PORT:-$DEFAULT_PORT}
 
 # Function to check if a port is available
@@ -109,4 +120,12 @@ rm -rf node_modules/.cache 2>/dev/null || true
 # Export the port and start the server
 export PORT=$PORT
 echo "🚀 Starting fresh server instance on port $PORT..."
-exec npm run dev
+
+# Choose the appropriate npm script based on environment
+if [ "$IS_REPLIT" = "true" ]; then
+    echo "🔧 Using Replit-optimized startup..."
+    exec npm run dev:replit
+else
+    echo "🔧 Using local development startup..."
+    exec npm run dev
+fi

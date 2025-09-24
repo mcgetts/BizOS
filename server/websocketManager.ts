@@ -1,8 +1,10 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import type { Server } from 'http';
 import { db } from './db';
-import { notifications, insertNotificationSchema } from '../shared/schema';
+import { notifications, insertNotificationSchema, users } from '../shared/schema';
+import { emailService } from './emailService.js';
 import type { InsertNotification } from '../shared/schema';
+import { eq } from 'drizzle-orm';
 
 interface AuthenticatedWebSocket extends WebSocket {
   userId?: string;
@@ -10,9 +12,17 @@ interface AuthenticatedWebSocket extends WebSocket {
 }
 
 interface WebSocketMessage {
-  type: 'auth' | 'notification' | 'ping' | 'pong';
+  type: 'auth' | 'notification' | 'ping' | 'pong' | 'data_change';
   userId?: string;
   data?: any;
+}
+
+interface DataChangeMessage {
+  type: 'data_change';
+  operation: 'create' | 'update' | 'delete';
+  entity: string;
+  data: any;
+  userId?: string;
 }
 
 class WebSocketManager {
@@ -163,6 +173,13 @@ class WebSocketManager {
         .values(notification)
         .returning();
 
+      // Get user details for email notifications
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, notification.userId))
+        .limit(1);
+
       // Send to connected clients for this user
       const userClients = this.clients.get(notification.userId);
       if (userClients && userClients.size > 0) {
@@ -186,6 +203,14 @@ class WebSocketManager {
         console.log(`Notification sent to ${userClients.size} client(s) for user ${notification.userId}`);
       } else {
         console.log(`No connected clients for user ${notification.userId}, notification saved to database`);
+      }
+
+      // Send email notification if user is offline or for important notifications
+      const shouldSendEmail = !userClients || userClients.size === 0 ||
+                             ['task_assigned', 'task_overdue', 'project_deadline'].includes(savedNotification.type);
+
+      if (shouldSendEmail && user && user.email) {
+        await this.sendEmailNotification(savedNotification, user);
       }
 
       return savedNotification;
@@ -220,6 +245,129 @@ class WebSocketManager {
   isUserConnected(userId: string): boolean {
     const userClients = this.clients.get(userId);
     return !!(userClients && userClients.size > 0);
+  }
+
+  async broadcastDataChange(operation: 'create' | 'update' | 'delete', entity: string, data: any, excludeUserId?: string) {
+    const message = JSON.stringify({
+      type: 'data_change',
+      operation,
+      entity,
+      data,
+      timestamp: new Date().toISOString()
+    });
+
+    // Broadcast to all connected clients except the one who made the change
+    for (const [userId, userClients] of this.clients.entries()) {
+      if (excludeUserId && userId === excludeUserId) continue;
+
+      userClients.forEach((ws) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(message);
+        }
+      });
+    }
+
+    console.log(`Data change broadcasted: ${operation} ${entity} to ${this.getConnectionCount()} clients`);
+  }
+
+  async broadcastToAllUsers(operation: 'create' | 'update' | 'delete', entity: string, data: any) {
+    const message = JSON.stringify({
+      type: 'data_change',
+      operation,
+      entity,
+      data,
+      timestamp: new Date().toISOString()
+    });
+
+    // Broadcast to all connected clients
+    for (const [userId, userClients] of this.clients.entries()) {
+      userClients.forEach((ws) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(message);
+        }
+      });
+    }
+
+    console.log(`Data change broadcasted to all: ${operation} ${entity} to ${this.getConnectionCount()} clients`);
+  }
+
+  private async sendEmailNotification(notification: any, user: any) {
+    try {
+      if (!emailService.isEmailConfigured()) {
+        console.log('Email service not configured, skipping email notification');
+        return;
+      }
+
+      let emailNotification;
+      const data = notification.data || {};
+
+      switch (notification.type) {
+        case 'task_assigned':
+          emailNotification = emailService.createTaskAssignmentNotification(
+            user.email,
+            user.name,
+            data.taskTitle || 'New Task',
+            data.projectName || 'Unknown Project',
+            data.dueDate
+          );
+          break;
+
+        case 'task_status_changed':
+          emailNotification = emailService.createTaskStatusChangeNotification(
+            user.email,
+            user.name,
+            data.taskTitle || 'Task',
+            data.oldStatus || 'Unknown',
+            data.newStatus || 'Unknown',
+            data.projectName || 'Unknown Project'
+          );
+          break;
+
+        case 'project_comment':
+          emailNotification = emailService.createProjectCommentNotification(
+            user.email,
+            user.name,
+            data.projectName || 'Unknown Project',
+            data.commenterName || 'Someone',
+            data.commentText || notification.message
+          );
+          break;
+
+        case 'task_overdue':
+        case 'task_due_soon':
+          const daysUntilDue = data.daysUntilDue || 0;
+          emailNotification = emailService.createDeadlineReminderNotification(
+            user.email,
+            user.name,
+            data.taskTitle || 'Task',
+            data.projectName || 'Unknown Project',
+            data.dueDate || new Date().toISOString(),
+            daysUntilDue
+          );
+          break;
+
+        default:
+          // Generic notification email
+          emailNotification = {
+            to: user.email,
+            subject: notification.title || 'Project Management Notification',
+            text: `Hello ${user.name},\n\n${notification.message}\n\nBest regards,\nProject Management Team`,
+            html: `
+              <h3>${notification.title || 'Notification'}</h3>
+              <p>Hello <strong>${user.name}</strong>,</p>
+              <p>${notification.message}</p>
+              <p>Best regards,<br>Project Management Team</p>
+            `
+          };
+      }
+
+      if (emailNotification) {
+        await emailService.sendEmail(emailNotification);
+        console.log(`Email notification sent to ${user.email} for notification type: ${notification.type}`);
+      }
+    } catch (error) {
+      console.error('Error sending email notification:', error);
+    }
   }
 }
 

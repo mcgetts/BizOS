@@ -1,5 +1,8 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 import { storage } from "./storage";
 import { db } from "./db";
 import { eq, desc, and, sql } from "drizzle-orm";
@@ -41,6 +44,9 @@ import {
   updateOpportunityNextStepSchema,
   updateOpportunityCommunicationSchema,
   updateOpportunityStakeholderSchema,
+  opportunityFileAttachments,
+  insertOpportunityFileAttachmentSchema,
+  updateOpportunityFileAttachmentSchema,
   projectTemplates,
   taskTemplates,
   taskDependencies,
@@ -487,10 +493,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/clients', isAuthenticated, async (req, res) => {
+  app.post('/api/clients', isAuthenticated, async (req: any, res) => {
     try {
       const validatedData = insertClientSchema.parse(req.body);
       const client = await storage.createClient(validatedData);
+
+      // Broadcast the creation to all connected clients
+      await wsManager.broadcastToAllUsers('create', 'client', client);
+
       res.status(201).json(client);
     } catch (error) {
       console.error("Error creating client:", error);
@@ -498,10 +508,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/clients/:id', isAuthenticated, async (req, res) => {
+  app.put('/api/clients/:id', isAuthenticated, async (req: any, res) => {
     try {
       const validatedData = insertClientSchema.partial().parse(req.body);
       const client = await storage.updateClient(req.params.id, validatedData);
+
+      // Broadcast the update to all connected clients, excluding the current user
+      await wsManager.broadcastDataChange('update', 'client', client, req.user?.id);
+
       res.json(client);
     } catch (error) {
       console.error("Error updating client:", error);
@@ -509,9 +523,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/clients/:id', isAuthenticated, async (req, res) => {
+  app.delete('/api/clients/:id', isAuthenticated, async (req: any, res) => {
     try {
+      // Get client data before deletion for broadcasting
+      const client = await storage.getClient(req.params.id);
       await storage.deleteClient(req.params.id);
+
+      // Broadcast the deletion to all connected clients, excluding the current user
+      if (client) {
+        await wsManager.broadcastDataChange('delete', 'client', { id: req.params.id, ...client }, req.user?.id);
+      }
+
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting client:", error);
@@ -543,10 +565,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/companies', isAuthenticated, async (req, res) => {
+  app.post('/api/companies', isAuthenticated, async (req: any, res) => {
     try {
       const validatedData = insertCompanySchema.parse(req.body);
       const company = await storage.createCompany(validatedData);
+
+      // Broadcast the creation to all connected clients
+      await wsManager.broadcastToAllUsers('create', 'company', company);
+
       res.status(201).json(company);
     } catch (error) {
       console.error("Error creating company:", error);
@@ -554,10 +580,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/companies/:id', isAuthenticated, async (req, res) => {
+  app.put('/api/companies/:id', isAuthenticated, async (req: any, res) => {
     try {
       const validatedData = insertCompanySchema.partial().parse(req.body);
       const company = await storage.updateCompany(req.params.id, validatedData);
+
+      // Broadcast the update to all connected clients, excluding the current user
+      await wsManager.broadcastDataChange('update', 'company', company, req.user?.id);
+
       res.json(company);
     } catch (error) {
       console.error("Error updating company:", error);
@@ -565,9 +595,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/companies/:id', isAuthenticated, async (req, res) => {
+  app.delete('/api/companies/:id', isAuthenticated, async (req: any, res) => {
     try {
+      // Get company data before deletion for broadcasting
+      const company = await storage.getCompany(req.params.id);
       await storage.deleteCompany(req.params.id);
+
+      // Broadcast the deletion to all connected clients, excluding the current user
+      if (company) {
+        await wsManager.broadcastDataChange('delete', 'company', { id: req.params.id, ...company }, req.user?.id);
+      }
+
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting company:", error);
@@ -1066,6 +1104,192 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // File upload configuration
+  const uploadDir = path.join(process.cwd(), 'uploads', 'opportunities');
+
+  // Ensure upload directory exists
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  }
+
+  const upload = multer({
+    storage: multer.diskStorage({
+      destination: (req, file, cb) => {
+        const opportunityDir = path.join(uploadDir, req.params.opportunityId);
+        if (!fs.existsSync(opportunityDir)) {
+          fs.mkdirSync(opportunityDir, { recursive: true });
+        }
+        cb(null, opportunityDir);
+      },
+      filename: (req, file, cb) => {
+        // Generate unique filename with timestamp
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const extension = path.extname(file.originalname);
+        const filename = `${file.fieldname}-${uniqueSuffix}${extension}`;
+        cb(null, filename);
+      }
+    }),
+    limits: {
+      fileSize: 10 * 1024 * 1024, // 10MB limit
+    },
+    fileFilter: (req, file, cb) => {
+      // Allow common file types
+      const allowedTypes = /jpeg|jpg|png|gif|pdf|doc|docx|txt|csv|xlsx|zip|pptx/;
+      const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+      const mimetype = allowedTypes.test(file.mimetype);
+
+      if (mimetype && extname) {
+        return cb(null, true);
+      } else {
+        cb(new Error('File type not allowed'));
+      }
+    }
+  });
+
+  // Opportunity File Attachments routes
+  app.get('/api/opportunities/:opportunityId/attachments', isAuthenticated, async (req, res) => {
+    try {
+      const attachments = await db.select({
+        id: opportunityFileAttachments.id,
+        originalFileName: opportunityFileAttachments.originalFileName,
+        fileSize: opportunityFileAttachments.fileSize,
+        mimeType: opportunityFileAttachments.mimeType,
+        description: opportunityFileAttachments.description,
+        isPublic: opportunityFileAttachments.isPublic,
+        uploadedAt: opportunityFileAttachments.uploadedAt,
+        uploadedBy: opportunityFileAttachments.uploadedBy,
+        communicationId: opportunityFileAttachments.communicationId,
+        uploader: {
+          id: users.id,
+          firstName: users.firstName,
+          lastName: users.lastName,
+        }
+      })
+      .from(opportunityFileAttachments)
+      .leftJoin(users, eq(opportunityFileAttachments.uploadedBy, users.id))
+      .where(eq(opportunityFileAttachments.opportunityId, req.params.opportunityId))
+      .orderBy(desc(opportunityFileAttachments.uploadedAt));
+
+      res.json(attachments);
+    } catch (error) {
+      console.error("Error fetching attachments:", error);
+      res.status(500).json({ message: "Failed to fetch attachments" });
+    }
+  });
+
+  app.post('/api/opportunities/:opportunityId/attachments',
+    isAuthenticated,
+    upload.single('file'),
+    async (req: any, res) => {
+      try {
+        if (!req.file) {
+          return res.status(400).json({ message: "No file provided" });
+        }
+
+        const { description, communicationId, isPublic } = req.body;
+
+        const newAttachment = await db.insert(opportunityFileAttachments).values({
+          opportunityId: req.params.opportunityId,
+          communicationId: communicationId || null,
+          fileName: req.file.filename,
+          originalFileName: req.file.originalname,
+          fileSize: req.file.size,
+          mimeType: req.file.mimetype,
+          filePath: req.file.path,
+          uploadedBy: req.user.claims.sub,
+          description: description || null,
+          isPublic: isPublic === 'true',
+        }).returning();
+
+        // Log activity history
+        await logActivityHistory(
+          req.params.opportunityId,
+          'file_attached',
+          `Uploaded file: "${req.file.originalname}"${communicationId ? ' to communication' : ''}`,
+          req.user.claims.sub
+        );
+
+        res.status(201).json(newAttachment[0]);
+      } catch (error) {
+        console.error("Error uploading file:", error);
+        // Clean up uploaded file on error
+        if (req.file && fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
+        res.status(500).json({ message: "Failed to upload file" });
+      }
+    }
+  );
+
+  app.get('/api/opportunities/:opportunityId/attachments/:id/download', isAuthenticated, async (req, res) => {
+    try {
+      const attachment = await db.select()
+        .from(opportunityFileAttachments)
+        .where(and(
+          eq(opportunityFileAttachments.id, req.params.id),
+          eq(opportunityFileAttachments.opportunityId, req.params.opportunityId)
+        ))
+        .limit(1);
+
+      if (!attachment.length) {
+        return res.status(404).json({ message: "File not found" });
+      }
+
+      const file = attachment[0];
+
+      if (!fs.existsSync(file.filePath)) {
+        return res.status(404).json({ message: "File no longer exists on disk" });
+      }
+
+      res.setHeader('Content-Disposition', `attachment; filename="${file.originalFileName}"`);
+      res.setHeader('Content-Type', file.mimeType);
+      res.download(file.filePath, file.originalFileName);
+    } catch (error) {
+      console.error("Error downloading file:", error);
+      res.status(500).json({ message: "Failed to download file" });
+    }
+  });
+
+  app.delete('/api/opportunities/:opportunityId/attachments/:id', isAuthenticated, async (req, res) => {
+    try {
+      const attachment = await db.select()
+        .from(opportunityFileAttachments)
+        .where(and(
+          eq(opportunityFileAttachments.id, req.params.id),
+          eq(opportunityFileAttachments.opportunityId, req.params.opportunityId)
+        ))
+        .limit(1);
+
+      if (!attachment.length) {
+        return res.status(404).json({ message: "File not found" });
+      }
+
+      const file = attachment[0];
+
+      // Delete from database
+      await db.delete(opportunityFileAttachments)
+        .where(eq(opportunityFileAttachments.id, req.params.id));
+
+      // Delete physical file
+      if (fs.existsSync(file.filePath)) {
+        fs.unlinkSync(file.filePath);
+      }
+
+      // Log activity history
+      await logActivityHistory(
+        req.params.opportunityId,
+        'file_removed',
+        `Deleted file: "${file.originalFileName}"`,
+        (req as any).user.claims.sub
+      );
+
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting file:", error);
+      res.status(500).json({ message: "Failed to delete file" });
+    }
+  });
+
   // Opportunity Stakeholders routes
   app.get('/api/opportunities/:opportunityId/stakeholders', isAuthenticated, async (req, res) => {
     try {
@@ -1232,10 +1456,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/projects', isAuthenticated, async (req, res) => {
+  app.post('/api/projects', isAuthenticated, async (req: any, res) => {
     try {
       const validatedData = insertProjectSchema.parse(req.body);
       const project = await storage.createProject(validatedData);
+
+      // Broadcast the creation to all connected clients
+      await wsManager.broadcastToAllUsers('create', 'project', project);
+
       res.status(201).json(project);
     } catch (error) {
       console.error("Error creating project:", error);
@@ -1243,10 +1471,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/projects/:id', isAuthenticated, async (req, res) => {
+  app.put('/api/projects/:id', isAuthenticated, async (req: any, res) => {
     try {
       const validatedData = insertProjectSchema.partial().parse(req.body);
       const project = await storage.updateProject(req.params.id, validatedData);
+
+      // Broadcast the update to all connected clients, excluding the current user
+      await wsManager.broadcastDataChange('update', 'project', project, req.user?.id);
+
       res.json(project);
     } catch (error) {
       console.error("Error updating project:", error);
@@ -1254,9 +1486,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/projects/:id', isAuthenticated, async (req, res) => {
+  app.delete('/api/projects/:id', isAuthenticated, async (req: any, res) => {
     try {
+      // Get project data before deletion for broadcasting
+      const project = await storage.getProject(req.params.id);
       await storage.deleteProject(req.params.id);
+
+      // Broadcast the deletion to all connected clients, excluding the current user
+      if (project) {
+        await wsManager.broadcastDataChange('delete', 'project', { id: req.params.id, ...project }, req.user?.id);
+      }
+
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting project:", error);
@@ -1292,6 +1532,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validatedData = insertTaskSchema.parse(req.body);
       const task = await storage.createTask(validatedData);
+
+      // Broadcast the creation to all connected clients
+      await wsManager.broadcastToAllUsers('create', 'task', task);
 
       // Send notifications for new task creation
       const currentUser = req.user;
@@ -1349,6 +1592,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const task = await storage.updateTask(req.params.id, validatedData);
+
+      // Broadcast the update to all connected clients, excluding the current user
+      await wsManager.broadcastDataChange('update', 'task', task, req.user?.id);
 
       // Send notifications for significant changes
       const currentUser = req.user;
@@ -1417,9 +1663,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/tasks/:id', isAuthenticated, async (req, res) => {
+  app.delete('/api/tasks/:id', isAuthenticated, async (req: any, res) => {
     try {
+      // Get task data before deletion for broadcasting
+      const task = await storage.getTask(req.params.id);
       await storage.deleteTask(req.params.id);
+
+      // Broadcast the deletion to all connected clients, excluding the current user
+      if (task) {
+        await wsManager.broadcastDataChange('delete', 'task', { id: req.params.id, ...task }, req.user?.id);
+      }
+
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting task:", error);
