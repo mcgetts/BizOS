@@ -35,6 +35,31 @@ export async function seedDatabase(): Promise<void> {
       console.log(`✅ Found ${adminUsers.length} admin user(s) - no promotion needed`);
     }
 
+    // Initialize system configuration variables
+    try {
+      const autoProjectVar = await storage.getSystemVariable('auto_create_project_from_won_opportunity');
+      if (!autoProjectVar) {
+        // Get the first admin user to use as the creator
+        const adminUser = adminUsers.length > 0 ? adminUsers[0] : allUsers[0];
+        if (adminUser) {
+          await storage.createSystemVariable({
+            key: 'auto_create_project_from_won_opportunity',
+            value: 'true',
+            description: 'Automatically create a project when an opportunity is marked as "Closed Won"',
+            dataType: 'boolean',
+            category: 'automation',
+            isEditable: true,
+            updatedBy: adminUser.id
+          });
+          console.log('✅ Created system variable for automatic project creation (enabled by default)');
+        } else {
+          console.log('⚠️ No users found - cannot create system variables');
+        }
+      }
+    } catch (error) {
+      console.log('⚠️ Could not initialize system variables:', error.message);
+    }
+
     console.log('🌱 Database seeding completed successfully');
   } catch (error) {
     console.error('❌ Error during database seeding:', error);

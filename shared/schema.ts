@@ -687,6 +687,7 @@ export const salesOpportunityRelations = relations(salesOpportunities, ({ one, m
   stakeholders: many(opportunityStakeholders),
   activityHistory: many(opportunityActivityHistory),
   fileAttachments: many(opportunityFileAttachments),
+  projects: many(projects),
 }));
 
 export const projectRelations = relations(projects, ({ one, many }) => ({
@@ -697,6 +698,10 @@ export const projectRelations = relations(projects, ({ one, many }) => ({
   client: one(clients, {
     fields: [projects.clientId],
     references: [clients.id],
+  }),
+  opportunity: one(salesOpportunities, {
+    fields: [projects.opportunityId],
+    references: [salesOpportunities.id],
   }),
   manager: one(users, {
     fields: [projects.managerId],

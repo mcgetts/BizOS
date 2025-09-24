@@ -7,7 +7,7 @@ import { Label } from "./ui/label";
 import { Switch } from "./ui/switch";
 import { Paperclip, Upload, Download, Trash2, FileText, Image, File } from "lucide-react";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "../hooks/use-toast";
 
 interface FileAttachment {
   id: string;

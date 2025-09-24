@@ -711,6 +711,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put('/api/opportunities/:id', isAuthenticated, async (req, res) => {
     try {
+      console.log(`📝 Updating opportunity ${req.params.id} with data:`, JSON.stringify(req.body, null, 2));
       const validatedData = insertSalesOpportunitySchema.partial().parse(req.body);
 
       // Get the current opportunity to track changes
@@ -749,6 +750,98 @@ export async function registerRoutes(app: Express): Promise<Server> {
           validatedData.stage
         );
         changes.push('stage');
+
+        // Automatically create project when opportunity is won (if enabled)
+        console.log(`🔄 Opportunity ${req.params.id} stage changed: "${current.stage}" → "${validatedData.stage}"`);
+        if (validatedData.stage === 'closed_won' && current.stage !== 'closed_won') {
+          console.log(`🎉 Opportunity ${req.params.id} marked as closed_won - checking auto-project creation...`);
+          // Check if automatic project creation is enabled
+          const autoProjectCreation = await storage.getSystemVariable('auto_create_project_from_won_opportunity');
+          const isEnabled = autoProjectCreation?.value === 'true' || autoProjectCreation?.value === true;
+          console.log(`📋 Auto-project creation setting: ${autoProjectCreation ? `${autoProjectCreation.key}=${autoProjectCreation.value}` : 'NOT FOUND'} (enabled: ${isEnabled})`);
+
+          if (!isEnabled) {
+            console.log('📋 Automatic project creation is disabled via system configuration');
+          } else {
+          try {
+            // Get the full opportunity data with relations
+            const opportunityData = await db.select({
+              id: salesOpportunities.id,
+              title: salesOpportunities.title,
+              companyId: salesOpportunities.companyId,
+              contactId: salesOpportunities.contactId,
+              assignedTo: salesOpportunities.assignedTo,
+              value: salesOpportunities.value,
+              priority: salesOpportunities.priority,
+              company: {
+                id: companies.id,
+                name: companies.name,
+              },
+              contact: {
+                id: clients.id,
+                firstName: clients.firstName,
+                lastName: clients.lastName,
+              }
+            })
+            .from(salesOpportunities)
+            .leftJoin(companies, eq(salesOpportunities.companyId, companies.id))
+            .leftJoin(clients, eq(salesOpportunities.contactId, clients.id))
+            .where(eq(salesOpportunities.id, req.params.id))
+            .limit(1);
+
+            if (opportunityData.length > 0) {
+              const opp = opportunityData[0];
+
+              // Create the project
+              const projectData = {
+                name: `${opp.title} - Delivery Project`,
+                description: `Project created from won opportunity: ${opp.title}`,
+                companyId: opp.companyId,
+                clientId: opp.contactId,
+                opportunityId: req.params.id,
+                managerId: opp.assignedTo,
+                status: "planning" as const,
+                priority: opp.priority || "medium" as const,
+                budget: opp.value ? opp.value.toString() : null,
+                actualCost: "0",
+                progress: 0,
+                startDate: new Date(),
+                tags: ["auto-created", "from-opportunity"]
+              };
+
+              const newProject = await db.insert(projects).values(projectData).returning();
+
+              if (newProject.length > 0) {
+                const project = newProject[0];
+
+                // Log activity in the opportunity
+                await logActivityHistory(
+                  req.params.id,
+                  'project_created',
+                  `Automatically created project: "${project.name}" (${project.id})`,
+                  userId
+                );
+
+                // Log activity in the new project
+                await db.insert(projectActivity).values({
+                  projectId: project.id,
+                  action: 'project_created',
+                  details: `Project automatically created from won opportunity: "${opp.title}"`,
+                  performedBy: userId
+                });
+
+                // Broadcast the new project creation to all users
+                await wsManager.broadcastToAllUsers('create', 'project', project);
+
+                console.log(`✅ Auto-created project ${project.id} from won opportunity ${req.params.id}`);
+              }
+            }
+          } catch (error) {
+            console.error("Error auto-creating project from won opportunity:", error);
+            // Don't fail the opportunity update if project creation fails
+          }
+          }
+        }
       }
 
       if (validatedData.value !== undefined && validatedData.value !== current.value) {
