@@ -42,6 +42,50 @@ Preferred communication style: Simple, everyday language.
 - **Path Resolution**: Custom module aliases for clean imports (@/, @shared/, @assets/)
 - **Development Tools**: Runtime error overlay, cartographer, and dev banner for Replit environment
 
+### Port Allocation Strategy
+
+**CRITICAL: To prevent port conflicts between Claude Code and Replit Agent, both agents MUST follow this unified port allocation strategy.**
+
+#### Port Assignment Rules
+- **Replit Environment**: Always use port **5000** (automatically detected via `REPL_ID` or `REPLIT_ENV`)
+- **Local Development**: Always use port **3001**
+- **Production**: Always use port **5000**
+
+#### Environment Detection Logic
+The server automatically detects the environment and assigns the correct port:
+```typescript
+// Environment detection (in server/index.ts)
+const isReplit = process.env.REPL_ID !== undefined || process.env.REPLIT_ENV === 'true';
+
+if (Number.isFinite(rawPort) && rawPort > 0) {
+  port = rawPort; // Use explicit PORT environment variable
+} else if (isReplit) {
+  port = 5000; // Force port 5000 in Replit environment
+} else {
+  port = isDevMode ? 3001 : 5000; // Local dev: 3001, Production: 5000
+}
+```
+
+#### Workflow Management Protocol
+1. **Before starting development**: Always use `restart_workflow` tool to cleanly restart the "Start application" workflow
+2. **If port conflicts occur**: The server has built-in single-instance enforcement with lock files (`.server.lock`)
+3. **Process cleanup**: If "Server already running" error appears, the existing process must be terminated before starting new one
+
+#### Critical Implementation Details
+- **Single Instance Enforcement**: Server uses PID-based lock files to prevent multiple instances
+- **WebSocket Port Binding**: WebSocket server shares the same port as the HTTP server (unified approach)
+- **Vite HMR Configuration**: Uses middleware mode with the main server instance for Hot Module Replacement
+- **Process Binding**: Server binds to `0.0.0.0:{port}` to ensure proper EADDRINUSE errors on conflicts
+
+#### Agent Collaboration Guidelines
+- **Never start multiple server instances simultaneously**
+- **Always check workflow status before making server changes** 
+- **Use the restart_workflow tool instead of manual npm commands**
+- **Respect the existing server lock mechanism**
+- **In Replit, always use port 5000 - never override to other ports**
+
+This strategy ensures that both Claude Code and Replit Agent can work on the same project without port conflicts or server instance collisions.
+
 ### Module Structure
 The application follows a modular architecture with distinct functional areas:
 - **Foundation**: Authentication, navigation, theming, and core layout components

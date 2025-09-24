@@ -41,27 +41,42 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  // Single-instance enforcement using lock file
+  // Single-instance enforcement using atomic lock file
   const lockFile = path.join(process.cwd(), '.server.lock');
 
-  // Check for existing lock file
-  if (fs.existsSync(lockFile)) {
-    try {
-      const pid = fs.readFileSync(lockFile, 'utf8').trim();
-      // Check if process is still running
-      process.kill(parseInt(pid), 0);
-      log(`❌ Server already running (PID: ${pid}). Use 'npm run dev:clean' to restart.`);
+  try {
+    // Atomic lock creation - fails if file already exists
+    const lockFd = fs.openSync(lockFile, 'wx');
+    fs.writeSync(lockFd, process.pid.toString());
+    fs.closeSync(lockFd);
+    log(`🔒 Server instance locked (PID: ${process.pid})`);
+  } catch (error: any) {
+    if (error.code === 'EEXIST') {
+      // Lock file exists, check if process is still running
+      try {
+        const pid = fs.readFileSync(lockFile, 'utf8').trim();
+        process.kill(parseInt(pid), 0);
+        log(`❌ Server already running (PID: ${pid}). Use workflow restart to cleanly restart the server.`);
+        process.exit(1);
+      } catch {
+        // Process not running, remove stale lock file and retry
+        fs.unlinkSync(lockFile);
+        log('🧹 Removed stale lock file, retrying...');
+        try {
+          const lockFd = fs.openSync(lockFile, 'wx');
+          fs.writeSync(lockFd, process.pid.toString());
+          fs.closeSync(lockFd);
+          log(`🔒 Server instance locked (PID: ${process.pid})`);
+        } catch {
+          log('❌ Failed to acquire server lock after cleanup');
+          process.exit(1);
+        }
+      }
+    } else {
+      log(`❌ Failed to create lock file: ${error.message}`);
       process.exit(1);
-    } catch {
-      // Process not running, remove stale lock file
-      fs.unlinkSync(lockFile);
-      log('🧹 Removed stale lock file');
     }
   }
-
-  // Create lock file with current PID
-  fs.writeFileSync(lockFile, process.pid.toString());
-  log(`🔒 Server instance locked (PID: ${process.pid})`);
 
   // Cleanup lock file on exit
   const cleanup = () => {
@@ -123,15 +138,18 @@ app.use((req, res, next) => {
   if (Number.isFinite(rawPort) && rawPort > 0) {
     port = rawPort;
     log(`Using PORT environment variable: ${port}${isReplit ? ' (Replit)' : ''}`);
+  } else if (isReplit) {
+    // Force port 5000 in Replit environment to prevent conflicts
+    port = 5000;
+    log(`Enforcing Replit port policy: ${port} (detected Replit environment)`);
   } else {
-    // Fallback logic
+    // Fallback logic for other environments
     port = isDevMode ? 3001 : 5000;
     log(`Using default port for ${isDevMode ? 'development' : 'production'}: ${port}`);
   }
   server.listen({
     port,
     host: "0.0.0.0",
-    reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
   });
