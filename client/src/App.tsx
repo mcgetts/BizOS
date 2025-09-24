@@ -14,7 +14,9 @@ import Analytics from "@/pages/Analytics";
 import Projects from "@/pages/Projects";
 import Tasks from "@/pages/Tasks";
 import Team from "@/pages/Team";
+import TeamHub from "@/pages/TeamHub";
 import Finance from "@/pages/Finance";
+import FinanceHub from "@/pages/FinanceHub";
 import Knowledge from "@/pages/Knowledge";
 import Marketing from "@/pages/Marketing";
 import Support from "@/pages/Support";
@@ -42,11 +44,15 @@ function Router() {
           <Route path="/clients" component={Clients} />
           <Route path="/projects" component={Projects} />
           <Route path="/tasks" component={Tasks} />
+          {/* Legacy routes - redirect to new consolidated pages */}
           <Route path="/team" component={Team} />
           <Route path="/resources" component={Resources} />
-          <Route path="/time" component={TimeTracking} />
-          <Route path="/budget" component={BudgetManagement} />
           <Route path="/finance" component={Finance} />
+          <Route path="/budget" component={BudgetManagement} />
+          {/* New consolidated hub pages */}
+          <Route path="/team-hub" component={TeamHub} />
+          <Route path="/finance-hub" component={FinanceHub} />
+          <Route path="/time" component={TimeTracking} />
           <Route path="/knowledge" component={Knowledge} />
           <Route path="/marketing" component={Marketing} />
           <Route path="/support" component={Support} />

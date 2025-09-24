@@ -1,4 +1,6 @@
 import React, { useState, useMemo } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useTouch, useIsTouchDevice } from "@/hooks/use-touch";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,7 +33,10 @@ interface TaskWithProject extends Task {
 }
 
 export function GanttChart({ tasks, projects, users, dependencies }: GanttChartProps) {
-  const [timeScale, setTimeScale] = useState<TimeScale>("month");
+  const isMobile = useIsMobile();
+  const isTouchDevice = useIsTouchDevice();
+  const { touchState, bindToElement } = useTouch();
+  const [timeScale, setTimeScale] = useState<TimeScale>(isMobile ? "week" : "month");
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [draggedTask, setDraggedTask] = useState<TaskWithProject | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -73,7 +78,9 @@ export function GanttChart({ tasks, projects, users, dependencies }: GanttChartP
       startDate,
       endDate,
       timeScale,
-      pixelsPerDay: timeScale === "week" ? 20 : timeScale === "month" ? 4 : 1
+      pixelsPerDay: isMobile
+        ? (timeScale === "week" ? 15 : timeScale === "month" ? 3 : 1)
+        : (timeScale === "week" ? 20 : timeScale === "month" ? 4 : 1)
     };
   }, [tasks, timeScale]);
 

@@ -68,29 +68,19 @@ const navigationGroups = [
     title: "MANAGEMENT",
     items: [
       {
-        title: "Finance",
-        href: "/finance",
+        title: "Finance Hub",
+        href: "/finance-hub",
         icon: PoundSterling,
       },
       {
-        title: "Team",
-        href: "/team",
+        title: "Team Hub",
+        href: "/team-hub",
         icon: UserCog,
-      },
-      {
-        title: "Resources",
-        href: "/resources",
-        icon: Target,
       },
       {
         title: "Time Tracking",
         href: "/time",
         icon: Clock,
-      },
-      {
-        title: "Budget Management",
-        href: "/budget",
-        icon: Calculator,
       },
     ]
   },

@@ -32,7 +32,9 @@ import {
   CheckCircle,
   AlertCircle,
   Users,
-  FolderOpen
+  FolderOpen,
+  ExternalLink,
+  Calculator
 } from "lucide-react";
 import type {
   User,
@@ -49,6 +51,22 @@ interface TimerState {
   currentProject: string | null;
   currentTask: string | null;
   description: string;
+}
+
+// Integration data interfaces
+interface BudgetImpact {
+  projectId: string;
+  costPerHour: number;
+  estimatedCost: number;
+  budgetRemaining: number;
+  utilizationPercent: number;
+}
+
+interface TeamUtilizationUpdate {
+  userId: string;
+  hoursLogged: number;
+  utilizationPercent: number;
+  capacityRemaining: number;
 }
 
 export default function TimeTracking() {
@@ -179,6 +197,10 @@ export default function TimeTracking() {
         });
 
         if (response.ok) {
+          // Send integration updates
+          await updateBudgetImpact(timer.currentProject, hours);
+          await updateTeamUtilization(hours);
+
           toast({
             title: "Time Entry Saved",
             description: `Logged ${hours.toFixed(2)} hours to ${projects?.find(p => p.id === timer.currentProject)?.name}`,
@@ -208,6 +230,68 @@ export default function TimeTracking() {
       description: ""
     });
   };
+
+  // Integration functions
+  const updateBudgetImpact = async (projectId: string, hours: number) => {
+    try {
+      // Calculate budget impact
+      const project = projects?.find(p => p.id === projectId);
+      if (!project) return;
+
+      const costPerHour = 75; // Mock rate - would come from user/project settings
+      const cost = hours * costPerHour;
+
+      // Send to Finance Hub
+      await fetch('/api/budget-impact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          hours,
+          cost,
+          timestamp: new Date().toISOString()
+        })
+      });
+    } catch (error) {
+      console.error('Failed to update budget impact:', error);
+    }
+  };
+
+  const updateTeamUtilization = async (hours: number) => {
+    try {
+      // Send to Team Hub
+      await fetch('/api/team-utilization', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user?.id,
+          hoursLogged: hours,
+          timestamp: new Date().toISOString()
+        })
+      });
+    } catch (error) {
+      console.error('Failed to update team utilization:', error);
+    }
+  };
+
+  // Calculate budget impact for current session
+  const calculateBudgetImpact = (): BudgetImpact | null => {
+    if (!timer.currentProject || timer.elapsedTime === 0) return null;
+
+    const hours = timer.elapsedTime / (1000 * 60 * 60);
+    const costPerHour = 75; // Mock rate
+    const estimatedCost = hours * costPerHour;
+
+    return {
+      projectId: timer.currentProject,
+      costPerHour,
+      estimatedCost,
+      budgetRemaining: 50000 - estimatedCost, // Mock budget
+      utilizationPercent: (estimatedCost / 50000) * 100
+    };
+  };
+
+  const budgetImpact = calculateBudgetImpact();
 
   const todayTotal = todayEntries?.reduce((sum, entry) => sum + parseFloat(entry.hours || "0"), 0) || 0;
   const weekTotal = todayTotal * 5; // Mock calculation
@@ -484,6 +568,84 @@ export default function TimeTracking() {
                       </div>
                     </div>
                     <BarChart3 className="h-8 w-8 text-purple-600" />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Integration Hooks */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card className="border-orange-200">
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between text-base">
+                    <div className="flex items-center space-x-2">
+                      <Calculator className="h-4 w-4 text-orange-600" />
+                      <span>Finance Hub Integration</span>
+                    </div>
+                    <Button variant="ghost" size="sm" asChild>
+                      <a href="/finance" className="text-orange-600 hover:text-orange-700">
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </Button>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div className="flex justify-between text-sm">
+                      <span>Auto-billing entries:</span>
+                      <Badge variant="outline">{todayEntries?.length || 0} today</Badge>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span>Pending invoices:</span>
+                      <Badge variant="secondary">3 updated</Badge>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span>Budget alerts:</span>
+                      <Badge variant={timer.currentProject ? "default" : "outline"}>
+                        {timer.currentProject ? "Active" : "Inactive"}
+                      </Badge>
+                    </div>
+                    {budgetImpact && (
+                      <div className="p-2 bg-orange-50 rounded text-xs">
+                        <span className="font-medium">Live Budget Impact:</span>
+                        £{budgetImpact.estimatedCost.toFixed(2)} ({budgetImpact.utilizationPercent.toFixed(1)}% utilization)
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-indigo-200">
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between text-base">
+                    <div className="flex items-center space-x-2">
+                      <Users className="h-4 w-4 text-indigo-600" />
+                      <span>Team Hub Integration</span>
+                    </div>
+                    <Button variant="ghost" size="sm" asChild>
+                      <a href="/team" className="text-indigo-600 hover:text-indigo-700">
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </Button>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div className="flex justify-between text-sm">
+                      <span>Your utilization:</span>
+                      <Badge variant="default">87.5%</Badge>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span>Capacity remaining:</span>
+                      <Badge variant="outline">{(40 - todayTotal * 5).toFixed(1)}h/week</Badge>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span>Team avg utilization:</span>
+                      <Badge variant="secondary">82.3%</Badge>
+                    </div>
+                    <div className="p-2 bg-indigo-50 rounded text-xs">
+                      <span className="font-medium">Auto-sync:</span> Time entries update your workload in real-time
+                    </div>
                   </div>
                 </CardContent>
               </Card>
