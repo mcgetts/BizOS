@@ -7,7 +7,7 @@ import { Label } from "./ui/label";
 import { Switch } from "./ui/switch";
 import { Paperclip, Upload, Download, Trash2, FileText, Image, File } from "lucide-react";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
-import { toast } from "./ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 
 interface FileAttachment {
   id: string;
@@ -38,6 +38,7 @@ export function FileAttachment({ opportunityId, communicationId, showUploadButto
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   // Fetch attachments
   const { data: attachments = [], isLoading } = useQuery({
