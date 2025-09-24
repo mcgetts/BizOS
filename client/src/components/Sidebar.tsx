@@ -15,6 +15,9 @@ import {
   Menu,
   Building2,
   BarChart3,
+  Target,
+  Clock,
+  Calculator,
 } from "lucide-react";
 
 // Executive Dashboard - Top Level
@@ -73,6 +76,21 @@ const navigationGroups = [
         title: "Team",
         href: "/team",
         icon: UserCog,
+      },
+      {
+        title: "Resources",
+        href: "/resources",
+        icon: Target,
+      },
+      {
+        title: "Time Tracking",
+        href: "/time",
+        icon: Clock,
+      },
+      {
+        title: "Budget Management",
+        href: "/budget",
+        icon: Calculator,
       },
     ]
   },

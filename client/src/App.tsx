@@ -20,6 +20,9 @@ import Marketing from "@/pages/Marketing";
 import Support from "@/pages/Support";
 import Company from "@/pages/Company";
 import Admin from "@/pages/Admin";
+import Resources from "@/pages/Resources";
+import TimeTracking from "@/pages/TimeTracking";
+import BudgetManagement from "@/pages/BudgetManagement";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -40,6 +43,9 @@ function Router() {
           <Route path="/projects" component={Projects} />
           <Route path="/tasks" component={Tasks} />
           <Route path="/team" component={Team} />
+          <Route path="/resources" component={Resources} />
+          <Route path="/time" component={TimeTracking} />
+          <Route path="/budget" component={BudgetManagement} />
           <Route path="/finance" component={Finance} />
           <Route path="/knowledge" component={Knowledge} />
           <Route path="/marketing" component={Marketing} />

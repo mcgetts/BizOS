@@ -58,7 +58,7 @@ import {
   type ClientInteraction,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, or, like, sql, count } from "drizzle-orm";
+import { eq, desc, and, or, like, sql, count, gte, lte } from "drizzle-orm";
 
 // Interface for storage operations
 export interface IStorage {
@@ -1417,6 +1417,169 @@ export class DatabaseStorage implements IStorage {
     }
 
     return trends;
+  }
+
+  // Time tracking methods
+  async getTimeEntries(options: {
+    startDate?: string;
+    endDate?: string;
+    projectId?: string;
+    userId?: string;
+  } = {}) {
+    try {
+      let query = this.db.select().from(timeEntries);
+      const conditions = [];
+
+      if (options.startDate && options.endDate) {
+        conditions.push(and(
+          gte(timeEntries.date, new Date(options.startDate)),
+          lte(timeEntries.date, new Date(options.endDate))
+        ));
+      }
+
+      if (options.projectId) {
+        conditions.push(eq(timeEntries.projectId, options.projectId));
+      }
+
+      if (options.userId) {
+        conditions.push(eq(timeEntries.userId, options.userId));
+      }
+
+      if (conditions.length > 0) {
+        query = query.where(and(...conditions));
+      }
+
+      return await query.orderBy(desc(timeEntries.date));
+    } catch (error) {
+      console.error("Error fetching time entries:", error);
+      throw error;
+    }
+  }
+
+  async createTimeEntry(data: {
+    userId: string;
+    projectId?: string;
+    taskId?: string;
+    description?: string;
+    hours: number;
+    date: Date;
+    billable?: boolean;
+    rate?: number;
+  }) {
+    try {
+      const [result] = await this.db.insert(timeEntries).values({
+        userId: data.userId,
+        projectId: data.projectId,
+        taskId: data.taskId,
+        description: data.description,
+        hours: data.hours.toString(),
+        date: data.date,
+        billable: data.billable ?? true,
+        rate: data.rate?.toString(),
+      }).returning();
+
+      return result;
+    } catch (error) {
+      console.error("Error creating time entry:", error);
+      throw error;
+    }
+  }
+
+  async updateTimeEntry(id: string, data: Partial<{
+    projectId: string;
+    taskId: string;
+    description: string;
+    hours: number;
+    date: Date;
+    billable: boolean;
+    rate: number;
+  }>) {
+    try {
+      const updateData: any = {};
+
+      if (data.projectId) updateData.projectId = data.projectId;
+      if (data.taskId) updateData.taskId = data.taskId;
+      if (data.description !== undefined) updateData.description = data.description;
+      if (data.hours !== undefined) updateData.hours = data.hours.toString();
+      if (data.date) updateData.date = data.date;
+      if (data.billable !== undefined) updateData.billable = data.billable;
+      if (data.rate !== undefined) updateData.rate = data.rate.toString();
+
+      const [result] = await this.db.update(timeEntries)
+        .set(updateData)
+        .where(eq(timeEntries.id, id))
+        .returning();
+
+      return result;
+    } catch (error) {
+      console.error("Error updating time entry:", error);
+      throw error;
+    }
+  }
+
+  async deleteTimeEntry(id: string) {
+    try {
+      await this.db.delete(timeEntries).where(eq(timeEntries.id, id));
+    } catch (error) {
+      console.error("Error deleting time entry:", error);
+      throw error;
+    }
+  }
+
+  async getTimeProductivityAnalytics(options: {
+    startDate?: string;
+    endDate?: string;
+    userId: string;
+  }) {
+    try {
+      const startDate = options.startDate ? new Date(options.startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const endDate = options.endDate ? new Date(options.endDate) : new Date();
+
+      // Get time entries for the period
+      const entries = await this.db.select()
+        .from(timeEntries)
+        .where(and(
+          eq(timeEntries.userId, options.userId),
+          gte(timeEntries.date, startDate),
+          lte(timeEntries.date, endDate)
+        ));
+
+      // Calculate analytics
+      const totalHours = entries.reduce((sum, entry) => sum + parseFloat(entry.hours || "0"), 0);
+      const billableHours = entries
+        .filter(entry => entry.billable)
+        .reduce((sum, entry) => sum + parseFloat(entry.hours || "0"), 0);
+
+      const billableRate = totalHours > 0 ? (billableHours / totalHours) * 100 : 0;
+      const avgHoursPerDay = totalHours / Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
+
+      // Project breakdown
+      const projectBreakdown = entries.reduce((acc: any, entry) => {
+        const projectId = entry.projectId || 'unassigned';
+        if (!acc[projectId]) {
+          acc[projectId] = { hours: 0, entries: 0 };
+        }
+        acc[projectId].hours += parseFloat(entry.hours || "0");
+        acc[projectId].entries += 1;
+        return acc;
+      }, {});
+
+      return {
+        totalHours: totalHours.toFixed(2),
+        billableHours: billableHours.toFixed(2),
+        billableRate: billableRate.toFixed(1),
+        avgHoursPerDay: avgHoursPerDay.toFixed(1),
+        totalEntries: entries.length,
+        projectBreakdown,
+        period: {
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+        }
+      };
+    } catch (error) {
+      console.error("Error fetching productivity analytics:", error);
+      throw error;
+    }
   }
 }
 

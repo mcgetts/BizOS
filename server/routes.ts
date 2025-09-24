@@ -2620,6 +2620,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // All workloads endpoint
+  app.get('/api/workloads', isAuthenticated, async (req, res) => {
+    try {
+      const { timeRange } = req.query;
+
+      // Get all active users
+      const allUsers = await db.select().from(users).where(eq(users.isActive, true));
+
+      // Calculate workload for each user
+      const workloads = await Promise.all(
+        allUsers.map(async (user) => {
+          const start = new Date();
+          const end = new Date();
+
+          switch (timeRange) {
+            case 'week':
+              start.setDate(start.getDate() - 7);
+              break;
+            case 'month':
+              start.setMonth(start.getMonth() - 1);
+              break;
+            case 'quarter':
+              start.setMonth(start.getMonth() - 3);
+              break;
+            default:
+              start.setDate(start.getDate() - 7);
+          }
+
+          return await calculateUserWorkload(user.id, start, end);
+        })
+      );
+
+      res.json(workloads);
+    } catch (error) {
+      console.error("Error calculating workloads:", error);
+      res.status(500).json({ message: "Failed to calculate workloads" });
+    }
+  });
+
   // Resource Allocation Management
   app.get('/api/resource-allocations', isAuthenticated, async (req, res) => {
     try {
@@ -3068,6 +3107,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting support ticket:", error);
       res.status(500).json({ message: "Failed to delete support ticket" });
+    }
+  });
+
+  // Time tracking endpoints
+  app.get('/api/time-entries', isAuthenticated, async (req, res) => {
+    try {
+      const { startDate, endDate, projectId, userId } = req.query;
+      const timeEntries = await storage.getTimeEntries({
+        startDate: startDate as string,
+        endDate: endDate as string,
+        projectId: projectId as string,
+        userId: userId as string,
+      });
+      res.json(timeEntries);
+    } catch (error) {
+      console.error("Error fetching time entries:", error);
+      res.status(500).json({ message: "Failed to fetch time entries" });
+    }
+  });
+
+  app.get('/api/time-entries/today', isAuthenticated, async (req, res) => {
+    try {
+      const today = new Date();
+      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+
+      const timeEntries = await storage.getTimeEntries({
+        startDate: startOfDay.toISOString(),
+        endDate: endOfDay.toISOString(),
+        userId: req.user?.id,
+      });
+      res.json(timeEntries);
+    } catch (error) {
+      console.error("Error fetching today's time entries:", error);
+      res.status(500).json({ message: "Failed to fetch today's time entries" });
+    }
+  });
+
+  app.post('/api/time-entries', isAuthenticated, async (req, res) => {
+    try {
+      const timeEntryData = {
+        ...req.body,
+        userId: req.user?.id,
+        date: new Date(req.body.date || new Date()),
+      };
+
+      const timeEntry = await storage.createTimeEntry(timeEntryData);
+      res.status(201).json(timeEntry);
+    } catch (error) {
+      console.error("Error creating time entry:", error);
+      res.status(400).json({ message: "Failed to create time entry" });
+    }
+  });
+
+  app.put('/api/time-entries/:id', isAuthenticated, async (req, res) => {
+    try {
+      const timeEntry = await storage.updateTimeEntry(req.params.id, req.body);
+      res.json(timeEntry);
+    } catch (error) {
+      console.error("Error updating time entry:", error);
+      res.status(400).json({ message: "Failed to update time entry" });
+    }
+  });
+
+  app.delete('/api/time-entries/:id', isAuthenticated, async (req, res) => {
+    try {
+      await storage.deleteTimeEntry(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting time entry:", error);
+      res.status(500).json({ message: "Failed to delete time entry" });
+    }
+  });
+
+  // Time tracking analytics
+  app.get('/api/time-analytics/productivity', isAuthenticated, async (req, res) => {
+    try {
+      const { startDate, endDate, userId } = req.query;
+      const analytics = await storage.getTimeProductivityAnalytics({
+        startDate: startDate as string,
+        endDate: endDate as string,
+        userId: (userId as string) || req.user?.id,
+      });
+      res.json(analytics);
+    } catch (error) {
+      console.error("Error fetching productivity analytics:", error);
+      res.status(500).json({ message: "Failed to fetch productivity analytics" });
     }
   });
 
