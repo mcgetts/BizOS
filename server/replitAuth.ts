@@ -40,9 +40,9 @@ const getOidcConfig = memoize(
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
   
-  // Use in-memory store for development or when DATABASE_URL is not set
-  if (process.env.NODE_ENV !== 'production' || !process.env.DATABASE_URL) {
-    console.log('🔧 Using in-memory session store for development');
+  // Use in-memory store only when DATABASE_URL is not available
+  if (!process.env.DATABASE_URL) {
+    console.log('🔧 Using in-memory session store (no DATABASE_URL available)');
     return session({
       secret: process.env.SESSION_SECRET || 'dev-secret-key-change-in-production',
       resave: false,
@@ -55,8 +55,8 @@ export function getSession() {
     });
   }
   
-  // Use PostgreSQL session store for production
-  console.log('🔧 Using PostgreSQL session store for production');
+  // Use PostgreSQL session store with persistent sessions
+  console.log('🔧 Using PostgreSQL session store with persistent sessions');
   const pgStore = connectPg(session);
   const sessionStore = new pgStore({
     conString: process.env.DATABASE_URL,
@@ -347,7 +347,18 @@ export async function setupAuth(app: Express) {
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
   const user = req.user as any;
 
-  if (!req.isAuthenticated() || !user.expires_at) {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  // Handle local authentication (email/password login)
+  if (user.isLocal) {
+    // For local authentication, the session is enough - no token expiration check needed
+    return next();
+  }
+
+  // Handle OAuth authentication (Replit OIDC)
+  if (!user.expires_at) {
     return res.status(401).json({ message: "Unauthorized" });
   }
 
