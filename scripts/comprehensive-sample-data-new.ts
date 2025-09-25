@@ -693,6 +693,207 @@ async function createKnowledgeContent(userList: any[]) {
   return insertedArticles;
 }
 
+async function createSalesOpportunities(companyList: any[], contactList: any[], userList: any[], projectList: any[]) {
+  console.log("💼 Creating sales opportunities and pipeline data...");
+  
+  const opportunityData = [];
+  const salesTeam = userList.filter(u => u.role === "manager" || u.role === "admin" || u.department === "Marketing");
+  
+  // Create 15 opportunities at various pipeline stages
+  for (let i = 0; i < 15; i++) {
+    const company = randomChoice(companyList);
+    const primaryContact = contactList.find(c => c.companyId === company.id && c.isPrimaryContact) ||
+                          contactList.find(c => c.companyId === company.id);
+    const assignedTo = randomChoice(salesTeam);
+    
+    const stage = randomChoice(["prospecting", "qualification", "proposal", "negotiation", "closed_won", "closed_lost"]);
+    const probability = {
+      "prospecting": Math.floor(Math.random() * 25) + 5, // 5-30%
+      "qualification": Math.floor(Math.random() * 25) + 25, // 25-50%
+      "proposal": Math.floor(Math.random() * 25) + 50, // 50-75%
+      "negotiation": Math.floor(Math.random() * 25) + 70, // 70-95%
+      "closed_won": 100,
+      "closed_lost": 0
+    }[stage];
+    
+    const value = Math.floor(Math.random() * 200000) + 50000; // £50k-250k
+    const closeDate = stage.startsWith("closed") ? randomPastDate(90) : randomFutureDate(120);
+    
+    opportunityData.push({
+      title: `${company.name} - ${randomChoice(["Digital Transformation", "System Integration", "Platform Development", "Consulting Services", "Process Automation", "Technology Upgrade"])}`,
+      description: `Opportunity to provide comprehensive business solutions for ${company.name}. Includes system design, implementation, and ongoing support.`,
+      companyId: company.id,
+      contactId: primaryContact?.id,
+      assignedTo: assignedTo.id,
+      stage,
+      value: value.toString(),
+      probability,
+      expectedCloseDate: closeDate,
+      actualCloseDate: stage.startsWith("closed") ? closeDate : null,
+      source: randomChoice(["website", "referral", "cold_outreach", "marketing", "networking", "existing_client"]),
+      lostReason: stage === "closed_lost" ? randomChoice(["budget", "timeline", "competitor", "no_decision", "requirements_changed"]) : null,
+      tags: randomChoices(["strategic", "recurring", "enterprise", "pilot", "urgent"], Math.floor(Math.random() * 3) + 1),
+      nextAction: stage.startsWith("closed") ? null : randomChoice([
+        "Follow up call scheduled",
+        "Proposal preparation",
+        "Technical demo",
+        "Contract review",
+        "Budget approval",
+        "Requirements gathering"
+      ]),
+      lastActivityDate: randomPastDate(14)
+    });
+  }
+
+  const insertedOpportunities = await db.insert(salesOpportunities).values(opportunityData).returning();
+  console.log(`✅ Created ${insertedOpportunities.length} sales opportunities`);
+
+  // Create opportunity stakeholders
+  const stakeholderData = [];
+  for (const opportunity of insertedOpportunities) {
+    const relatedContacts = contactList.filter(c => c.companyId === opportunity.companyId);
+    const stakeholderCount = Math.min(relatedContacts.length, Math.floor(Math.random() * 3) + 1);
+    
+    for (let i = 0; i < stakeholderCount; i++) {
+      const contact = relatedContacts[i];
+      stakeholderData.push({
+        opportunityId: opportunity.id,
+        contactId: contact.id,
+        name: contact.name,
+        role: randomChoice(["decision_maker", "influencer", "technical_contact", "budget_holder", "end_user"]),
+        influence: randomChoice(["high", "medium", "low"]),
+        notes: `Key ${contact.position} involved in decision making process.`
+      });
+    }
+  }
+
+  if (stakeholderData.length > 0) {
+    await db.insert(opportunityStakeholders).values(stakeholderData);
+    console.log(`✅ Created ${stakeholderData.length} opportunity stakeholders`);
+  }
+
+  // Create opportunity communications
+  const communicationData = [];
+  for (const opportunity of insertedOpportunities) {
+    const commCount = Math.floor(Math.random() * 5) + 2; // 2-6 communications per opportunity
+    
+    for (let i = 0; i < commCount; i++) {
+      communicationData.push({
+        opportunityId: opportunity.id,
+        type: randomChoice(["email", "call", "meeting", "proposal", "demo"]),
+        subject: `Re: ${opportunity.title} - ${randomChoice(["Follow up", "Proposal Discussion", "Technical Requirements", "Budget Review", "Next Steps"])}`,
+        summary: "Detailed discussion about project requirements, timeline, and next steps.",
+        contactId: opportunity.contactId,
+        userId: opportunity.assignedTo,
+        scheduledDate: randomPastDate(60),
+        completedDate: randomPastDate(60),
+        outcome: randomChoice(["positive", "neutral", "negative", "action_required"]),
+        followUpRequired: Math.random() > 0.6
+      });
+    }
+  }
+
+  if (communicationData.length > 0) {
+    await db.insert(opportunityCommunications).values(communicationData);
+    console.log(`✅ Created ${communicationData.length} opportunity communications`);
+  }
+
+  // Create opportunity next steps
+  const nextStepsData = [];
+  for (const opportunity of insertedOpportunities.filter(o => !o.stage.startsWith("closed"))) {
+    const stepCount = Math.floor(Math.random() * 3) + 1; // 1-3 next steps per active opportunity
+    
+    for (let i = 0; i < stepCount; i++) {
+      const stepTitle = randomChoice([
+        "Schedule technical demo with IT team",
+        "Prepare detailed project proposal", 
+        "Review budget requirements",
+        "Conduct stakeholder interviews",
+        "Present solution architecture",
+        "Negotiate contract terms",
+        "Finalize project timeline"
+      ]);
+      
+      nextStepsData.push({
+        opportunityId: opportunity.id,
+        title: stepTitle,
+        description: `${stepTitle} - Important step to move opportunity forward in the sales pipeline.`,
+        dueDate: randomFutureDate(30),
+        assignedTo: opportunity.assignedTo,
+        priority: randomChoice(["low", "medium", "high"]),
+        status: randomChoice(["pending", "in_progress", "completed"])
+      });
+    }
+  }
+
+  if (nextStepsData.length > 0) {
+    await db.insert(opportunityNextSteps).values(nextStepsData);
+    console.log(`✅ Created ${nextStepsData.length} opportunity next steps`);
+  }
+
+  // Link closed-won opportunities to projects
+  const closedWonOpportunities = insertedOpportunities.filter(o => o.stage === "closed_won");
+  let linkedProjects = 0;
+  
+  for (const opportunity of closedWonOpportunities) {
+    const relatedProject = projectList.find(p => p.companyId === opportunity.companyId);
+    if (relatedProject) {
+      await db.update(projects)
+        .set({ 
+          opportunityId: opportunity.id,
+          updatedAt: new Date()
+        })
+        .where(sql`id = ${relatedProject.id}`);
+      linkedProjects++;
+    }
+  }
+
+  if (linkedProjects > 0) {
+    console.log(`✅ Linked ${linkedProjects} projects to won opportunities`);
+  }
+
+  return insertedOpportunities;
+}
+
+async function createClientInteractions(contactList: any[], userList: any[]) {
+  console.log("🤝 Creating client interaction history...");
+  
+  const interactionData = [];
+  const salesTeam = userList.filter(u => u.role === "manager" || u.role === "admin" || u.department === "Marketing");
+  
+  for (let i = 0; i < 30; i++) {
+    const contact = randomChoice(contactList);
+    const user = randomChoice(salesTeam);
+    
+    interactionData.push({
+      clientId: contact.id,
+      userId: user.id,
+      type: randomChoice(["call", "email", "meeting", "demo", "proposal", "follow_up"]),
+      subject: randomChoice([
+        "Initial discovery call",
+        "Product demonstration", 
+        "Proposal discussion",
+        "Technical requirements review",
+        "Budget and timeline planning",
+        "Contract negotiation",
+        "Project kickoff meeting",
+        "Regular check-in call"
+      ]),
+      summary: "Productive discussion covering client needs, project scope, and next steps.",
+      outcome: randomChoice(["positive", "neutral", "needs_follow_up", "not_interested"]),
+      followUpRequired: Math.random() > 0.7,
+      followUpDate: Math.random() > 0.5 ? randomFutureDate(14) : null,
+      duration: Math.floor(Math.random() * 120) + 15, // 15-135 minutes
+      interactionDate: randomPastDate(180),
+      tags: randomChoices(["discovery", "technical", "commercial", "decision_maker"], Math.floor(Math.random() * 3) + 1)
+    });
+  }
+
+  const insertedInteractions = await db.insert(clientInteractions).values(interactionData).returning();
+  console.log(`✅ Created ${insertedInteractions.length} client interactions`);
+  return insertedInteractions;
+}
+
 async function createSupportTickets(contactList: any[], userList: any[]) {
   console.log("🎫 Creating support tickets...");
   
@@ -774,6 +975,12 @@ async function main() {
     const knowledgeList = await createKnowledgeContent(teamMembers);
     console.log("");
 
+    const opportunityList = await createSalesOpportunities(companyList, contactList, teamMembers, projectList);
+    console.log("");
+
+    const interactionList = await createClientInteractions(contactList, teamMembers);
+    console.log("");
+
     const ticketList = await createSupportTickets(contactList, teamMembers);
     console.log("");
 
@@ -804,11 +1011,13 @@ async function main() {
     - ${teamMembers.length} team members
     - ${companyList.length} companies  
     - ${contactList.length} contacts
+    - ${opportunityList.length} sales opportunities
     - ${projectList.length} projects
     - ${taskList.length} tasks
     - ${timeEntryList.length} time entries
     - ${invoiceList.length} invoices
     - ${expenseList.length} expenses
+    - ${interactionList.length} client interactions
     - ${knowledgeList.length} knowledge articles
     - ${ticketList.length} support tickets`);
 
