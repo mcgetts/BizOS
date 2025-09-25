@@ -103,7 +103,7 @@ export const projects = pgTable("projects", {
   description: text("description"),
   companyId: varchar("company_id").references(() => companies.id),
   clientId: varchar("client_id").references(() => clients.id), // Secondary link to primary contact
-  opportunityId: varchar("opportunity_id").references(() => salesOpportunities.id), // Link to the originating opportunity
+  opportunityId: varchar("opportunity_id").references(() => salesOpportunities.id).unique(), // Link to the originating opportunity (unique to prevent duplicate projects)
   managerId: varchar("manager_id").references(() => users.id),
   status: varchar("status").default("planning").$type<ProjectStatus>(),
   priority: varchar("priority").default("medium").$type<Priority>(),

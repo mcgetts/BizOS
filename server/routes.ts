@@ -1281,143 +1281,106 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Automatically create project when opportunity is won (if enabled)
         console.log(`🔄 Opportunity ${req.params.id} stage changed: "${current.stage}" → "${validatedData.stage}"`);
         if (validatedData.stage === 'closed_won' && current.stage !== 'closed_won') {
-          console.log(`🎉 Opportunity ${req.params.id} marked as closed_won - auto-project creation temporarily disabled for debugging`);
-          // TODO: Re-enable auto-project creation after fixing syntax errors
-          /*
           console.log(`🎉 Opportunity ${req.params.id} marked as closed_won - checking auto-project creation...`);
-          // Check if automatic project creation is enabled
-          const autoProjectCreation = await storage.getSystemVariable('auto_create_project_from_won_opportunity');
-          const isEnabled = autoProjectCreation?.value === 'true' || autoProjectCreation?.value === true;
-          console.log(`📋 Auto-project creation setting: ${autoProjectCreation ? `${autoProjectCreation.key}=${autoProjectCreation.value}` : 'NOT FOUND'} (enabled: ${isEnabled})`);
-
-          if (!isEnabled) {
-            console.log('📋 Automatic project creation is disabled via system configuration');
-          } else {
           try {
-            // Get the opportunity data first
-            const [opportunity] = await db.select()
-              .from(salesOpportunities)
-              .where(eq(salesOpportunities.id, req.params.id))
-              .limit(1);
+            // Check if automatic project creation is enabled
+            const autoProjectCreation = await storage.getSystemVariable('auto_create_project_from_won_opportunity');
+            const isEnabled = autoProjectCreation?.value === 'true' || autoProjectCreation?.value === true;
+            console.log(`📋 Auto-project creation setting: ${autoProjectCreation ? `${autoProjectCreation.key}=${autoProjectCreation.value}` : 'NOT FOUND'} (enabled: ${isEnabled})`);
 
-            if (!opportunity) {
-              console.log(`❌ Opportunity ${req.params.id} not found`);
-              return;
-            }
-
-            // Get company data if available
-            let company = null;
-            if (opportunity.companyId) {
-              [company] = await db.select()
-                .from(companies)
-                .where(eq(companies.id, opportunity.companyId))
+            if (!isEnabled) {
+              console.log('📋 Automatic project creation is disabled via system configuration');
+            } else {
+              // Check if project already exists for this opportunity (idempotency protection)
+              const [existingProject] = await db.select()
+                .from(projects)
+                .where(eq(projects.opportunityId, req.params.id))
                 .limit(1);
-            }
 
-            const opp = {
-              ...opportunity,
-              company
-            };
+              if (existingProject) {
+                console.log(`⚠️ Project already exists for opportunity ${req.params.id}: ${existingProject.id}`);
+                return; // Skip creation - project already exists
+              }
 
-            console.log(`📊 Enhanced project creation for opportunity: ${opp.title}`);
+              // Get the opportunity data first
+              const [opportunity] = await db.select()
+                .from(salesOpportunities)
+                .where(eq(salesOpportunities.id, req.params.id))
+                .limit(1);
 
-              // Calculate intelligent project timeline based on opportunity value and complexity
-              const complexity = opp.value && parseFloat(opp.value) > 50000 ? 'high' :
-                               opp.value && parseFloat(opp.value) > 15000 ? 'medium' : 'low';
+              if (!opportunity) {
+                console.log(`❌ Opportunity ${req.params.id} not found`);
+                return;
+              }
 
-              // Simple timeline calculation
-              const durationWeeks = complexity === 'high' ? 12 : complexity === 'medium' ? 8 : 4;
-              const startDate = new Date();
-              const endDate = new Date();
-              endDate.setDate(startDate.getDate() + (durationWeeks * 7));
-              const timelineCalc = { durationWeeks, startDate, endDate };
+              // Start transaction for atomic project creation
+              let createdProject: any = null;
+              let notificationData: any = null;
+              
+              try {
+                await db.transaction(async (tx) => {
+                  console.log(`📊 Creating project for opportunity: ${opportunity.title}`);
 
-              // Format pain points as requirements
-              const formattedRequirements = Array.isArray(opp.painPoints)
-                ? opp.painPoints.join('. ')
-                : opp.painPoints ? String(opp.painPoints) : null;
+                  // Calculate project timeline based on opportunity value with safe parsing
+                  const value = opportunity.value ? parseFloat(opportunity.value.toString()) : 0;
+                  const complexity = value > 50000 ? 'high' : value > 15000 ? 'medium' : 'low';
+                  const durationWeeks = complexity === 'high' ? 12 : complexity === 'medium' ? 8 : 4;
+                  
+                  const startDate = new Date();
+                  const endDate = new Date();
+                  endDate.setDate(startDate.getDate() + (durationWeeks * 7));
 
-              // No template for now - simplified
-              const recommendedTemplate = null;
-              console.log(`🎯 Template recommendation: No template (simplified implementation)`);
+                  // Format pain points as requirements with safe handling
+                  const requirements = Array.isArray(opportunity.painPoints)
+                    ? opportunity.painPoints.join('. ')
+                    : opportunity.painPoints ? String(opportunity.painPoints) : null;
 
-              // Create enhanced project with comprehensive data mapping
-              const projectData = {
-                name: `${opp.title} - Project`,
-                description: opp.description || `Project created from won opportunity: ${opp.title}`,
-                companyId: opp.companyId,
-                clientId: opp.contactId,
-                opportunityId: req.params.id,
-                managerId: opp.assignedTo,
-                status: "planning" as const,
-                priority: opp.priority || "medium" as const,
-                budget: opp.value ? opp.value.toString() : null,
-                actualCost: "0",
-                progress: 0,
-                startDate: timelineCalc.startDate,
-                endDate: timelineCalc.endDate,
-                // Enhanced fields for opportunity conversion
-                requirements: formattedRequirements,
-                successCriteria: opp.successCriteria,
-                conversionDate: new Date(),
-                originalValue: opp.value,
-                tags: ["auto-created", "from-opportunity", opp.company?.industry || "general"].filter(Boolean)
-              };
+                  // Safely handle success criteria
+                  const successCriteria = opportunity.successCriteria || null;
 
-              const newProject = await db.insert(projects).values(projectData).returning();
+                  console.log(`🎯 Project timeline: ${durationWeeks} weeks (${complexity} complexity)`);
 
-              if (newProject.length > 0) {
-                const project = newProject[0];
-                console.log(`✅ Created enhanced project ${project.id} from opportunity ${req.params.id}`);
+                  // Create project with comprehensive data mapping
+                  const projectData = {
+                    name: `${opportunity.title} - Project`,
+                    description: opportunity.description || `Project created from won opportunity: ${opportunity.title}`,
+                    companyId: opportunity.companyId || null,
+                    clientId: opportunity.contactId || null,
+                    opportunityId: req.params.id,
+                    managerId: opportunity.assignedTo || null,
+                    status: "planning" as const,
+                    priority: opportunity.priority || "medium" as const,
+                    budget: opportunity.value ? opportunity.value.toString() : null,
+                    actualCost: "0",
+                    progress: 0,
+                    startDate,
+                    endDate,
+                    // Enhanced fields for opportunity conversion
+                    requirements,
+                    successCriteria,
+                    conversionDate: new Date(),
+                    originalValue: opportunity.value || null,
+                    tags: ["auto-created", "from-opportunity", complexity].filter(Boolean)
+                  };
 
-                // Generate tasks from recommended template if available
-                if (recommendedTemplate && recommendedTemplate.id) {
-                  try {
-                    console.log(`🔧 Generating tasks from template: ${recommendedTemplate.name}`);
+                  const [newProject] = await tx.insert(projects).values(projectData).returning();
 
-                    // Get template tasks
-                    const templateTasks = await db.select()
-                      .from(taskTemplates)
-                      .where(eq(taskTemplates.templateId, recommendedTemplate.id))
-                      .orderBy(asc(taskTemplates.order));
-
-                    console.log(`📋 Found ${templateTasks.length} template tasks to create`);
-
-                    // Create tasks from template
-                    for (const templateTask of templateTasks) {
-                      const taskData = {
-                        title: templateTask.title,
-                        description: templateTask.description || `Task auto-generated from template: ${recommendedTemplate.name}`,
-                        projectId: project.id,
-                        status: 'todo' as const,
-                        priority: templateTask.priority || 'medium' as const,
-                        estimatedHours: templateTask.estimatedHours || '8.00',
-                        actualHours: '0.00',
-                        // Calculate due date based on project timeline and task order
-                        dueDate: new Date(project.startDate.getTime() + (templateTask.order * 7 * 24 * 60 * 60 * 1000)), // Weekly intervals
-                        tags: ['auto-generated', 'from-template']
-                      };
-
-                      const newTask = await db.insert(tasks).values(taskData).returning();
-                      console.log(`✅ Created task: ${newTask[0].title} (${newTask[0].id})`);
-                    }
-
-                    // Log template usage
-                    await db.insert(projectActivity).values({
-                      projectId: project.id,
-                      action: 'template_applied',
-                      details: `Applied project template: "${recommendedTemplate.name}" with ${templateTasks.length} tasks`,
-                      performedBy: userId
-                    });
-                  } catch (templateError) {
-                    console.error(`⚠️ Error applying template to project ${project.id}:`, templateError);
-                    // Continue with project creation even if template fails
+                  if (!newProject) {
+                    throw new Error('Failed to create project - no data returned');
                   }
-                }
 
-                // Transfer stakeholders from opportunity to project
-                try {
-                  const stakeholdersList = await db.select()
+                  console.log(`✅ Created project ${newProject.id} from opportunity ${req.params.id}`);
+
+                  // Log project creation activity (within transaction)
+                  await tx.insert(projectActivity).values({
+                    projectId: newProject.id,
+                    action: 'project_created',
+                    details: `Project automatically created from won opportunity: "${opportunity.title}" (Value: ${opportunity.value || 'N/A'}, Timeline: ${durationWeeks} weeks)`,
+                    performedBy: userId
+                  });
+
+                  // Transfer stakeholders from opportunity to project (within transaction)
+                  const stakeholdersList = await tx.select()
                     .from(opportunityStakeholders)
                     .where(eq(opportunityStakeholders.opportunityId, req.params.id));
 
@@ -1425,8 +1388,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
                   for (const stakeholder of stakeholdersList) {
                     // Create project comment to document stakeholder transfer
-                    await db.insert(projectComments).values({
-                      projectId: project.id,
+                    await tx.insert(projectComments).values({
+                      projectId: newProject.id,
                       userId: userId,
                       content: `Stakeholder transferred from opportunity: ${stakeholder.name} (${stakeholder.role}) - ${stakeholder.email}`,
                       isInternal: true
@@ -1434,65 +1397,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   }
 
                   if (stakeholdersList.length > 0) {
-                    await db.insert(projectActivity).values({
-                      projectId: project.id,
+                    await tx.insert(projectActivity).values({
+                      projectId: newProject.id,
                       action: 'stakeholders_transferred',
                       details: `Transferred ${stakeholdersList.length} stakeholder(s) from opportunity`,
                       performedBy: userId
                     });
                   }
-                } catch (stakeholderError) {
-                  console.error(`⚠️ Error transferring stakeholders to project ${project.id}:`, stakeholderError);
+
+                  // Store project and notification data for post-transaction processing
+                  createdProject = newProject;
+                  
+                  // Create notification (within transaction) - ensure userId is not null
+                  const targetUserId = opportunity.assignedTo || userId;
+                  if (targetUserId) {
+                    notificationData = {
+                      userId: targetUserId,
+                      type: 'project_created' as const,
+                      title: 'Project Auto-Created from Won Opportunity',
+                      message: `Project "${newProject.name}" has been automatically created from the won opportunity "${opportunity.title}".`,
+                      relatedEntityType: 'project' as const,
+                      relatedEntityId: newProject.id,
+                      actionUrl: `/projects/${newProject.id}`
+                    };
+
+                    await tx.insert(notifications).values(notificationData);
+                  } else {
+                    console.log(`⚠️ Skipping notification - no valid userId for opportunity ${req.params.id}`);
+                  }
+
+                  console.log(`🎉 Transaction complete for project ${newProject.id} from opportunity ${req.params.id}`);
+
+                }); // Close the db.transaction call
+
+                // After successful transaction, handle side effects
+                if (createdProject && notificationData) {
+                  try {
+                    await wsManager.broadcastNotification(notificationData.userId, notificationData);
+                    await wsManager.broadcastToAllUsers('create', 'project', createdProject);
+                    console.log(`📢 Sent project creation notification to user ${notificationData.userId}`);
+                  } catch (wsError) {
+                    console.error(`⚠️ Error broadcasting notifications (non-critical):`, wsError);
+                  }
                 }
 
-                // Log comprehensive activity in the opportunity
-                await logActivityHistory(
-                  req.params.id,
-                  'project_created',
-                  `Enhanced project created: "${project.name}" (${project.id}) with ${recommendedTemplate ? 'template integration' : 'manual setup'}`,
-                  userId,
-                  null,
-                  project.id
-                );
-
-                // Log enhanced activity in the new project
-                await db.insert(projectActivity).values({
-                  projectId: project.id,
-                  action: 'project_created',
-                  details: `Enhanced project automatically created from won opportunity: "${opp.title}" (Value: ${opp.value || 'N/A'}, Timeline: ${timelineCalc.durationWeeks} weeks)`,
-                  performedBy: userId
-                });
-
-                // Send comprehensive notification about project creation
-                try {
-                  const notificationData = {
-                    userId: opp.assignedTo || userId,
-                    type: 'project_created' as const,
-                    title: 'Project Auto-Created from Won Opportunity',
-                    message: `Project "${project.name}" has been automatically created from the won opportunity "${opp.title}" with enhanced setup including ${recommendedTemplate ? 'template tasks and ' : ''}stakeholder transfer.`,
-                    relatedEntityType: 'project' as const,
-                    relatedEntityId: project.id,
-                    actionUrl: `/projects/${project.id}`
-                  };
-
-                  await db.insert(notifications).values(notificationData);
-                  await wsManager.broadcastNotification(notificationData.userId, notificationData);
-                  console.log(`📢 Sent enhanced project creation notification to user ${notificationData.userId}`);
-                } catch (notificationError) {
-                  console.error(`⚠️ Error sending project creation notification:`, notificationError);
+              } catch (error: any) {
+                // Handle unique constraint violation (idempotency)
+                if (error?.code === '23505' && error?.constraint?.includes('opportunity_id')) {
+                  console.log(`⚠️ Project already exists for opportunity ${req.params.id} (unique constraint)`);
+                  // This is expected for concurrent requests - not an error
+                } else {
+                  console.error(`❌ Error auto-creating project for opportunity ${req.params.id}:`, error);
+                  throw error;
                 }
-
-                // Broadcast the new project creation to all users
-                await wsManager.broadcastToAllUsers('create', 'project', project);
-
-                console.log(`🎉 Enhanced auto-creation complete for project ${project.id} from opportunity ${req.params.id}`);
               }
             }
-          catch (error) {
+          } catch (error) {
             console.error("Error auto-creating project from won opportunity:", error);
             // Don't fail the opportunity update if project creation fails
           }
-          */
         }
       }
 
