@@ -4,29 +4,75 @@ import { db } from '../server/db';
 import { sql } from "drizzle-orm";
 import {
   users,
+  companies,
   clients,
   projects,
   tasks,
+  timeEntries,
   invoices,
   expenses,
   knowledgeArticles,
   marketingCampaigns,
   supportTickets,
+  salesOpportunities,
+  clientInteractions,
+  projectActivity,
+  projectComments,
+  projectBudgets,
+  budgetCategories,
+  documents,
   systemVariables,
-} from "@shared/schema";
+  opportunityCommunications,
+  opportunityNextSteps,
+} from "../shared/schema";
+
+// Helper functions
+function randomDate(start: Date, end: Date): Date {
+  return new Date(start.getTime() + Math.random() * (end.getTime() - start.getTime()));
+}
+
+function randomFutureDate(daysFromNow: number = 30): Date {
+  const now = new Date();
+  return new Date(now.getTime() + Math.random() * daysFromNow * 24 * 60 * 60 * 1000);
+}
+
+function randomPastDate(daysAgo: number = 180): Date {
+  const now = new Date();
+  return new Date(now.getTime() - Math.random() * daysAgo * 24 * 60 * 60 * 1000);
+}
+
+function randomChoice<T>(array: T[]): T {
+  return array[Math.floor(Math.random() * array.length)];
+}
+
+function randomChoices<T>(array: T[], count: number): T[] {
+  const shuffled = [...array].sort(() => 0.5 - Math.random());
+  return shuffled.slice(0, count);
+}
 
 async function clearAllData() {
   console.log("🧹 Clearing all existing sample data...");
 
   // Clear all tables in correct order (respecting foreign key constraints)
-  await db.delete(supportTickets);
-  await db.delete(marketingCampaigns);
-  await db.delete(knowledgeArticles);
-  await db.delete(expenses);
-  await db.delete(invoices);
+  await db.delete(projectActivity);
+  await db.delete(projectComments);
+  await db.delete(timeEntries);
   await db.delete(tasks);
+  await db.delete(projectBudgets);
+  await db.delete(budgetCategories);
+  await db.delete(invoices);
+  await db.delete(expenses);
+  await db.delete(documents);
+  await db.delete(knowledgeArticles);
+  await db.delete(supportTickets);
+  await db.delete(opportunityCommunications);
+  await db.delete(opportunityNextSteps);
+  await db.delete(salesOpportunities);
+  await db.delete(clientInteractions);
   await db.delete(projects);
   await db.delete(clients);
+  await db.delete(companies);
+  await db.delete(marketingCampaigns);
   await db.delete(systemVariables);
   // Clear all users except Steven McGettigan if he exists
   await db.delete(users).where(sql`email != 'steven@mcgettigan.com'`);
@@ -187,27 +233,191 @@ async function createTeamMembers() {
   return createdUsers;
 }
 
-async function createClients(teamMembers: any[]) {
-  console.log("🏢 Creating 20 client profiles with various industries...");
-
-  const salesTeam = teamMembers.filter(u => u.role === "manager" || u.role === "admin");
-
-  const clientProfiles = [
+async function createCompanies() {
+  console.log("🏢 Creating 10 companies with realistic business details...");
+  
+  const companyData = [
     {
-      name: "TechStartup Ltd",
-      email: "contact@techstartup.com",
-      phone: "+44 20 7123 4567",
-      company: "TechStartup Ltd",
-      industry: "Technology",
-      website: "https://techstartup.com",
-      address: "123 Tech Street, London, SW1A 1AA",
-      status: "client",
-      source: "referral",
-      assignedTo: salesTeam[0]?.id,
-      totalValue: "45000.00",
-      notes: "AI-powered SaaS platform development",
-      tags: ["SaaS", "AI", "High Priority"]
+      name: "TechStart Innovation",
+      industry: "technology",
+      website: "https://techstart.com",
+      address: "123 Tech Street, London, EC1A 1AA",
+      phone: "+44 20 1234 5678",
+      email: "hello@techstart.com",
+      description: "A fast-growing startup developing AI-powered business automation tools",
+      size: "startup",
+      revenue: "2500000",
+      foundedYear: 2019,
+      tags: ["AI", "Automation", "SaaS"]
     },
+    {
+      name: "Global Health Solutions",
+      industry: "healthcare",
+      website: "https://globalhealthsolutions.com",
+      address: "45 Medical Way, Manchester, M1 2AB",
+      phone: "+44 161 234 5678",
+      email: "contact@globalhealthsolutions.com",
+      description: "Healthcare technology company specializing in patient management systems",
+      size: "medium",
+      revenue: "15000000",
+      foundedYear: 2015,
+      tags: ["Healthcare", "Technology", "Patient Care"]
+    },
+    {
+      name: "Premier Financial Services",
+      industry: "finance",
+      website: "https://premierfs.co.uk",
+      address: "78 Finance Plaza, Edinburgh, EH1 3CD",
+      phone: "+44 131 345 6789",
+      email: "info@premierfs.co.uk",
+      description: "Independent financial advisory firm serving SMEs across the UK",
+      size: "small",
+      revenue: "5000000",
+      foundedYear: 2012,
+      tags: ["Financial Services", "Advisory", "SME"]
+    },
+    {
+      name: "BuildCorp Construction",
+      industry: "construction",
+      website: "https://buildcorp.co.uk",
+      address: "156 Construction Avenue, Birmingham, B1 4EF",
+      phone: "+44 121 456 7890",
+      email: "projects@buildcorp.co.uk",
+      description: "Commercial construction company specializing in office buildings and retail spaces",
+      size: "large",
+      revenue: "45000000",
+      foundedYear: 2008,
+      tags: ["Construction", "Commercial", "Real Estate"]
+    },
+    {
+      name: "EduTech Learning",
+      industry: "education",
+      website: "https://edutech-learning.com",
+      address: "89 Education Road, Cambridge, CB1 5GH",
+      phone: "+44 1223 567 890",
+      email: "hello@edutech-learning.com",
+      description: "Online learning platform for professional development and certification",
+      size: "medium",
+      revenue: "8000000",
+      foundedYear: 2017,
+      tags: ["Education", "Online Learning", "Certification"]
+    },
+    {
+      name: "RetailMax Group",
+      industry: "retail",
+      website: "https://retailmax.co.uk",
+      address: "234 Retail Street, Leeds, LS1 6IJ",
+      phone: "+44 113 678 901",
+      email: "contact@retailmax.co.uk",
+      description: "Multi-brand retail group operating fashion and lifestyle stores across the UK",
+      size: "large",
+      revenue: "120000000",
+      foundedYear: 2003,
+      tags: ["Retail", "Fashion", "Lifestyle"]
+    },
+    {
+      name: "GreenEnergy Solutions",
+      industry: "technology",
+      website: "https://greenenergy-solutions.com",
+      address: "67 Renewable Way, Bristol, BS1 7KL",
+      phone: "+44 117 789 012",
+      email: "info@greenenergy-solutions.com",
+      description: "Renewable energy technology company developing smart grid solutions",
+      size: "medium",
+      revenue: "12000000",
+      foundedYear: 2016,
+      tags: ["Renewable Energy", "Smart Grid", "Technology"]
+    },
+    {
+      name: "Creative Media Agency",
+      industry: "media",
+      website: "https://creativemedia.co.uk",
+      address: "91 Creative Studios, Brighton, BN1 8MN",
+      phone: "+44 1273 890 123",
+      email: "studio@creativemedia.co.uk",
+      description: "Full-service creative agency specializing in digital marketing and brand design",
+      size: "small",
+      revenue: "3500000",
+      foundedYear: 2014,
+      tags: ["Creative", "Digital Marketing", "Branding"]
+    },
+    {
+      name: "ManufacturingPro Ltd",
+      industry: "manufacturing",
+      website: "https://manufacturingpro.co.uk",
+      address: "145 Industrial Park, Sheffield, S1 9OP",
+      phone: "+44 114 901 234",
+      email: "sales@manufacturingpro.co.uk",
+      description: "Precision manufacturing company producing components for automotive and aerospace industries",
+      size: "large",
+      revenue: "65000000",
+      foundedYear: 2005,
+      tags: ["Manufacturing", "Automotive", "Aerospace"]
+    },
+    {
+      name: "Charity Foundation UK",
+      industry: "non-profit",
+      website: "https://charityfoundation.org.uk",
+      address: "33 Charity Lane, Oxford, OX1 0QR",
+      phone: "+44 1865 012 345",
+      email: "contact@charityfoundation.org.uk",
+      description: "National charity focused on education and community development programs",
+      size: "medium",
+      revenue: "4000000",
+      foundedYear: 2010,
+      tags: ["Non-profit", "Education", "Community"]
+    }
+  ];
+
+  const insertedCompanies = await db.insert(companies).values(companyData).returning();
+  console.log(`✅ Created ${insertedCompanies.length} companies`);
+  return insertedCompanies;
+}
+
+async function createContacts(companyList: any[], userList: any[]) {
+  console.log("👤 Creating 16 contacts across companies...");
+  
+  const contactData = [];
+  
+  // Create 1-2 contacts per company, ensuring we have 16 total
+  let contactCount = 0;
+  for (let i = 0; i < companyList.length && contactCount < 16; i++) {
+    const company = companyList[i];
+    const contactsForCompany = i < 6 ? 2 : 1; // First 6 companies get 2 contacts, rest get 1
+    
+    for (let j = 0; j < contactsForCompany && contactCount < 16; j++) {
+      const isPrimary = j === 0; // First contact is primary
+      const firstName = randomChoice([
+        "John", "Jane", "Michael", "Sarah", "David", "Emma", "James", "Olivia",
+        "Robert", "Emily", "William", "Sophia", "Thomas", "Isabella", "Daniel", "Ava"
+      ]);
+      const lastName = randomChoice([
+        "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis",
+        "Rodriguez", "Martinez", "Hernandez", "Lopez", "Gonzalez", "Wilson", "Anderson", "Taylor"
+      ]);
+      
+      contactData.push({
+        name: `${firstName} ${lastName}`,
+        email: `${firstName.toLowerCase()}.${lastName.toLowerCase()}@${company.name.toLowerCase().replace(/\s+/g, '')}.com`,
+        phone: `+44 ${Math.floor(Math.random() * 900) + 100} ${Math.floor(Math.random() * 900) + 100} ${Math.floor(Math.random() * 900) + 100}`,
+        companyId: company.id,
+        position: randomChoice(["CEO", "CTO", "VP Sales", "Marketing Director", "Operations Manager", "IT Manager", "Finance Director"]),
+        department: randomChoice(["Executive", "Technology", "Sales", "Marketing", "Operations", "Finance"]),
+        isPrimaryContact: isPrimary,
+        source: randomChoice(["referral", "website", "marketing", "cold_outreach", "networking"]),
+        assignedTo: randomChoice(userList).id,
+        lastContactDate: randomPastDate(30),
+        notes: `${isPrimary ? "Primary contact" : "Secondary contact"} for ${company.name}. ${randomChoice(["Very responsive", "Prefers email communication", "Best to contact in the morning", "Key decision maker"])}`,
+        tags: randomChoices(["decision-maker", "technical", "budget-holder", "influencer", "champion"], Math.floor(Math.random() * 3) + 1),
+        isActive: true
+      });
+      contactCount++;
+    }
+  }
+
+  const insertedContacts = await db.insert(clients).values(contactData).returning();
+  console.log(`✅ Created ${insertedContacts.length} contacts`);
+  return insertedContacts;
     {
       name: "GreenEnergy Solutions",
       email: "info@greenenergy.co.uk",
