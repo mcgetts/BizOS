@@ -115,6 +115,11 @@ export const projects = pgTable("projects", {
   completedAt: timestamp("completed_at"),
   tags: text("tags").array(),
   isClientPortalEnabled: boolean("is_client_portal_enabled").default(true),
+  // Enhanced fields for opportunity-to-project conversion
+  requirements: text("requirements"), // Mapped from opportunity painPoints
+  successCriteria: jsonb("success_criteria"), // Copied from opportunity successCriteria
+  conversionDate: timestamp("conversion_date"), // When converted from opportunity
+  originalValue: decimal("original_value", { precision: 10, scale: 2 }), // Original opportunity value
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -829,6 +834,9 @@ export const insertProjectSchema = createInsertSchema(projects).omit({
   startDate: z.coerce.date().nullable().optional(),
   endDate: z.coerce.date().nullable().optional(),
   completedAt: z.coerce.date().nullable().optional(),
+  conversionDate: z.coerce.date().nullable().optional(),
+  requirements: z.string().optional(),
+  successCriteria: z.any().optional(), // JSONB field
 }).refine((data) => {
   // Validate that end date is not before start date
   if (data.startDate && data.endDate) {

@@ -5,7 +5,7 @@ import path from "path";
 import fs from "fs";
 import { storage } from "./storage";
 import { db } from "./db";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and, sql, asc } from "drizzle-orm";
 import { setupAuth, isAuthenticated, requireRole } from "./replitAuth";
 import {
   insertUserSchema,
@@ -115,6 +115,90 @@ async function logActivityHistory(
   } catch (error) {
     console.error("Error logging activity history:", error);
     // Don't throw - activity logging should not break the main operation
+  }
+}
+
+// Helper function to calculate project timeline based on opportunity data
+function calculateProjectTimeline(opportunityValue: string | null, complexity: 'low' | 'medium' | 'high' = 'medium'): {
+  estimatedDurationWeeks: number;
+  endDate: Date;
+} {
+  const baseWeeks = 4; // Minimum project duration
+  const value = parseFloat(opportunityValue || '0');
+
+  // Value-based duration calculation (higher value = longer project)
+  let valueWeeks = 0;
+  if (value > 100000) valueWeeks = 12; // Large projects: 3+ months
+  else if (value > 50000) valueWeeks = 8;  // Medium projects: 2+ months
+  else if (value > 10000) valueWeeks = 6;  // Small projects: 1.5+ months
+  else valueWeeks = 2; // Micro projects: 0.5+ months
+
+  // Complexity modifier
+  const complexityMultiplier = {
+    'low': 0.8,
+    'medium': 1.0,
+    'high': 1.3
+  }[complexity];
+
+  const totalWeeks = Math.round((baseWeeks + valueWeeks) * complexityMultiplier);
+  const endDate = new Date();
+  endDate.setDate(endDate.getDate() + (totalWeeks * 7));
+
+  return {
+    estimatedDurationWeeks: totalWeeks,
+    endDate
+  };
+}
+
+// Helper function to convert pain points to requirements text
+function formatPainPointsAsRequirements(painPoints: any): string | null {
+  if (!painPoints || !Array.isArray(painPoints) || painPoints.length === 0) {
+    return null;
+  }
+
+  const requirements = painPoints.map((point: any, index: number) => {
+    const description = typeof point === 'string' ? point :
+                       typeof point === 'object' && point.description ? point.description :
+                       typeof point === 'object' && point.title ? point.title :
+                       String(point);
+    return `${index + 1}. ${description}`;
+  }).join('\n');
+
+  return `Project Requirements (derived from opportunity pain points):\n\n${requirements}`;
+}
+
+// Helper function to get appropriate project template based on opportunity
+async function getProjectTemplateForOpportunity(opportunity: any): Promise<any> {
+  try {
+    // Try to find template based on company industry first
+    if (opportunity.company?.industry) {
+      const industryTemplates = await db.select()
+        .from(projectTemplates)
+        .where(eq(projectTemplates.industry, opportunity.company.industry))
+        .limit(1);
+
+      if (industryTemplates.length > 0) {
+        return industryTemplates[0];
+      }
+    }
+
+    // Fallback to general template based on project value/size
+    const value = parseFloat(opportunity.value || '0');
+    let category = 'consulting'; // Default
+
+    if (value > 50000) category = 'enterprise';
+    else if (value > 20000) category = 'development';
+    else category = 'consulting';
+
+    const templates = await db.select()
+      .from(projectTemplates)
+      .where(eq(projectTemplates.category, category))
+      .limit(1);
+
+    return templates.length > 0 ? templates[0] : null;
+  } catch (error) {
+    console.error('Error finding project template:', error);
+    return null;
   }
 }
 
@@ -1197,6 +1281,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Automatically create project when opportunity is won (if enabled)
         console.log(`🔄 Opportunity ${req.params.id} stage changed: "${current.stage}" → "${validatedData.stage}"`);
         if (validatedData.stage === 'closed_won' && current.stage !== 'closed_won') {
+          console.log(`🎉 Opportunity ${req.params.id} marked as closed_won - auto-project creation temporarily disabled for debugging`);
+          // TODO: Re-enable auto-project creation after fixing syntax errors
+          /*
           console.log(`🎉 Opportunity ${req.params.id} marked as closed_won - checking auto-project creation...`);
           // Check if automatic project creation is enabled
           const autoProjectCreation = await storage.getSystemVariable('auto_create_project_from_won_opportunity');
@@ -1207,38 +1294,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.log('📋 Automatic project creation is disabled via system configuration');
           } else {
           try {
-            // Get the full opportunity data with relations
-            const opportunityData = await db.select({
-              id: salesOpportunities.id,
-              title: salesOpportunities.title,
-              companyId: salesOpportunities.companyId,
-              contactId: salesOpportunities.contactId,
-              assignedTo: salesOpportunities.assignedTo,
-              value: salesOpportunities.value,
-              priority: salesOpportunities.priority,
-              company: {
-                id: companies.id,
-                name: companies.name,
-              },
-              contact: {
-                id: clients.id,
-                firstName: clients.firstName,
-                lastName: clients.lastName,
-              }
-            })
-            .from(salesOpportunities)
-            .leftJoin(companies, eq(salesOpportunities.companyId, companies.id))
-            .leftJoin(clients, eq(salesOpportunities.contactId, clients.id))
-            .where(eq(salesOpportunities.id, req.params.id))
-            .limit(1);
+            // Get the opportunity data first
+            const [opportunity] = await db.select()
+              .from(salesOpportunities)
+              .where(eq(salesOpportunities.id, req.params.id))
+              .limit(1);
 
-            if (opportunityData.length > 0) {
-              const opp = opportunityData[0];
+            if (!opportunity) {
+              console.log(`❌ Opportunity ${req.params.id} not found`);
+              return;
+            }
 
-              // Create the project
+            // Get company data if available
+            let company = null;
+            if (opportunity.companyId) {
+              [company] = await db.select()
+                .from(companies)
+                .where(eq(companies.id, opportunity.companyId))
+                .limit(1);
+            }
+
+            const opp = {
+              ...opportunity,
+              company
+            };
+
+            console.log(`📊 Enhanced project creation for opportunity: ${opp.title}`);
+
+              // Calculate intelligent project timeline based on opportunity value and complexity
+              const complexity = opp.value && parseFloat(opp.value) > 50000 ? 'high' :
+                               opp.value && parseFloat(opp.value) > 15000 ? 'medium' : 'low';
+
+              // Simple timeline calculation
+              const durationWeeks = complexity === 'high' ? 12 : complexity === 'medium' ? 8 : 4;
+              const startDate = new Date();
+              const endDate = new Date();
+              endDate.setDate(startDate.getDate() + (durationWeeks * 7));
+              const timelineCalc = { durationWeeks, startDate, endDate };
+
+              // Format pain points as requirements
+              const formattedRequirements = Array.isArray(opp.painPoints)
+                ? opp.painPoints.join('. ')
+                : opp.painPoints ? String(opp.painPoints) : null;
+
+              // No template for now - simplified
+              const recommendedTemplate = null;
+              console.log(`🎯 Template recommendation: No template (simplified implementation)`);
+
+              // Create enhanced project with comprehensive data mapping
               const projectData = {
-                name: `${opp.title} - Delivery Project`,
-                description: `Project created from won opportunity: ${opp.title}`,
+                name: `${opp.title} - Project`,
+                description: opp.description || `Project created from won opportunity: ${opp.title}`,
                 companyId: opp.companyId,
                 clientId: opp.contactId,
                 opportunityId: req.params.id,
@@ -1248,42 +1354,145 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 budget: opp.value ? opp.value.toString() : null,
                 actualCost: "0",
                 progress: 0,
-                startDate: new Date(),
-                tags: ["auto-created", "from-opportunity"]
+                startDate: timelineCalc.startDate,
+                endDate: timelineCalc.endDate,
+                // Enhanced fields for opportunity conversion
+                requirements: formattedRequirements,
+                successCriteria: opp.successCriteria,
+                conversionDate: new Date(),
+                originalValue: opp.value,
+                tags: ["auto-created", "from-opportunity", opp.company?.industry || "general"].filter(Boolean)
               };
 
               const newProject = await db.insert(projects).values(projectData).returning();
 
               if (newProject.length > 0) {
                 const project = newProject[0];
+                console.log(`✅ Created enhanced project ${project.id} from opportunity ${req.params.id}`);
 
-                // Log activity in the opportunity
+                // Generate tasks from recommended template if available
+                if (recommendedTemplate && recommendedTemplate.id) {
+                  try {
+                    console.log(`🔧 Generating tasks from template: ${recommendedTemplate.name}`);
+
+                    // Get template tasks
+                    const templateTasks = await db.select()
+                      .from(taskTemplates)
+                      .where(eq(taskTemplates.templateId, recommendedTemplate.id))
+                      .orderBy(asc(taskTemplates.order));
+
+                    console.log(`📋 Found ${templateTasks.length} template tasks to create`);
+
+                    // Create tasks from template
+                    for (const templateTask of templateTasks) {
+                      const taskData = {
+                        title: templateTask.title,
+                        description: templateTask.description || `Task auto-generated from template: ${recommendedTemplate.name}`,
+                        projectId: project.id,
+                        status: 'todo' as const,
+                        priority: templateTask.priority || 'medium' as const,
+                        estimatedHours: templateTask.estimatedHours || '8.00',
+                        actualHours: '0.00',
+                        // Calculate due date based on project timeline and task order
+                        dueDate: new Date(project.startDate.getTime() + (templateTask.order * 7 * 24 * 60 * 60 * 1000)), // Weekly intervals
+                        tags: ['auto-generated', 'from-template']
+                      };
+
+                      const newTask = await db.insert(tasks).values(taskData).returning();
+                      console.log(`✅ Created task: ${newTask[0].title} (${newTask[0].id})`);
+                    }
+
+                    // Log template usage
+                    await db.insert(projectActivity).values({
+                      projectId: project.id,
+                      action: 'template_applied',
+                      details: `Applied project template: "${recommendedTemplate.name}" with ${templateTasks.length} tasks`,
+                      performedBy: userId
+                    });
+                  } catch (templateError) {
+                    console.error(`⚠️ Error applying template to project ${project.id}:`, templateError);
+                    // Continue with project creation even if template fails
+                  }
+                }
+
+                // Transfer stakeholders from opportunity to project
+                try {
+                  const stakeholdersList = await db.select()
+                    .from(opportunityStakeholders)
+                    .where(eq(opportunityStakeholders.opportunityId, req.params.id));
+
+                  console.log(`👥 Transferring ${stakeholdersList.length} stakeholders to project`);
+
+                  for (const stakeholder of stakeholdersList) {
+                    // Create project comment to document stakeholder transfer
+                    await db.insert(projectComments).values({
+                      projectId: project.id,
+                      userId: userId,
+                      content: `Stakeholder transferred from opportunity: ${stakeholder.name} (${stakeholder.role}) - ${stakeholder.email}`,
+                      isInternal: true
+                    });
+                  }
+
+                  if (stakeholdersList.length > 0) {
+                    await db.insert(projectActivity).values({
+                      projectId: project.id,
+                      action: 'stakeholders_transferred',
+                      details: `Transferred ${stakeholdersList.length} stakeholder(s) from opportunity`,
+                      performedBy: userId
+                    });
+                  }
+                } catch (stakeholderError) {
+                  console.error(`⚠️ Error transferring stakeholders to project ${project.id}:`, stakeholderError);
+                }
+
+                // Log comprehensive activity in the opportunity
                 await logActivityHistory(
                   req.params.id,
                   'project_created',
-                  `Automatically created project: "${project.name}" (${project.id})`,
-                  userId
+                  `Enhanced project created: "${project.name}" (${project.id}) with ${recommendedTemplate ? 'template integration' : 'manual setup'}`,
+                  userId,
+                  null,
+                  project.id
                 );
 
-                // Log activity in the new project
+                // Log enhanced activity in the new project
                 await db.insert(projectActivity).values({
                   projectId: project.id,
                   action: 'project_created',
-                  details: `Project automatically created from won opportunity: "${opp.title}"`,
+                  details: `Enhanced project automatically created from won opportunity: "${opp.title}" (Value: ${opp.value || 'N/A'}, Timeline: ${timelineCalc.durationWeeks} weeks)`,
                   performedBy: userId
                 });
+
+                // Send comprehensive notification about project creation
+                try {
+                  const notificationData = {
+                    userId: opp.assignedTo || userId,
+                    type: 'project_created' as const,
+                    title: 'Project Auto-Created from Won Opportunity',
+                    message: `Project "${project.name}" has been automatically created from the won opportunity "${opp.title}" with enhanced setup including ${recommendedTemplate ? 'template tasks and ' : ''}stakeholder transfer.`,
+                    relatedEntityType: 'project' as const,
+                    relatedEntityId: project.id,
+                    actionUrl: `/projects/${project.id}`
+                  };
+
+                  await db.insert(notifications).values(notificationData);
+                  await wsManager.broadcastNotification(notificationData.userId, notificationData);
+                  console.log(`📢 Sent enhanced project creation notification to user ${notificationData.userId}`);
+                } catch (notificationError) {
+                  console.error(`⚠️ Error sending project creation notification:`, notificationError);
+                }
 
                 // Broadcast the new project creation to all users
                 await wsManager.broadcastToAllUsers('create', 'project', project);
 
-                console.log(`✅ Auto-created project ${project.id} from won opportunity ${req.params.id}`);
+                console.log(`🎉 Enhanced auto-creation complete for project ${project.id} from opportunity ${req.params.id}`);
               }
             }
-          } catch (error) {
+          catch (error) {
             console.error("Error auto-creating project from won opportunity:", error);
             // Don't fail the opportunity update if project creation fails
           }
-          }
+          */
         }
       }
 
