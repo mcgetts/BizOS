@@ -1,0 +1,1170 @@
+# API Endpoints and Service Boundaries
+# YAML DSL for REST API Definition
+# Version: 1.0
+# Last Updated: 2025-09-25
+
+metadata:
+  name: "Business Platform API Definition"
+  version: "4.0.0"
+  description: "Comprehensive REST API definition covering all business platform endpoints including authentication, CRM, project management, and analytics services."
+  api_style: "RESTful"
+  base_url: "https://business-platform.repl.co/api"
+  authentication: "session_based"
+  total_endpoints: 35
+  documentation: "OpenAPI 3.0 compatible"
+
+api_configuration:
+  framework: "Express.js"
+  middleware:
+    - "express.json()"
+    - "express.urlencoded({ extended: false })"
+    - "session middleware"
+    - "authentication middleware"
+    - "rate limiting"
+    - "CORS handling"
+
+  security:
+    authentication_required: true
+    rate_limiting:
+      enabled: true
+      window: "15 minutes"
+      max_requests: 100
+
+  response_format:
+    success: "JSON"
+    error: "JSON with error message"
+    status_codes: [200, 201, 400, 401, 403, 404, 409, 500]
+
+# Authentication and User Management Endpoints
+authentication_endpoints:
+  auth_register:
+    path: "/api/auth/register"
+    method: "POST"
+    description: "User registration with email verification"
+    authentication_required: false
+    rate_limit: "5 requests per 15 minutes"
+    request_schema:
+      required_fields:
+        - "email"
+        - "password"
+        - "firstName"
+        - "lastName"
+      optional_fields:
+        - "phone"
+        - "department"
+        - "position"
+    response:
+      success: "201 - User created, verification email sent"
+      error: "400 - Validation errors, 409 - Email already exists"
+    validation:
+      email: "valid email format"
+      password: "min 8 chars, uppercase, lowercase, number"
+
+  auth_login:
+    path: "/api/auth/login"
+    method: "POST"
+    description: "User login with email and password"
+    authentication_required: false
+    rate_limit: "5 attempts per 15 minutes per IP"
+    request_schema:
+      required_fields:
+        - "email"
+        - "password"
+      optional_fields:
+        - "rememberMe"
+    response:
+      success: "200 - Login successful with session"
+      error: "401 - Invalid credentials, 423 - Account locked"
+
+  auth_verify_email:
+    path: "/api/auth/verify-email"
+    method: "POST"
+    description: "Email verification confirmation"
+    authentication_required: false
+    request_schema:
+      required_fields:
+        - "token"
+    response:
+      success: "200 - Email verified"
+      error: "400 - Invalid or expired token"
+
+  auth_forgot_password:
+    path: "/api/auth/forgot-password"
+    method: "POST"
+    description: "Request password reset"
+    authentication_required: false
+    rate_limit: "3 requests per hour per email"
+    request_schema:
+      required_fields:
+        - "email"
+    response:
+      success: "200 - Reset email sent (always returns success)"
+      error: "400 - Invalid email format"
+
+  auth_reset_password:
+    path: "/api/auth/reset-password"
+    method: "POST"
+    description: "Reset password with token"
+    authentication_required: false
+    request_schema:
+      required_fields:
+        - "token"
+        - "password"
+    response:
+      success: "200 - Password reset successful"
+      error: "400 - Invalid token or password requirements"
+
+  auth_change_password:
+    path: "/api/auth/change-password"
+    method: "POST"
+    description: "Change password for authenticated user"
+    authentication_required: true
+    request_schema:
+      required_fields:
+        - "currentPassword"
+        - "newPassword"
+    response:
+      success: "200 - Password changed"
+      error: "400 - Invalid current password"
+
+  auth_logout:
+    path: "/api/auth/logout"
+    method: "POST"
+    description: "User logout and session destruction"
+    authentication_required: true
+    response:
+      success: "200 - Logout successful"
+
+  auth_me:
+    path: "/api/auth/me"
+    method: "GET"
+    description: "Get current authenticated user"
+    authentication_required: true
+    response:
+      success: "200 - User profile data"
+      error: "401 - Not authenticated"
+
+# User Management Endpoints
+user_management_endpoints:
+  users_list:
+    path: "/api/users"
+    method: "GET"
+    description: "List all users (admin/manager only)"
+    authentication_required: true
+    authorization: ["admin", "manager"]
+    query_parameters:
+      optional:
+        - "limit"
+        - "offset"
+        - "role"
+        - "department"
+    response:
+      success: "200 - Array of user objects"
+
+  users_create:
+    path: "/api/users"
+    method: "POST"
+    description: "Create new user (admin only)"
+    authentication_required: true
+    authorization: ["admin"]
+    request_schema:
+      required_fields:
+        - "email"
+        - "firstName"
+        - "lastName"
+        - "role"
+    response:
+      success: "201 - User created"
+      error: "409 - Email already exists"
+
+  users_get:
+    path: "/api/users/:id"
+    method: "GET"
+    description: "Get user by ID"
+    authentication_required: true
+    path_parameters:
+      - "id: User UUID"
+    response:
+      success: "200 - User object"
+      error: "404 - User not found"
+
+  users_update:
+    path: "/api/users/:id"
+    method: "PUT"
+    description: "Update user profile"
+    authentication_required: true
+    authorization: "own_profile_or_admin"
+    request_schema:
+      optional_fields:
+        - "firstName"
+        - "lastName"
+        - "phone"
+        - "department"
+        - "position"
+        - "skills"
+    response:
+      success: "200 - User updated"
+
+# Company Management Endpoints
+company_management_endpoints:
+  companies_list:
+    path: "/api/companies"
+    method: "GET"
+    description: "List companies with filtering"
+    authentication_required: true
+    query_parameters:
+      optional:
+        - "industry"
+        - "size"
+        - "limit"
+        - "offset"
+    response:
+      success: "200 - Array of company objects"
+
+  companies_create:
+    path: "/api/companies"
+    method: "POST"
+    description: "Create new company"
+    authentication_required: true
+    request_schema:
+      required_fields:
+        - "name"
+      optional_fields:
+        - "industry"
+        - "website"
+        - "address"
+        - "phone"
+        - "email"
+        - "size"
+        - "revenue"
+        - "tags"
+    response:
+      success: "201 - Company created"
+
+  companies_get:
+    path: "/api/companies/:id"
+    method: "GET"
+    description: "Get company by ID with related data"
+    authentication_required: true
+    path_parameters:
+      - "id: Company UUID"
+    response:
+      success: "200 - Company object with clients and opportunities"
+      error: "404 - Company not found"
+
+  companies_update:
+    path: "/api/companies/:id"
+    method: "PUT"
+    description: "Update company information"
+    authentication_required: true
+    response:
+      success: "200 - Company updated"
+
+# Client Management Endpoints
+client_management_endpoints:
+  clients_list:
+    path: "/api/clients"
+    method: "GET"
+    description: "List clients with company information"
+    authentication_required: true
+    query_parameters:
+      optional:
+        - "companyId"
+        - "assignedTo"
+        - "limit"
+        - "offset"
+    response:
+      success: "200 - Array of client objects with company data"
+
+  clients_create:
+    path: "/api/clients"
+    method: "POST"
+    description: "Create new client contact"
+    authentication_required: true
+    request_schema:
+      required_fields:
+        - "name"
+      optional_fields:
+        - "email"
+        - "phone"
+        - "companyId"
+        - "position"
+        - "department"
+        - "isPrimaryContact"
+        - "source"
+        - "notes"
+        - "tags"
+    response:
+      success: "201 - Client created"
+
+  clients_get:
+    path: "/api/clients/:id"
+    method: "GET"
+    description: "Get client by ID with interaction history"
+    authentication_required: true
+    response:
+      success: "200 - Client object with interactions"
+
+  clients_update:
+    path: "/api/clients/:id"
+    method: "PUT"
+    description: "Update client information"
+    authentication_required: true
+    response:
+      success: "200 - Client updated"
+
+# Sales and CRM Endpoints
+sales_crm_endpoints:
+  opportunities_list:
+    path: "/api/opportunities"
+    method: "GET"
+    description: "List sales opportunities with filtering"
+    authentication_required: true
+    query_parameters:
+      optional:
+        - "stage"
+        - "assignedTo"
+        - "companyId"
+        - "priority"
+        - "limit"
+        - "offset"
+    response:
+      success: "200 - Array of opportunity objects"
+
+  opportunities_create:
+    path: "/api/opportunities"
+    method: "POST"
+    description: "Create new sales opportunity"
+    authentication_required: true
+    request_schema:
+      required_fields:
+        - "title"
+        - "companyId"
+      optional_fields:
+        - "description"
+        - "contactId"
+        - "stage"
+        - "value"
+        - "probability"
+        - "expectedCloseDate"
+        - "source"
+        - "priority"
+        - "tags"
+        - "notes"
+    response:
+      success: "201 - Opportunity created"
+
+  opportunities_get:
+    path: "/api/opportunities/:id"
+    method: "GET"
+    description: "Get opportunity with full details"
+    authentication_required: true
+    response:
+      success: "200 - Opportunity with relations (company, contact, next steps, communications)"
+
+  opportunities_update:
+    path: "/api/opportunities/:id"
+    method: "PUT"
+    description: "Update opportunity"
+    authentication_required: true
+    response:
+      success: "200 - Opportunity updated"
+
+  opportunity_next_steps:
+    path: "/api/opportunities/:id/next-steps"
+    method: "GET"
+    description: "Get next steps for opportunity"
+    authentication_required: true
+    response:
+      success: "200 - Array of next step objects"
+
+  opportunity_next_steps_create:
+    path: "/api/opportunities/:id/next-steps"
+    method: "POST"
+    description: "Create next step for opportunity"
+    authentication_required: true
+    request_schema:
+      required_fields:
+        - "title"
+      optional_fields:
+        - "description"
+        - "assignedTo"
+        - "dueDate"
+        - "priority"
+    response:
+      success: "201 - Next step created"
+
+  opportunity_communications:
+    path: "/api/opportunities/:id/communications"
+    method: "GET"
+    description: "Get communication history"
+    authentication_required: true
+    response:
+      success: "200 - Array of communication records"
+
+  opportunity_communications_create:
+    path: "/api/opportunities/:id/communications"
+    method: "POST"
+    description: "Log new communication"
+    authentication_required: true
+    request_schema:
+      required_fields:
+        - "type"
+        - "communicationDate"
+      optional_fields:
+        - "subject"
+        - "summary"
+        - "outcome"
+        - "attendees"
+        - "followUpRequired"
+        - "followUpDate"
+    response:
+      success: "201 - Communication logged"
+
+# Project Management Endpoints
+project_management_endpoints:
+  projects_list:
+    path: "/api/projects"
+    method: "GET"
+    description: "List projects with filtering and sorting"
+    authentication_required: true
+    query_parameters:
+      optional:
+        - "status"
+        - "managerId"
+        - "companyId"
+        - "priority"
+        - "limit"
+        - "offset"
+    response:
+      success: "200 - Array of project objects"
+
+  projects_create:
+    path: "/api/projects"
+    method: "POST"
+    description: "Create new project"
+    authentication_required: true
+    request_schema:
+      required_fields:
+        - "name"
+      optional_fields:
+        - "description"
+        - "companyId"
+        - "clientId"
+        - "opportunityId"
+        - "managerId"
+        - "status"
+        - "priority"
+        - "budget"
+        - "startDate"
+        - "endDate"
+        - "tags"
+    response:
+      success: "201 - Project created"
+
+  projects_get:
+    path: "/api/projects/:id"
+    method: "GET"
+    description: "Get project with tasks and activity"
+    authentication_required: true
+    response:
+      success: "200 - Project object with tasks, comments, and activity"
+
+  projects_update:
+    path: "/api/projects/:id"
+    method: "PUT"
+    description: "Update project information"
+    authentication_required: true
+    response:
+      success: "200 - Project updated"
+
+  projects_delete:
+    path: "/api/projects/:id"
+    method: "DELETE"
+    description: "Delete project (admin/manager only)"
+    authentication_required: true
+    authorization: ["admin", "manager"]
+    response:
+      success: "204 - Project deleted"
+
+  project_comments:
+    path: "/api/projects/:id/comments"
+    method: "GET"
+    description: "Get project comments and activity feed"
+    authentication_required: true
+    response:
+      success: "200 - Array of comment objects"
+
+  project_comments_create:
+    path: "/api/projects/:id/comments"
+    method: "POST"
+    description: "Add comment to project"
+    authentication_required: true
+    request_schema:
+      required_fields:
+        - "content"
+      optional_fields:
+        - "type"
+        - "mentionedUsers"
+        - "attachments"
+    response:
+      success: "201 - Comment created"
+
+  project_activity:
+    path: "/api/projects/:id/activity"
+    method: "GET"
+    description: "Get project activity log"
+    authentication_required: true
+    response:
+      success: "200 - Array of activity records"
+
+# Task Management Endpoints
+task_management_endpoints:
+  tasks_list:
+    path: "/api/tasks"
+    method: "GET"
+    description: "List tasks with filtering"
+    authentication_required: true
+    query_parameters:
+      optional:
+        - "projectId"
+        - "assignedTo"
+        - "status"
+        - "priority"
+        - "limit"
+        - "offset"
+    response:
+      success: "200 - Array of task objects"
+
+  tasks_create:
+    path: "/api/tasks"
+    method: "POST"
+    description: "Create new task"
+    authentication_required: true
+    request_schema:
+      required_fields:
+        - "title"
+        - "projectId"
+      optional_fields:
+        - "description"
+        - "assignedTo"
+        - "status"
+        - "priority"
+        - "estimatedHours"
+        - "startDate"
+        - "dueDate"
+        - "tags"
+    response:
+      success: "201 - Task created"
+
+  tasks_get:
+    path: "/api/tasks/:id"
+    method: "GET"
+    description: "Get task with dependencies"
+    authentication_required: true
+    response:
+      success: "200 - Task object with dependencies"
+
+  tasks_update:
+    path: "/api/tasks/:id"
+    method: "PUT"
+    description: "Update task"
+    authentication_required: true
+    response:
+      success: "200 - Task updated"
+
+  task_dependencies:
+    path: "/api/task-dependencies"
+    method: "GET"
+    description: "Get task dependencies for project"
+    authentication_required: true
+    query_parameters:
+      required:
+        - "projectId"
+    response:
+      success: "200 - Array of dependency objects"
+
+  task_dependencies_create:
+    path: "/api/task-dependencies"
+    method: "POST"
+    description: "Create task dependency"
+    authentication_required: true
+    request_schema:
+      required_fields:
+        - "taskId"
+        - "dependsOnTaskId"
+      optional_fields:
+        - "dependencyType"
+        - "lag"
+    response:
+      success: "201 - Dependency created"
+
+# Time Tracking and Financial Endpoints
+time_financial_endpoints:
+  time_entries_list:
+    path: "/api/time-entries"
+    method: "GET"
+    description: "List time entries with filtering"
+    authentication_required: true
+    query_parameters:
+      optional:
+        - "userId"
+        - "projectId"
+        - "taskId"
+        - "date"
+        - "billable"
+        - "limit"
+        - "offset"
+    response:
+      success: "200 - Array of time entry objects"
+
+  time_entries_create:
+    path: "/api/time-entries"
+    method: "POST"
+    description: "Log time entry"
+    authentication_required: true
+    request_schema:
+      required_fields:
+        - "hours"
+        - "date"
+      optional_fields:
+        - "projectId"
+        - "taskId"
+        - "description"
+        - "billable"
+        - "rate"
+    response:
+      success: "201 - Time entry created"
+
+  invoices_list:
+    path: "/api/invoices"
+    method: "GET"
+    description: "List invoices"
+    authentication_required: true
+    query_parameters:
+      optional:
+        - "status"
+        - "companyId"
+        - "projectId"
+        - "limit"
+        - "offset"
+    response:
+      success: "200 - Array of invoice objects"
+
+  invoices_create:
+    path: "/api/invoices"
+    method: "POST"
+    description: "Create invoice"
+    authentication_required: true
+    request_schema:
+      required_fields:
+        - "companyId"
+        - "amount"
+        - "total"
+      optional_fields:
+        - "clientId"
+        - "projectId"
+        - "tax"
+        - "dueDate"
+        - "notes"
+        - "terms"
+    response:
+      success: "201 - Invoice created"
+
+  expenses_list:
+    path: "/api/expenses"
+    method: "GET"
+    description: "List expenses"
+    authentication_required: true
+    query_parameters:
+      optional:
+        - "projectId"
+        - "userId"
+        - "category"
+        - "billable"
+        - "limit"
+        - "offset"
+    response:
+      success: "200 - Array of expense objects"
+
+  expenses_create:
+    path: "/api/expenses"
+    method: "POST"
+    description: "Create expense record"
+    authentication_required: true
+    request_schema:
+      required_fields:
+        - "description"
+        - "amount"
+        - "date"
+      optional_fields:
+        - "category"
+        - "projectId"
+        - "receiptUrl"
+        - "billable"
+        - "reimbursed"
+    response:
+      success: "201 - Expense created"
+
+# Analytics and Dashboard Endpoints
+analytics_dashboard_endpoints:
+  dashboard_kpis:
+    path: "/api/dashboard/kpis"
+    method: "GET"
+    description: "Get executive KPI metrics"
+    authentication_required: true
+    authorization: ["admin", "manager"]
+    response:
+      success: "200 - KPI dashboard data"
+      data_includes:
+        - "total_revenue"
+        - "active_projects"
+        - "pipeline_value"
+        - "team_utilization"
+        - "client_satisfaction"
+        - "monthly_growth"
+
+  dashboard_revenue_trends:
+    path: "/api/dashboard/revenue-trends"
+    method: "GET"
+    description: "Get revenue trend analytics"
+    authentication_required: true
+    authorization: ["admin", "manager"]
+    query_parameters:
+      optional:
+        - "period" # monthly, quarterly, yearly
+        - "compare" # previous period comparison
+    response:
+      success: "200 - Revenue trend data with forecasting"
+
+  dashboard_project_analytics:
+    path: "/api/dashboard/project-analytics"
+    method: "GET"
+    description: "Get project performance analytics"
+    authentication_required: true
+    response:
+      success: "200 - Project performance metrics"
+      data_includes:
+        - "completion_rates"
+        - "budget_variance"
+        - "timeline_performance"
+        - "resource_utilization"
+
+  dashboard_team_performance:
+    path: "/api/dashboard/team-performance"
+    method: "GET"
+    description: "Get team productivity analytics"
+    authentication_required: true
+    authorization: ["admin", "manager"]
+    response:
+      success: "200 - Team performance metrics"
+      data_includes:
+        - "individual_productivity"
+        - "workload_distribution"
+        - "skill_utilization"
+        - "burnout_indicators"
+
+# Resource Management Endpoints
+resource_management_endpoints:
+  resource_allocations:
+    path: "/api/resource-allocations"
+    method: "GET"
+    description: "Get resource allocation data"
+    authentication_required: true
+    query_parameters:
+      optional:
+        - "userId"
+        - "projectId"
+        - "startDate"
+        - "endDate"
+    response:
+      success: "200 - Array of resource allocation objects"
+
+  resource_allocations_create:
+    path: "/api/resource-allocations"
+    method: "POST"
+    description: "Create resource allocation"
+    authentication_required: true
+    authorization: ["admin", "manager"]
+    request_schema:
+      required_fields:
+        - "userId"
+        - "projectId"
+        - "allocatedHours"
+        - "startDate"
+        - "endDate"
+      optional_fields:
+        - "taskId"
+        - "hourlyRate"
+        - "utilizationTarget"
+        - "priority"
+        - "notes"
+    response:
+      success: "201 - Resource allocation created"
+
+  user_capacity:
+    path: "/api/users/:id/capacity"
+    method: "GET"
+    description: "Get user capacity and availability"
+    authentication_required: true
+    response:
+      success: "200 - User capacity data"
+
+  team_workload:
+    path: "/api/team/workload"
+    method: "GET"
+    description: "Get team workload overview"
+    authentication_required: true
+    authorization: ["admin", "manager"]
+    response:
+      success: "200 - Team workload analytics"
+
+# Support and Knowledge Management Endpoints
+support_knowledge_endpoints:
+  support_tickets_list:
+    path: "/api/support/tickets"
+    method: "GET"
+    description: "List support tickets"
+    authentication_required: true
+    query_parameters:
+      optional:
+        - "status"
+        - "priority"
+        - "assignedTo"
+        - "clientId"
+        - "limit"
+        - "offset"
+    response:
+      success: "200 - Array of ticket objects"
+
+  support_tickets_create:
+    path: "/api/support/tickets"
+    method: "POST"
+    description: "Create support ticket"
+    authentication_required: true
+    request_schema:
+      required_fields:
+        - "title"
+        - "description"
+      optional_fields:
+        - "category"
+        - "priority"
+        - "clientId"
+    response:
+      success: "201 - Ticket created with auto-generated number"
+
+  knowledge_articles_list:
+    path: "/api/knowledge/articles"
+    method: "GET"
+    description: "List knowledge base articles"
+    authentication_required: true
+    query_parameters:
+      optional:
+        - "category"
+        - "status"
+        - "tags"
+        - "limit"
+        - "offset"
+    response:
+      success: "200 - Array of article objects"
+
+  knowledge_articles_create:
+    path: "/api/knowledge/articles"
+    method: "POST"
+    description: "Create knowledge article"
+    authentication_required: true
+    authorization: ["admin", "manager"]
+    request_schema:
+      required_fields:
+        - "title"
+        - "content"
+      optional_fields:
+        - "category"
+        - "tags"
+        - "status"
+        - "isPublic"
+    response:
+      success: "201 - Article created"
+
+  documents_upload:
+    path: "/api/documents/upload"
+    method: "POST"
+    description: "Upload document file"
+    authentication_required: true
+    content_type: "multipart/form-data"
+    request_schema:
+      required_fields:
+        - "file"
+        - "name"
+      optional_fields:
+        - "description"
+        - "category"
+        - "projectId"
+        - "clientId"
+        - "tags"
+    response:
+      success: "201 - Document uploaded"
+
+# Project Template Endpoints
+template_endpoints:
+  project_templates_list:
+    path: "/api/project-templates"
+    method: "GET"
+    description: "List project templates"
+    authentication_required: true
+    query_parameters:
+      optional:
+        - "industry"
+        - "category"
+    response:
+      success: "200 - Array of template objects with task templates"
+
+  project_templates_create:
+    path: "/api/project-templates"
+    method: "POST"
+    description: "Create project template"
+    authentication_required: true
+    authorization: ["admin", "manager"]
+    request_schema:
+      required_fields:
+        - "name"
+        - "industry"
+        - "category"
+      optional_fields:
+        - "description"
+        - "estimatedDuration"
+        - "defaultBudget"
+        - "defaultPriority"
+        - "tags"
+    response:
+      success: "201 - Template created"
+
+  project_from_template:
+    path: "/api/projects/from-template"
+    method: "POST"
+    description: "Create project from template"
+    authentication_required: true
+    request_schema:
+      required_fields:
+        - "templateId"
+        - "name"
+      optional_fields:
+        - "companyId"
+        - "managerId"
+        - "startDate"
+        - "budget"
+    response:
+      success: "201 - Project created from template with tasks"
+
+# Notification Endpoints
+notification_endpoints:
+  notifications_list:
+    path: "/api/notifications"
+    method: "GET"
+    description: "Get user notifications"
+    authentication_required: true
+    query_parameters:
+      optional:
+        - "read"
+        - "type"
+        - "limit"
+        - "offset"
+    response:
+      success: "200 - Array of notification objects"
+
+  notifications_mark_read:
+    path: "/api/notifications/:id/read"
+    method: "PUT"
+    description: "Mark notification as read"
+    authentication_required: true
+    response:
+      success: "200 - Notification marked as read"
+
+  notifications_mark_all_read:
+    path: "/api/notifications/mark-all-read"
+    method: "PUT"
+    description: "Mark all notifications as read"
+    authentication_required: true
+    response:
+      success: "200 - All notifications marked as read"
+
+# Integration Management Endpoints
+integration_endpoints:
+  integrations_status:
+    path: "/api/integrations/status"
+    method: "GET"
+    description: "Get integration health status"
+    authentication_required: true
+    authorization: ["admin"]
+    response:
+      success: "200 - Integration status for Slack, Teams, GitHub"
+
+  integrations_slack_test:
+    path: "/api/integrations/slack/test"
+    method: "POST"
+    description: "Test Slack integration"
+    authentication_required: true
+    authorization: ["admin"]
+    response:
+      success: "200 - Slack test result"
+
+  integrations_teams_test:
+    path: "/api/integrations/teams/test"
+    method: "POST"
+    description: "Test Microsoft Teams integration"
+    authentication_required: true
+    authorization: ["admin"]
+    response:
+      success: "200 - Teams test result"
+
+  integrations_github_webhook:
+    path: "/api/integrations/github/webhook"
+    method: "POST"
+    description: "GitHub webhook handler"
+    authentication_required: false
+    security: "webhook signature verification"
+    response:
+      success: "200 - Webhook processed"
+
+# File Management Endpoints
+file_management_endpoints:
+  files_upload:
+    path: "/api/files/upload"
+    method: "POST"
+    description: "Generic file upload"
+    authentication_required: true
+    content_type: "multipart/form-data"
+    max_file_size: "10MB"
+    allowed_types: ["image/*", "application/pdf", "text/*", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.*"]
+    response:
+      success: "201 - File uploaded with URL"
+
+  files_delete:
+    path: "/api/files/:fileId"
+    method: "DELETE"
+    description: "Delete uploaded file"
+    authentication_required: true
+    authorization: "file_owner_or_admin"
+    response:
+      success: "204 - File deleted"
+
+# WebSocket Connection Endpoints
+websocket_endpoints:
+  websocket_connect:
+    path: "/ws"
+    protocol: "WebSocket"
+    description: "Real-time WebSocket connection"
+    authentication_required: true
+    features:
+      - "Real-time notifications"
+      - "Project activity updates"
+      - "Task status changes"
+      - "Comment notifications"
+      - "System alerts"
+
+# Error Handling
+error_responses:
+  400:
+    description: "Bad Request - Validation errors"
+    format:
+      error: "string"
+      details: "array of validation errors"
+
+  401:
+    description: "Unauthorized - Authentication required"
+    format:
+      error: "Authentication required"
+
+  403:
+    description: "Forbidden - Insufficient permissions"
+    format:
+      error: "Insufficient permissions"
+
+  404:
+    description: "Not Found - Resource not found"
+    format:
+      error: "Resource not found"
+
+  409:
+    description: "Conflict - Resource already exists"
+    format:
+      error: "Resource conflict description"
+
+  429:
+    description: "Too Many Requests - Rate limit exceeded"
+    format:
+      error: "Rate limit exceeded"
+      retry_after: "seconds until retry allowed"
+
+  500:
+    description: "Internal Server Error"
+    format:
+      error: "Internal server error"
+
+# Service Boundaries
+service_boundaries:
+  authentication_service:
+    description: "Handles user authentication, registration, and session management"
+    endpoints: ["/api/auth/*"]
+    dependencies: ["database", "email_service"]
+
+  user_management_service:
+    description: "User profile and role management"
+    endpoints: ["/api/users/*"]
+    dependencies: ["database", "authentication_service"]
+
+  crm_service:
+    description: "Customer relationship management"
+    endpoints: ["/api/companies/*", "/api/clients/*", "/api/opportunities/*"]
+    dependencies: ["database", "notification_service"]
+
+  project_management_service:
+    description: "Project and task management"
+    endpoints: ["/api/projects/*", "/api/tasks/*", "/api/project-templates/*"]
+    dependencies: ["database", "notification_service", "websocket_service"]
+
+  financial_service:
+    description: "Time tracking, invoicing, and expense management"
+    endpoints: ["/api/time-entries/*", "/api/invoices/*", "/api/expenses/*"]
+    dependencies: ["database", "project_management_service"]
+
+  analytics_service:
+    description: "Business intelligence and reporting"
+    endpoints: ["/api/dashboard/*"]
+    dependencies: ["database", "all_business_services"]
+
+  support_service:
+    description: "Support tickets and knowledge management"
+    endpoints: ["/api/support/*", "/api/knowledge/*"]
+    dependencies: ["database", "notification_service"]
+
+  integration_service:
+    description: "Third-party service integrations"
+    endpoints: ["/api/integrations/*"]
+    dependencies: ["slack_api", "teams_api", "github_api"]
+
+  notification_service:
+    description: "Real-time notifications and WebSocket management"
+    endpoints: ["/api/notifications/*", "/ws"]
+    dependencies: ["database", "websocket_manager"]
+
+  file_service:
+    description: "File upload and management"
+    endpoints: ["/api/files/*", "/api/documents/*"]
+    dependencies: ["storage_service", "database"]
+
+api_versioning:
+  strategy: "none"
+  current_version: "1.0"
+  future_considerations: "API versioning with /v1/, /v2/ prefixes"
+
+monitoring_logging:
+  request_logging: true
+  error_tracking: true
+  performance_monitoring: true
+  audit_logging: "for sensitive operations"
+
+testing:
+  unit_tests: "vitest for endpoint logic"
+  integration_tests: "supertest for API testing"
+  e2e_tests: "playwright for full workflow testing"

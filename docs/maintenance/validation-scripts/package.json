@@ -1,0 +1,18 @@
+{
+  "name": "yaml-dsl-validation",
+  "version": "1.0.0",
+  "description": "Validation scripts for YAML DSL documentation",
+  "main": "validate-yaml.js",
+  "scripts": {
+    "validate": "node validate-yaml.js",
+    "validate:verbose": "node validate-yaml.js --verbose",
+    "sync-check": "node sync-check.js",
+    "sync-check:report": "node sync-check.js --report-only",
+    "full-check": "npm run validate && npm run sync-check"
+  },
+  "dependencies": {
+    "yaml": "^2.3.4"
+  },
+  "author": "Business Platform Development Team",
+  "license": "MIT"
+}

@@ -1,0 +1,702 @@
+# Frontend Component Architecture
+# YAML DSL for UI Component Structure
+# Version: 1.0
+# Last Updated: 2025-09-25
+
+metadata:
+  name: "Business Platform Frontend Architecture"
+  version: "4.0.0"
+  description: "React-based frontend architecture with 50+ components covering authentication, project management, analytics, and mobile-optimized interfaces."
+  framework: "React"
+  react_version: "18.3.1"
+  typescript: true
+  ui_library: "Radix UI"
+  styling: "Tailwind CSS"
+  state_management: "@tanstack/react-query"
+  routing: "Wouter"
+  total_components: 50+
+
+architecture_overview:
+  pattern: "component_based"
+  structure: "layered"
+  organization: "feature_based"
+  responsive_design: "mobile_first"
+  theme_system: "next_themes"
+
+directory_structure:
+  client/src:
+    components/:
+      ui/: "Reusable UI components based on Radix UI"
+      auth/: "Authentication-related components"
+      mobile/: "Mobile-optimized components"
+      business/: "Business domain components"
+    pages/: "Page-level components (route handlers)"
+    hooks/: "Custom React hooks"
+    lib/: "Utility functions and configurations"
+    contexts/: "React context providers"
+
+# Core Application Structure
+application_structure:
+  app_component:
+    file: "client/src/App.tsx"
+    description: "Root application component with providers"
+    providers:
+      - "QueryClientProvider (@tanstack/react-query)"
+      - "ThemeProvider (next-themes)"
+      - "TooltipProvider (Radix UI)"
+      - "NotificationProvider (custom context)"
+      - "Toaster (shadcn/ui)"
+    routing: "Wouter-based routing with authentication guards"
+
+  router_component:
+    description: "Main routing logic with authentication state"
+    authenticated_routes:
+      - "/ → Dashboard"
+      - "/dashboard → Dashboard"
+      - "/clients → Clients"
+      - "/projects → Projects"
+      - "/tasks → Tasks"
+      - "/team → Team"
+      - "/team-hub → TeamHub"
+      - "/finance → Finance"
+      - "/finance-hub → FinanceHub"
+      - "/time → TimeTracking"
+      - "/budget → BudgetManagement"
+      - "/knowledge → Knowledge"
+      - "/marketing → Marketing"
+      - "/support → Support"
+      - "/company → Company"
+      - "/analytics → Analytics"
+      - "/admin → Admin"
+      - "/resources → Resources"
+    unauthenticated_routes:
+      - "/ → Landing (authentication forms)"
+
+# Page Components
+page_components:
+  landing_page:
+    file: "client/src/pages/Landing.tsx"
+    description: "Marketing landing page with authentication forms"
+    features:
+      - "Professional marketing content"
+      - "Multi-method authentication (Local + OAuth)"
+      - "Registration form with password strength indicator"
+      - "Login form with validation"
+      - "Password reset functionality"
+      - "Email verification flow"
+    components_used:
+      - "AuthContainer"
+      - "LoginForm"
+      - "RegisterForm"
+      - "ForgotPasswordForm"
+
+  dashboard_page:
+    file: "client/src/pages/Dashboard.tsx"
+    description: "Main dashboard with KPIs and overview"
+    layout: "KPI → Search → Content → Actions"
+    sections:
+      - "Executive KPI cards"
+      - "Quick actions"
+      - "Recent activity"
+      - "Performance charts"
+    components_used:
+      - "DashboardKPIs"
+      - "Layout"
+      - "Card components"
+
+  projects_page:
+    file: "client/src/pages/Projects.tsx"
+    description: "Project management with Gantt chart"
+    features:
+      - "Project list with filtering"
+      - "Professional Gantt chart visualization"
+      - "Critical path analysis"
+      - "Task dependency tracking"
+      - "Project template selector"
+      - "Real-time project activity"
+    components_used:
+      - "GanttChart"
+      - "ProjectTemplateSelector"
+      - "ProjectCommunication"
+
+  tasks_page:
+    file: "client/src/pages/Tasks.tsx"
+    description: "Task management and tracking"
+    features:
+      - "Task kanban board"
+      - "Task dependencies"
+      - "Time tracking integration"
+      - "Assignment management"
+    components_used:
+      - "TaskBoard"
+      - "TaskForm"
+      - "TaskDependencies"
+
+  clients_page:
+    file: "client/src/pages/Clients.tsx"
+    description: "CRM and client management"
+    layout: "KPI → Search → Content → Actions"
+    features:
+      - "Client contact management"
+      - "Company relationships"
+      - "Sales pipeline integration"
+      - "Communication history"
+    components_used:
+      - "SalesPipeline"
+      - "OpportunityDetail"
+      - "ClientList"
+
+  analytics_page:
+    file: "client/src/pages/Analytics.tsx"
+    description: "AI-powered business intelligence dashboard"
+    features:
+      - "5 comprehensive analytics modules"
+      - "Predictive insights"
+      - "Executive KPI tracking"
+      - "Multi-dimensional analysis"
+      - "Business intelligence recommendations"
+    components_used:
+      - "AnalyticsModules"
+      - "PredictiveCharts"
+      - "BusinessIntelligence"
+
+  team_hub_page:
+    file: "client/src/pages/TeamHub.tsx"
+    description: "Consolidated team management hub"
+    features:
+      - "Team performance analytics"
+      - "Resource allocation"
+      - "Capacity planning"
+      - "Skill management"
+      - "Workload visualization"
+
+  finance_hub_page:
+    file: "client/src/pages/FinanceHub.tsx"
+    description: "Consolidated financial management"
+    features:
+      - "Budget tracking"
+      - "Invoice management"
+      - "Expense tracking"
+      - "Financial analytics"
+      - "Profitability analysis"
+
+  budget_management_page:
+    file: "client/src/pages/BudgetManagement.tsx"
+    description: "Advanced budget management with variance reporting"
+    features:
+      - "Real-time cost tracking"
+      - "Budget variance analysis"
+      - "Multi-tiered alert system"
+      - "Automated billing"
+      - "Profitability insights"
+
+  time_tracking_page:
+    file: "client/src/pages/TimeTracking.tsx"
+    description: "Enhanced time tracking with budget integration"
+    features:
+      - "Real-time time tracking"
+      - "Budget impact calculations"
+      - "Project cost monitoring"
+      - "Billing automation"
+
+# Authentication Components
+authentication_components:
+  auth_container:
+    file: "client/src/components/auth/AuthContainer.tsx"
+    description: "Authentication flow orchestration"
+    features:
+      - "Multi-method authentication support"
+      - "OAuth integration with Replit"
+      - "State management for auth flows"
+      - "Error handling and validation"
+      - "Professional UX with loading states"
+
+  login_form:
+    file: "client/src/components/auth/LoginForm.tsx"
+    description: "Professional login interface"
+    features:
+      - "Email/password validation"
+      - "Password visibility toggle"
+      - "Remember me functionality"
+      - "Real-time form validation"
+      - "Loading states and error handling"
+      - "Rate limiting feedback"
+
+  register_form:
+    file: "client/src/components/auth/RegisterForm.tsx"
+    description: "Registration form with advanced validation"
+    features:
+      - "Real-time password strength indicator"
+      - "Email availability checking"
+      - "Professional form validation"
+      - "Terms acceptance"
+      - "Success state handling"
+      - "Comprehensive error feedback"
+
+  forgot_password_form:
+    file: "client/src/components/auth/ForgotPasswordForm.tsx"
+    description: "Password reset interface"
+    features:
+      - "Email validation"
+      - "Success state feedback"
+      - "Rate limiting display"
+      - "Clear UX flow"
+
+# Core Business Components
+business_components:
+  gantt_chart:
+    file: "client/src/components/GanttChart.tsx"
+    description: "Professional Gantt chart with advanced features"
+    lines_of_code: 300+
+    features:
+      - "True date-based positioning"
+      - "Multi-scale views (day/week/month)"
+      - "Project hierarchy visualization"
+      - "SVG dependency connectors"
+      - "Critical path highlighting"
+      - "Drag & drop task scheduling"
+      - "Task status indicators"
+      - "Milestone tracking"
+    dependencies:
+      - "date-fns for date manipulation"
+      - "SVG for dependency lines"
+      - "React hooks for state management"
+
+  mobile_gantt:
+    file: "client/src/components/mobile/MobileGantt.tsx"
+    description: "Touch-optimized Gantt chart for mobile"
+    lines_of_code: 200+
+    features:
+      - "Touch-friendly task visualization"
+      - "Collapsible project views"
+      - "Swipe gestures for navigation"
+      - "Responsive timeline scaling"
+      - "Mobile-specific interactions"
+
+  project_template_selector:
+    file: "client/src/components/ProjectTemplateSelector.tsx"
+    description: "Template-based project creation"
+    lines_of_code: 450+
+    features:
+      - "Industry-specific templates"
+      - "Template preview and customization"
+      - "Automated task generation"
+      - "Budget and timeline estimation"
+      - "Template management interface"
+
+  notification_panel:
+    file: "client/src/components/NotificationPanel.tsx"
+    description: "Real-time notification system"
+    lines_of_code: 150+
+    features:
+      - "Real-time WebSocket notifications"
+      - "Bell icon with unread count"
+      - "Notification categorization"
+      - "Mark as read functionality"
+      - "Notification history"
+      - "Action buttons for quick responses"
+
+  project_communication:
+    file: "client/src/components/ProjectCommunication.tsx"
+    description: "Project comments and activity interface"
+    lines_of_code: 300+
+    features:
+      - "@mention support for team members"
+      - "File attachment handling"
+      - "Rich text commenting"
+      - "Activity timeline"
+      - "Real-time updates"
+
+  sales_pipeline:
+    file: "client/src/components/SalesPipeline.tsx"
+    description: "CRM sales pipeline visualization"
+    features:
+      - "Drag & drop opportunity management"
+      - "Stage-based pipeline"
+      - "Probability and value tracking"
+      - "Pipeline analytics"
+      - "Deal progression tracking"
+
+  opportunity_detail:
+    file: "client/src/components/OpportunityDetail.tsx"
+    description: "Detailed opportunity management"
+    features:
+      - "Stakeholder mapping"
+      - "Communication history"
+      - "Next steps tracking"
+      - "File attachments"
+      - "Activity logging"
+
+  dashboard_kpis:
+    file: "client/src/components/DashboardKPIs.tsx"
+    description: "Executive KPI display with drill-down"
+    features:
+      - "6 key performance indicators"
+      - "Real-time trend analysis"
+      - "Goal tracking and progress"
+      - "Interactive drill-down"
+      - "Comparative analytics"
+
+# UI Component Library
+ui_components:
+  base_ui_system:
+    framework: "Radix UI"
+    customization: "shadcn/ui patterns"
+    components:
+      - "Button (multiple variants)"
+      - "Input (with validation states)"
+      - "Select (with search)"
+      - "Dialog/Modal"
+      - "Dropdown Menu"
+      - "Tooltip"
+      - "Alert"
+      - "Card"
+      - "Badge"
+      - "Progress"
+      - "Table"
+      - "Tabs"
+      - "Accordion"
+      - "Calendar"
+      - "Form controls"
+
+  standard_selects:
+    file: "client/src/components/ui/StandardSelects.tsx"
+    description: "Reusable UI components with consistent styling"
+    features:
+      - "Industry selectors"
+      - "Priority selectors"
+      - "Status selectors"
+      - "User selectors"
+      - "Company selectors"
+      - "Consistent styling and validation"
+
+  layout_components:
+    layout:
+      file: "client/src/components/Layout.tsx"
+      description: "Main application layout wrapper"
+      features:
+        - "Responsive sidebar navigation"
+        - "Header with user menu"
+        - "Breadcrumb navigation"
+        - "Content area with proper spacing"
+
+    sidebar:
+      file: "client/src/components/Sidebar.tsx"
+      description: "Navigation sidebar with responsive behavior"
+      features:
+        - "Collapsible sidebar for desktop"
+        - "Sheet-based mobile navigation"
+        - "Active route highlighting"
+        - "Role-based menu items"
+        - "User profile section"
+
+    header:
+      file: "client/src/components/Header.tsx"
+      description: "Application header with user controls"
+      features:
+        - "Search functionality"
+        - "Notification bell"
+        - "User avatar and dropdown"
+        - "Theme toggle"
+        - "Mobile hamburger menu"
+
+# Mobile-First Components
+mobile_components:
+  responsive_design:
+    approach: "mobile_first"
+    breakpoints:
+      - "sm: 640px"
+      - "md: 768px"
+      - "lg: 1024px"
+      - "xl: 1280px"
+
+  mobile_specific_components:
+    mobile_header:
+      description: "Touch-friendly header for mobile devices"
+      features:
+        - "Hamburger menu integration"
+        - "Conditional search display"
+        - "Touch-optimized user info"
+
+    mobile_navigation:
+      description: "Sheet-based mobile navigation"
+      features:
+        - "Slide-out navigation drawer"
+        - "Touch-friendly menu items"
+        - "Gesture-based interactions"
+
+  touch_interface_utilities:
+    file: "client/src/hooks/use-mobile.tsx"
+    description: "Custom hooks for touch detection and mobile optimization"
+    features:
+      - "Touch device detection"
+      - "Screen size responsive hooks"
+      - "Gesture recognition utilities"
+      - "Mobile-specific state management"
+
+# State Management
+state_management:
+  global_state:
+    library: "@tanstack/react-query"
+    features:
+      - "Server state synchronization"
+      - "Automatic background refetching"
+      - "Optimistic updates"
+      - "Error handling"
+      - "Caching strategies"
+
+  local_state:
+    approach: "React hooks (useState, useReducer)"
+    patterns:
+      - "Component-local state for UI interactions"
+      - "Custom hooks for reusable logic"
+      - "Context for shared state between components"
+
+  contexts:
+    notification_context:
+      file: "client/src/contexts/NotificationContext.tsx"
+      description: "WebSocket-based real-time notifications"
+      features:
+        - "WebSocket connection management"
+        - "Notification state handling"
+        - "Real-time updates"
+
+    theme_provider:
+      file: "client/src/components/ThemeProvider.tsx"
+      description: "Dark/light theme management"
+      features:
+        - "System theme detection"
+        - "Manual theme switching"
+        - "Persistent theme storage"
+
+# Custom Hooks
+custom_hooks:
+  use_auth:
+    file: "client/src/hooks/useAuth.ts"
+    description: "Authentication state and methods"
+    features:
+      - "Current user state"
+      - "Login/logout methods"
+      - "Registration handling"
+      - "Password reset functionality"
+      - "Loading states"
+
+  use_mobile:
+    file: "client/src/hooks/use-mobile.tsx"
+    description: "Mobile device detection and responsive behavior"
+    features:
+      - "Screen size detection"
+      - "Touch capability detection"
+      - "Responsive breakpoint hooks"
+
+  use_toast:
+    file: "client/src/hooks/use-toast.ts"
+    description: "Toast notification system"
+    features:
+      - "Success/error notifications"
+      - "Custom duration"
+      - "Action buttons in toasts"
+      - "Queue management"
+
+# Styling and Theming
+styling_system:
+  css_framework: "Tailwind CSS"
+  version: "3.4.17"
+
+  theme_configuration:
+    colors:
+      primary: "Blue-based theme"
+      secondary: "Gray scale"
+      accent: "Brand colors"
+      semantic: "Success, warning, error colors"
+
+  responsive_design:
+    approach: "mobile_first"
+    utilities: "Tailwind responsive prefixes"
+    custom_breakpoints: "Configured in tailwind.config"
+
+  animations:
+    library: "Framer Motion"
+    version: "11.13.1"
+    features:
+      - "Page transitions"
+      - "Component animations"
+      - "Micro-interactions"
+      - "Loading states"
+
+  component_variants:
+    approach: "class-variance-authority (CVA)"
+    features:
+      - "Component size variants"
+      - "Color scheme variants"
+      - "State variants (disabled, loading, etc.)"
+
+# Form Management
+form_handling:
+  library: "react-hook-form"
+  version: "7.63.0"
+
+  validation:
+    library: "@hookform/resolvers with Zod"
+    features:
+      - "Real-time validation"
+      - "Error message display"
+      - "Cross-field validation"
+      - "Server-side error integration"
+
+  form_components:
+    standardized_forms:
+      - "Registration form with password strength"
+      - "Login form with validation"
+      - "Project creation forms"
+      - "Task management forms"
+      - "Client contact forms"
+      - "Financial entry forms"
+
+# Real-time Features
+real_time_components:
+  websocket_integration:
+    connection_management: "Custom hooks and context"
+    features:
+      - "Automatic reconnection"
+      - "Connection status display"
+      - "Message queuing"
+      - "Error handling"
+
+  live_updates:
+    components:
+      - "Project activity feeds"
+      - "Task status updates"
+      - "Notification panel"
+      - "Comment systems"
+      - "Dashboard metrics"
+
+# Performance Optimizations
+performance:
+  code_splitting:
+    strategy: "Route-based code splitting"
+    implementation: "React.lazy and Suspense"
+
+  lazy_loading:
+    components:
+      - "Large data tables"
+      - "Image galleries"
+      - "Chart components"
+      - "Modal contents"
+
+  memoization:
+    react_memo: "For expensive render components"
+    use_memo: "For expensive calculations"
+    use_callback: "For event handlers in props"
+
+  bundle_optimization:
+    tree_shaking: "Enabled in Vite"
+    dynamic_imports: "For optional features"
+    vendor_chunking: "Separate vendor bundles"
+
+# Testing Strategy
+testing:
+  unit_testing:
+    framework: "@testing-library/react"
+    focus:
+      - "Component rendering"
+      - "User interactions"
+      - "Hook behavior"
+      - "Utility functions"
+
+  integration_testing:
+    approach: "Testing Library with user events"
+    focus:
+      - "Form submissions"
+      - "Authentication flows"
+      - "API integrations"
+      - "Real-time features"
+
+  e2e_testing:
+    framework: "Playwright"
+    coverage:
+      - "Complete user workflows"
+      - "Cross-browser compatibility"
+      - "Mobile responsiveness"
+      - "Authentication scenarios"
+
+# Accessibility
+accessibility:
+  compliance: "WCAG 2.1 AA"
+  features:
+    - "Semantic HTML structure"
+    - "ARIA labels and descriptions"
+    - "Keyboard navigation support"
+    - "Screen reader compatibility"
+    - "Color contrast compliance"
+    - "Focus management"
+
+  radix_ui_benefits:
+    - "Built-in accessibility features"
+    - "Keyboard navigation"
+    - "Screen reader support"
+    - "Focus management"
+
+# Development Tools
+development_tools:
+  build_system: "Vite"
+  dev_server: "Vite dev server with HMR"
+  type_checking: "TypeScript strict mode"
+  linting: "ESLint with TypeScript rules"
+  formatting: "Prettier integration"
+
+  browser_tools:
+    react_dev_tools: "Component inspection"
+    tanstack_query_dev_tools: "Query state debugging"
+
+component_relationships:
+  hierarchy:
+    app:
+      router:
+        layout:
+          header: ["NotificationPanel", "UserMenu", "ThemeToggle"]
+          sidebar: ["Navigation", "UserProfile"]
+          main_content:
+            pages:
+              dashboard: ["DashboardKPIs", "Charts", "RecentActivity"]
+              projects: ["GanttChart", "ProjectTemplateSelector", "ProjectCommunication"]
+              clients: ["SalesPipeline", "OpportunityDetail", "ClientList"]
+              analytics: ["AnalyticsModules", "BusinessIntelligence"]
+
+  data_flow:
+    user_actions: "Component → Custom Hook → API Call → React Query → UI Update"
+    real_time: "WebSocket → Context → Components → UI Update"
+    form_submission: "Form → React Hook Form → Validation → API → Success/Error State"
+
+reusability_patterns:
+  composite_components:
+    description: "Components built from smaller, reusable pieces"
+    examples:
+      - "DataTable (Table + Pagination + Filters)"
+      - "FormField (Label + Input + ErrorMessage)"
+      - "StatusBadge (Badge + Icon + Color variants)"
+
+  render_props_patterns:
+    description: "Flexible component composition"
+    examples:
+      - "DataProvider components"
+      - "Modal trigger patterns"
+      - "Form field patterns"
+
+  custom_hook_patterns:
+    description: "Reusable stateful logic"
+    examples:
+      - "useApi for data fetching"
+      - "useLocalStorage for persistence"
+      - "useDebounce for performance"
+
+future_enhancements:
+  planned_improvements:
+    - "Advanced data visualization components"
+    - "Drag-and-drop dashboard customization"
+    - "Advanced search and filtering UI"
+    - "Rich text editor integration"
+    - "Calendar and scheduling components"
+    - "Advanced chart library integration"
+    - "Progressive Web App features"
+    - "Offline capability"

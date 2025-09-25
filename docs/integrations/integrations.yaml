@@ -1,0 +1,626 @@
+# External Service Integrations
+# YAML DSL for Third-Party Integration Architecture
+# Version: 1.0
+# Last Updated: 2025-09-25
+
+metadata:
+  name: "Business Platform Integration Suite"
+  version: "4.0.0"
+  description: "Comprehensive third-party integration suite with Slack, Teams, GitHub and real-time capabilities"
+  integration_count: 3
+  integration_manager: "centralized"
+  real_time_capabilities: true
+  cross_platform_notifications: true
+
+integration_architecture:
+  pattern: "centralized_integration_manager"
+  file: "server/integrations/index.ts"
+  lines_of_code: 480+
+  features:
+    - "Unified integration management"
+    - "Cross-platform notification broadcasting"
+    - "Health monitoring and status reporting"
+    - "Automatic retry and error handling"
+    - "Configuration management"
+    - "Integration statistics tracking"
+
+# Slack Integration
+slack_integration:
+  implementation:
+    file: "server/integrations/slack.ts"
+    lines_of_code: 340+
+    library: "@slack/web-api"
+    version: "7.10.0"
+
+  configuration:
+    api_token: "environment_variable_SLACK_BOT_TOKEN"
+    signing_secret: "environment_variable_SLACK_SIGNING_SECRET"
+    app_token: "environment_variable_SLACK_APP_TOKEN"
+
+  features:
+    notifications:
+      project_updates:
+        description: "Real-time project status notifications"
+        channels: "configurable per project"
+        message_format: "rich text with project details"
+        triggers:
+          - "project_created"
+          - "project_status_changed"
+          - "project_completed"
+          - "project_budget_exceeded"
+
+      task_notifications:
+        description: "Task assignment and status updates"
+        format: "mention user in channel"
+        triggers:
+          - "task_assigned"
+          - "task_completed"
+          - "task_overdue"
+          - "task_priority_changed"
+
+      daily_digest:
+        description: "Automated daily summary"
+        schedule: "configurable (default 9 AM)"
+        content:
+          - "completed tasks count"
+          - "new projects created"
+          - "overdue items"
+          - "team activity highlights"
+        format: "structured message with metrics"
+
+      alert_system:
+        description: "System alerts and warnings"
+        severity_levels:
+          - "info: general notifications"
+          - "warning: important updates"
+          - "error: critical system issues"
+        format: "color-coded messages with actions"
+
+  api_methods:
+    message_sending:
+      - "postMessage() - send messages to channels"
+      - "postEphemeral() - send private messages"
+      - "updateMessage() - update existing messages"
+
+    channel_management:
+      - "conversationsList() - get available channels"
+      - "conversationsInfo() - get channel details"
+      - "conversationsMembers() - get channel members"
+
+    user_management:
+      - "usersInfo() - get user details"
+      - "usersList() - get workspace members"
+
+  webhook_support:
+    enabled: true
+    endpoint: "/api/integrations/slack/webhook"
+    verification: "signature verification"
+    events:
+      - "message posted"
+      - "app_mention"
+      - "channel_joined"
+
+  configuration_options:
+    channels:
+      general: "Default channel for all notifications"
+      projects: "Project-specific channels"
+      alerts: "System alert channels"
+      digest: "Daily digest channel"
+
+    features:
+      notifications_enabled: true
+      daily_digest_enabled: true
+      project_channels_auto_create: false
+      mention_users_on_assignment: true
+
+# Microsoft Teams Integration
+teams_integration:
+  implementation:
+    file: "server/integrations/teams.ts"
+    lines_of_code: 680+
+    api_approach: "webhook_based"
+    message_format: "adaptive_cards"
+
+  configuration:
+    webhook_urls:
+      general: "environment_variable_TEAMS_WEBHOOK_GENERAL"
+      projects: "environment_variable_TEAMS_WEBHOOK_PROJECTS"
+      alerts: "environment_variable_TEAMS_WEBHOOK_ALERTS"
+
+  features:
+    adaptive_cards:
+      description: "Rich, interactive message format"
+      capabilities:
+        - "structured content layout"
+        - "embedded actions and buttons"
+        - "rich text formatting"
+        - "image and media support"
+        - "responsive design"
+
+    notification_types:
+      project_notifications:
+        format: "adaptive_card"
+        elements:
+          - "project title and description"
+          - "status and priority indicators"
+          - "manager and team information"
+          - "budget and timeline data"
+          - "action buttons (view project, assign tasks)"
+
+      task_notifications:
+        format: "compact_adaptive_card"
+        elements:
+          - "task title and description"
+          - "assignee and due date"
+          - "project context"
+          - "priority and status"
+          - "quick action buttons"
+
+      daily_digest:
+        format: "comprehensive_adaptive_card"
+        sections:
+          - "summary metrics"
+          - "completed tasks list"
+          - "upcoming deadlines"
+          - "team activity"
+          - "action items"
+
+      alert_system:
+        format: "attention_adaptive_card"
+        severity_colors:
+          - "Good: success messages"
+          - "Warning: important updates"
+          - "Attention: critical alerts"
+
+  adaptive_card_templates:
+    project_update_card:
+      type: "AdaptiveCard"
+      version: "1.2"
+      elements:
+        - "TextBlock for title"
+        - "FactSet for project details"
+        - "ColumnSet for metrics"
+        - "ActionSet for quick actions"
+
+    task_assignment_card:
+      type: "AdaptiveCard"
+      version: "1.2"
+      elements:
+        - "Container with task details"
+        - "FactSet for assignment info"
+        - "ActionSet with accept/view actions"
+
+  cross_platform_features:
+    unified_messaging: "same content across Slack and Teams"
+    format_adaptation: "automatic format conversion"
+    action_synchronization: "consistent action buttons"
+
+# GitHub Integration
+github_integration:
+  implementation:
+    file: "server/integrations/github.ts"
+    lines_of_code: 330+
+    library: "@octokit/rest"
+    version: "20.1.2"
+
+  configuration:
+    authentication:
+      token: "environment_variable_GITHUB_TOKEN"
+      app_id: "environment_variable_GITHUB_APP_ID"
+      private_key: "environment_variable_GITHUB_PRIVATE_KEY"
+
+  features:
+    issue_management:
+      create_issues_from_tasks:
+        description: "Automatically create GitHub issues from tasks"
+        mapping:
+          task_title: "issue title"
+          task_description: "issue body"
+          task_assignee: "issue assignee"
+          task_priority: "issue labels"
+          task_project: "issue project"
+
+      issue_synchronization:
+        description: "Sync issue status with task status"
+        bidirectional: true
+        status_mapping:
+          todo: "open"
+          in_progress: "in progress"
+          completed: "closed"
+
+    repository_management:
+      repository_sync:
+        description: "Sync repository data with projects"
+        data_synced:
+          - "repository name and description"
+          - "contributor information"
+          - "commit activity"
+          - "branch information"
+          - "release data"
+
+      create_projects_from_repos:
+        description: "Create internal projects from GitHub repositories"
+        automatic_task_generation: "from repository issues"
+        team_assignment: "based on repository contributors"
+
+    commit_activity_tracking:
+      description: "Track commit activity and link to tasks"
+      features:
+        - "commit message parsing"
+        - "automatic task updates from commits"
+        - "developer activity tracking"
+        - "code contribution metrics"
+
+    webhook_integration:
+      endpoint: "/api/integrations/github/webhook"
+      events:
+        push:
+          description: "Code push events"
+          actions:
+            - "update related tasks"
+            - "notify team members"
+            - "track commit activity"
+
+        pull_request:
+          description: "Pull request events"
+          actions:
+            - "create review tasks"
+            - "notify reviewers"
+            - "update project status"
+
+        issue:
+          description: "Issue creation/updates"
+          actions:
+            - "sync with internal tasks"
+            - "notify assignees"
+            - "update project progress"
+
+        comment:
+          description: "Issue/PR comments"
+          actions:
+            - "notify relevant team members"
+            - "update communication log"
+
+  api_operations:
+    repository_operations:
+      - "repos.get() - get repository information"
+      - "repos.listCommits() - get commit history"
+      - "repos.listContributors() - get contributor list"
+      - "repos.listReleases() - get release information"
+
+    issue_operations:
+      - "issues.create() - create new issues"
+      - "issues.update() - update issue status"
+      - "issues.addAssignees() - assign users"
+      - "issues.addLabels() - add labels"
+
+    webhook_operations:
+      - "repos.createWebhook() - setup webhooks"
+      - "repos.updateWebhook() - modify webhook config"
+      - "repos.deleteWebhook() - remove webhooks"
+
+# Integration Manager
+integration_manager:
+  class: "IntegrationManager"
+  file: "server/integrations/index.ts"
+
+  initialization:
+    description: "Initialize all integrations on server startup"
+    process:
+      - "load configuration from environment"
+      - "initialize individual integrations"
+      - "test connectivity for each service"
+      - "setup error handling and retry logic"
+      - "start health monitoring"
+
+  configuration_management:
+    default_config:
+      slack:
+        enabled: false
+        channels: {}
+        webhooks: {}
+
+      github:
+        enabled: false
+        repositories: []
+        sync:
+          createIssuesFromTasks: false
+          createProjectsFromRepos: false
+          syncCommitsToTasks: false
+          syncPRsToTasks: false
+
+      teams:
+        enabled: false
+        channels: {}
+        features:
+          sendProjectUpdates: true
+          sendTaskNotifications: true
+          sendDailyDigests: true
+          sendAlerts: true
+
+      features:
+        crossPlatformNotifications: true
+        autoSyncEnabled: true
+        webhookRetries: 3
+        webhookTimeout: 5000
+
+  cross_platform_broadcasting:
+    description: "Send notifications to all enabled platforms"
+    methods:
+      notifyProjectEvent:
+        description: "Broadcast project updates"
+        parameters:
+          - "project object"
+          - "message string"
+          - "event type (created/updated/completed/deleted)"
+
+      notifyTaskEvent:
+        description: "Broadcast task updates"
+        parameters:
+          - "task object"
+          - "project object"
+          - "user object"
+          - "event type (assigned/updated/completed)"
+
+      sendAlert:
+        description: "Send system alerts"
+        parameters:
+          - "message string"
+          - "severity (info/warning/error)"
+
+      sendDailyDigest:
+        description: "Send daily summary"
+        parameters:
+          - "statistics object"
+
+  health_monitoring:
+    health_check_endpoint: "/api/integrations/status"
+    status_levels:
+      - "healthy: all integrations working"
+      - "degraded: some integrations failing"
+      - "unhealthy: critical integrations down"
+
+    monitoring_metrics:
+      - "connection status per integration"
+      - "message delivery success rates"
+      - "error counts and types"
+      - "response times"
+      - "last successful operation timestamps"
+
+# WebSocket Integration
+websocket_integration:
+  implementation:
+    file: "server/websocketManager.ts"
+    library: "ws"
+    version: "8.18.0"
+
+  features:
+    real_time_notifications:
+      description: "Live notification delivery to connected clients"
+      channels:
+        - "user-specific notifications"
+        - "project activity updates"
+        - "task status changes"
+        - "system announcements"
+
+    connection_management:
+      user_authentication: "session-based auth for WebSocket connections"
+      connection_pooling: "manage multiple connections per user"
+      automatic_reconnection: "client-side reconnection logic"
+      heartbeat_monitoring: "keep-alive and health checks"
+
+    integration_bridge:
+      description: "Bridge between external integrations and WebSocket"
+      process:
+        - "external service triggers event"
+        - "integration processes event"
+        - "WebSocket manager broadcasts to relevant users"
+        - "real-time UI updates"
+
+# Email Service Integration
+email_integration:
+  implementation:
+    file: "server/emailService.ts"
+    library: "nodemailer"
+    version: "7.0.6"
+
+  features:
+    authentication_emails:
+      registration_verification:
+        description: "Email verification for new user registration"
+        template: "HTML template with verification link"
+        security: "time-limited verification token"
+
+      password_reset:
+        description: "Password reset email with secure token"
+        template: "HTML template with reset link"
+        security: "time-limited reset token"
+
+      account_notifications:
+        description: "Account security notifications"
+        triggers:
+          - "password changed"
+          - "login from new device"
+          - "account locked"
+
+    business_notifications:
+      offline_notifications:
+        description: "Email notifications for offline users"
+        triggers:
+          - "task assignments when user offline"
+          - "project updates for team members"
+          - "critical system alerts"
+
+      digest_emails:
+        description: "Daily/weekly summary emails"
+        content:
+          - "task completions"
+          - "project progress"
+          - "upcoming deadlines"
+          - "team activity"
+
+  template_system:
+    html_templates: "responsive HTML email templates"
+    template_variables: "dynamic content insertion"
+    branding: "consistent company branding"
+    responsive_design: "mobile-friendly email layouts"
+
+# Real-Time Workflow
+real_time_workflow:
+  event_flow:
+    description: "Complete flow from business event to user notification"
+    steps:
+      1: "Business event occurs (task created, project updated, etc.)"
+      2: "Application triggers integration manager"
+      3: "Integration manager broadcasts to all enabled services"
+      4: "External services receive notifications (Slack, Teams)"
+      5: "WebSocket manager broadcasts to connected users"
+      6: "Email service sends notifications to offline users"
+      7: "Users receive real-time updates in UI"
+
+  notification_deduplication:
+    description: "Prevent duplicate notifications across channels"
+    strategy: "user preference-based notification routing"
+    preferences:
+      - "real-time only (WebSocket)"
+      - "external services only (Slack/Teams)"
+      - "email only (for offline users)"
+      - "all channels (maximum coverage)"
+
+# Configuration Management
+configuration:
+  environment_variables:
+    slack:
+      - "SLACK_BOT_TOKEN"
+      - "SLACK_SIGNING_SECRET"
+      - "SLACK_APP_TOKEN"
+
+    teams:
+      - "TEAMS_WEBHOOK_GENERAL"
+      - "TEAMS_WEBHOOK_PROJECTS"
+      - "TEAMS_WEBHOOK_ALERTS"
+
+    github:
+      - "GITHUB_TOKEN"
+      - "GITHUB_APP_ID"
+      - "GITHUB_PRIVATE_KEY"
+
+    email:
+      - "SMTP_HOST"
+      - "SMTP_PORT"
+      - "SMTP_USER"
+      - "SMTP_PASSWORD"
+
+  runtime_configuration:
+    admin_interface: "Integration settings in admin panel"
+    per_project_settings: "Project-specific integration preferences"
+    user_preferences: "Individual notification preferences"
+
+# Error Handling and Resilience
+error_handling:
+  retry_mechanisms:
+    exponential_backoff: "progressively longer retry delays"
+    max_retries: "configurable per integration (default: 3)"
+    circuit_breaker: "temporary disable after repeated failures"
+
+  fallback_strategies:
+    primary_failure: "attempt alternative notification methods"
+    complete_failure: "log errors and alert administrators"
+    graceful_degradation: "core application continues without integrations"
+
+  error_logging:
+    structured_logging: "JSON format for easy parsing"
+    error_categorization: "network, authentication, rate limiting, etc."
+    alerting: "notify administrators of critical integration failures"
+
+# Performance Optimization
+performance:
+  async_operations:
+    description: "All integration calls are asynchronous"
+    implementation: "Promise.allSettled() for parallel execution"
+    timeout_handling: "configurable timeout per integration"
+
+  rate_limiting:
+    slack: "respect Slack API rate limits"
+    teams: "webhook rate limiting"
+    github: "GitHub API rate limit handling"
+
+  caching:
+    connection_pooling: "reuse connections where possible"
+    response_caching: "cache frequently accessed data"
+    configuration_caching: "cache integration settings"
+
+# Security Measures
+security:
+  authentication:
+    api_tokens: "secure token storage and rotation"
+    webhook_verification: "signature verification for webhooks"
+    ssl_tls: "encrypted communication with all services"
+
+  data_privacy:
+    data_minimization: "only send necessary data to external services"
+    user_consent: "user control over external notifications"
+    audit_logging: "track all external data sharing"
+
+  access_control:
+    role_based: "admin-only integration configuration"
+    project_based: "project-specific integration settings"
+    user_preferences: "individual notification control"
+
+# Monitoring and Analytics
+monitoring:
+  integration_metrics:
+    message_delivery_rates: "track successful/failed deliveries"
+    response_times: "monitor integration performance"
+    error_rates: "track error frequency and types"
+    user_engagement: "track click-through rates from notifications"
+
+  health_dashboard:
+    real_time_status: "live integration health display"
+    historical_metrics: "performance over time"
+    alert_configuration: "threshold-based alerting"
+
+  business_metrics:
+    notification_effectiveness: "measure impact on user engagement"
+    workflow_efficiency: "track time-to-response on notifications"
+    integration_usage: "most/least used integration features"
+
+# Testing Strategy
+testing:
+  unit_tests:
+    integration_classes: "test individual integration logic"
+    webhook_handlers: "test webhook processing"
+    message_formatting: "test message template rendering"
+
+  integration_tests:
+    end_to_end_flows: "test complete notification workflows"
+    external_api_mocking: "mock external service responses"
+    error_scenarios: "test error handling and recovery"
+
+  manual_testing:
+    test_environments: "separate test channels/repositories"
+    user_acceptance: "real user testing of notification flows"
+    performance_testing: "load testing with multiple integrations"
+
+# Future Enhancements
+future_roadmap:
+  additional_integrations:
+    - "Jira integration for issue tracking"
+    - "Azure DevOps integration"
+    - "Salesforce CRM integration"
+    - "Google Workspace integration"
+    - "Discord integration"
+    - "Microsoft Outlook integration"
+
+  advanced_features:
+    - "AI-powered notification prioritization"
+    - "Smart notification batching"
+    - "Custom workflow automation"
+    - "Integration marketplace"
+    - "Advanced analytics and insights"
+
+  enterprise_features:
+    - "Single Sign-On (SSO) integration"
+    - "Enterprise directory integration (Active Directory, LDAP)"
+    - "Advanced compliance and audit features"
+    - "Multi-tenant integration management"

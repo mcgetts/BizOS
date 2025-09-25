@@ -1,0 +1,585 @@
+# Environment Configuration Template
+# YAML DSL for Environment-Specific Settings
+# Version: 4.0.0
+# Last Updated: 2025-09-25
+
+metadata:
+  name: "Business Platform Environment Configuration"
+  version: "4.0.0"
+  description: "Environment-specific configuration template for all deployment scenarios"
+  template_type: "environment"
+  supported_platforms: ["replit", "docker", "nodejs", "cloud"]
+
+# Environment Configuration Templates
+environment_templates:
+
+  # Local Development Environment
+  local_development:
+    name: "Local Development"
+    description: "Configuration for local development with hot reloading and debugging"
+
+    runtime:
+      node_version: ">=18.0.0"
+      package_manager: "npm"
+      dev_server: true
+      hot_reload: true
+
+    environment_variables:
+      NODE_ENV: "development"
+      PORT: "3001"
+      DATABASE_URL: "postgresql://localhost:5432/business_platform_dev"
+      SESSION_SECRET: "dev-secret-key-not-for-production"
+
+      # Development flags
+      DEBUG: "true"
+      VERBOSE_LOGGING: "true"
+      SKIP_AUTH_IN_DEV: "false"
+      MOCK_EXTERNAL_SERVICES: "true"
+
+      # Development integrations (optional)
+      SLACK_BOT_TOKEN: ""  # Leave empty to disable
+      GITHUB_TOKEN: "${GITHUB_TOKEN_DEV}"  # Personal token for testing
+      TEAMS_WEBHOOK_GENERAL: ""  # Leave empty to disable
+
+    features:
+      websocket: true
+      file_uploads: true
+      analytics: true
+      real_time_notifications: true
+      email_service: "console"  # Log emails to console
+
+    database:
+      auto_migrate: true
+      seed_data: true
+      reset_on_restart: false
+
+    development_tools:
+      typescript_check: true
+      eslint: true
+      prettier: true
+      vite_dev_server: true
+
+  # Docker Development Environment
+  docker_development:
+    name: "Docker Development"
+    description: "Containerized development environment"
+
+    dockerfile: |
+      FROM node:18-alpine
+      WORKDIR /app
+      COPY package*.json ./
+      RUN npm install
+      COPY . .
+      EXPOSE 3001
+      CMD ["npm", "run", "dev"]
+
+    docker_compose: |
+      version: '3.8'
+      services:
+        app:
+          build: .
+          ports:
+            - "3001:3001"
+          environment:
+            - NODE_ENV=development
+            - DATABASE_URL=postgresql://postgres:password@db:5432/business_platform
+          depends_on:
+            - db
+          volumes:
+            - .:/app
+            - /app/node_modules
+        db:
+          image: postgres:14-alpine
+          environment:
+            POSTGRES_DB: business_platform
+            POSTGRES_USER: postgres
+            POSTGRES_PASSWORD: password
+          ports:
+            - "5432:5432"
+          volumes:
+            - postgres_data:/var/lib/postgresql/data
+      volumes:
+        postgres_data:
+
+    environment_variables:
+      NODE_ENV: "development"
+      PORT: "3001"
+      DATABASE_URL: "postgresql://postgres:password@db:5432/business_platform"
+      SESSION_SECRET: "docker-dev-secret-key"
+
+  # Replit Environment
+  replit_environment:
+    name: "Replit Deployment"
+    description: "Configuration specific to Replit hosting platform"
+
+    replit_config: |
+      language = "nodejs"
+
+      [nix]
+      channel = "stable-22_11"
+
+      [deployment]
+      run = ["sh", "-c", "npm run build && npm start"]
+      deploymentTarget = "cloudrun"
+      publicDir = "/"
+
+      [[ports]]
+      localPort = 5000
+      externalPort = 80
+
+      [env]
+      NODE_ENV = "production"
+      PORT = "5000"
+
+    environment_variables:
+      NODE_ENV: "production"
+      PORT: "5000"  # Fixed port for Replit
+      REPL_ID: "${REPL_ID}"  # Automatically provided by Replit
+      REPL_SLUG: "${REPL_SLUG}"  # Automatically provided by Replit
+
+      # Database (use Replit Database or external)
+      DATABASE_URL: "${DATABASE_URL}"
+
+      # Authentication
+      SESSION_SECRET: "${SESSION_SECRET}"
+      REPLIT_CLIENT_ID: "${REPLIT_CLIENT_ID}"
+      REPLIT_CLIENT_SECRET: "${REPLIT_CLIENT_SECRET}"
+
+      # Integrations
+      SLACK_BOT_TOKEN: "${SLACK_BOT_TOKEN}"
+      SLACK_SIGNING_SECRET: "${SLACK_SIGNING_SECRET}"
+      GITHUB_TOKEN: "${GITHUB_TOKEN}"
+      TEAMS_WEBHOOK_GENERAL: "${TEAMS_WEBHOOK_GENERAL}"
+
+      # Email
+      SMTP_HOST: "${SMTP_HOST}"
+      SMTP_USER: "${SMTP_USER}"
+      SMTP_PASSWORD: "${SMTP_PASSWORD}"
+
+    features:
+      oauth_replit: true
+      single_instance: true
+      port_management: "replit_managed"
+
+  # Cloud Production Environment
+  cloud_production:
+    name: "Cloud Production"
+    description: "Scalable cloud deployment configuration"
+
+    infrastructure:
+      compute:
+        type: "container"
+        cpu: "2 cores"
+        memory: "4 GB"
+        storage: "50 GB SSD"
+        scaling:
+          min_instances: 2
+          max_instances: 10
+          scale_on_cpu: 70  # percent
+          scale_on_memory: 80  # percent
+
+      database:
+        type: "managed_postgresql"
+        version: "14"
+        instance_class: "db.t3.medium"
+        storage: "100 GB"
+        backup_retention: 30  # days
+        multi_az: true
+        encryption: true
+
+      load_balancer:
+        type: "application"
+        ssl_certificate: "managed"
+        health_check: "/health"
+
+    environment_variables:
+      NODE_ENV: "production"
+      PORT: "5000"
+      DATABASE_URL: "${DATABASE_URL}"  # Managed database URL
+      REDIS_URL: "${REDIS_URL}"  # For session storage and caching
+
+      # Authentication
+      SESSION_SECRET: "${SESSION_SECRET}"
+      JWT_SECRET: "${JWT_SECRET}"
+
+      # OAuth providers
+      REPLIT_CLIENT_ID: "${REPLIT_CLIENT_ID}"
+      REPLIT_CLIENT_SECRET: "${REPLIT_CLIENT_SECRET}"
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID}"
+      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET}"
+
+      # Integrations
+      SLACK_BOT_TOKEN: "${SLACK_BOT_TOKEN}"
+      SLACK_SIGNING_SECRET: "${SLACK_SIGNING_SECRET}"
+      GITHUB_TOKEN: "${GITHUB_TOKEN}"
+      GITHUB_APP_ID: "${GITHUB_APP_ID}"
+      GITHUB_PRIVATE_KEY: "${GITHUB_PRIVATE_KEY}"
+      TEAMS_WEBHOOK_GENERAL: "${TEAMS_WEBHOOK_GENERAL}"
+      TEAMS_WEBHOOK_ALERTS: "${TEAMS_WEBHOOK_ALERTS}"
+
+      # Email service
+      EMAIL_PROVIDER: "sendgrid"  # or "ses", "mailgun"
+      SENDGRID_API_KEY: "${SENDGRID_API_KEY}"
+      EMAIL_FROM: "${EMAIL_FROM}"
+
+      # File storage
+      FILE_STORAGE: "s3"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY}"
+      AWS_S3_BUCKET: "${AWS_S3_BUCKET}"
+      AWS_REGION: "${AWS_REGION}"
+
+      # Monitoring and logging
+      LOG_LEVEL: "info"
+      SENTRY_DSN: "${SENTRY_DSN}"
+      DATADOG_API_KEY: "${DATADOG_API_KEY}"
+
+    features:
+      clustering: true
+      redis_sessions: true
+      s3_file_storage: true
+      cdn: true
+      ssl_termination: true
+      auto_scaling: true
+      monitoring: true
+      log_aggregation: true
+
+  # Staging Environment
+  staging_environment:
+    name: "Staging Environment"
+    description: "Pre-production testing environment"
+
+    environment_variables:
+      NODE_ENV: "staging"
+      PORT: "5000"
+      DATABASE_URL: "${DATABASE_URL_STAGING}"
+
+      # Feature flags for testing
+      ENABLE_BETA_FEATURES: "true"
+      DEBUG_API_CALLS: "true"
+      EXTENDED_LOGGING: "true"
+
+      # Test integrations
+      SLACK_BOT_TOKEN: "${SLACK_BOT_TOKEN_STAGING}"
+      GITHUB_TOKEN: "${GITHUB_TOKEN_STAGING}"
+
+      # Test email
+      EMAIL_PROVIDER: "mailtrap"  # Testing email service
+      MAILTRAP_USERNAME: "${MAILTRAP_USERNAME}"
+      MAILTRAP_PASSWORD: "${MAILTRAP_PASSWORD}"
+
+    features:
+      beta_testing: true
+      extended_logging: true
+      performance_profiling: true
+      a_b_testing: true
+
+# Platform-Specific Configurations
+platform_configurations:
+
+  # Replit Platform
+  replit:
+    deployment_strategy: "single_instance"
+    port_management: "automatic"
+    environment_secrets: "replit_secrets"
+    database_options:
+      - "replit_database"
+      - "external_postgresql"
+      - "supabase"
+      - "planetscale"
+
+    limitations:
+      max_memory: "4GB"
+      max_cpu: "2 cores"
+      max_storage: "10GB"
+      outbound_requests: "limited"
+
+    optimizations:
+      - "Use environment variables for all secrets"
+      - "Implement connection pooling for database"
+      - "Enable compression for responses"
+      - "Use CDN for static assets"
+
+    replit_specific_files:
+      ".replit": |
+        run = "npm run dev:replit"
+        language = "nodejs"
+
+        [nix]
+        channel = "stable-22_11"
+
+        [deployment]
+        run = ["sh", "-c", "npm run build && npm start"]
+        publicDir = "/"
+
+        [[ports]]
+        localPort = 5000
+        externalPort = 80
+
+      "replit.nix": |
+        { pkgs }: {
+          deps = [
+            pkgs.nodejs-18_x
+            pkgs.nodePackages.typescript
+            pkgs.nodePackages.prisma
+            pkgs.postgresql
+          ];
+        }
+
+  # Docker Platform
+  docker:
+    deployment_strategy: "containerized"
+    orchestration_options:
+      - "docker_compose"
+      - "kubernetes"
+      - "docker_swarm"
+
+    dockerfile_template: |
+      # Multi-stage build for production
+      FROM node:18-alpine AS builder
+      WORKDIR /app
+      COPY package*.json ./
+      RUN npm ci --only=production
+
+      FROM node:18-alpine AS runner
+      WORKDIR /app
+      COPY --from=builder /app/node_modules ./node_modules
+      COPY . .
+      RUN npm run build
+
+      USER node
+      EXPOSE 5000
+      CMD ["npm", "start"]
+
+    docker_compose_template: |
+      version: '3.8'
+      services:
+        app:
+          build: .
+          ports:
+            - "${PORT:-5000}:5000"
+          environment:
+            - NODE_ENV=production
+            - DATABASE_URL=postgresql://postgres:${DB_PASSWORD}@db:5432/${DB_NAME}
+          depends_on:
+            - db
+            - redis
+          restart: unless-stopped
+
+        db:
+          image: postgres:14-alpine
+          environment:
+            POSTGRES_DB: ${DB_NAME}
+            POSTGRES_USER: postgres
+            POSTGRES_PASSWORD: ${DB_PASSWORD}
+          volumes:
+            - postgres_data:/var/lib/postgresql/data
+          restart: unless-stopped
+
+        redis:
+          image: redis:7-alpine
+          restart: unless-stopped
+
+      volumes:
+        postgres_data:
+
+  # Cloud Providers
+  cloud_providers:
+    aws:
+      services:
+        compute: "ECS Fargate"
+        database: "RDS PostgreSQL"
+        cache: "ElastiCache Redis"
+        storage: "S3"
+        cdn: "CloudFront"
+        load_balancer: "Application Load Balancer"
+
+      environment_template:
+        ECS_TASK_DEFINITION: |
+          {
+            "family": "business-platform",
+            "networkMode": "awsvpc",
+            "requiresCompatibilities": ["FARGATE"],
+            "cpu": "1024",
+            "memory": "2048",
+            "containerDefinitions": [
+              {
+                "name": "app",
+                "image": "your-account.dkr.ecr.region.amazonaws.com/business-platform:latest",
+                "portMappings": [
+                  {
+                    "containerPort": 5000,
+                    "protocol": "tcp"
+                  }
+                ],
+                "environment": [
+                  {
+                    "name": "NODE_ENV",
+                    "value": "production"
+                  }
+                ],
+                "secrets": [
+                  {
+                    "name": "DATABASE_URL",
+                    "valueFrom": "arn:aws:secretsmanager:region:account:secret:database-url"
+                  }
+                ]
+              }
+            ]
+          }
+
+    google_cloud:
+      services:
+        compute: "Cloud Run"
+        database: "Cloud SQL PostgreSQL"
+        cache: "Memorystore Redis"
+        storage: "Cloud Storage"
+        cdn: "Cloud CDN"
+        load_balancer: "Cloud Load Balancing"
+
+      cloud_run_config: |
+        apiVersion: serving.knative.dev/v1
+        kind: Service
+        metadata:
+          name: business-platform
+        spec:
+          template:
+            spec:
+              containers:
+              - image: gcr.io/project-id/business-platform:latest
+                ports:
+                - containerPort: 5000
+                env:
+                - name: NODE_ENV
+                  value: production
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: database-secret
+                      key: url
+
+    azure:
+      services:
+        compute: "Container Apps"
+        database: "Azure Database for PostgreSQL"
+        cache: "Azure Cache for Redis"
+        storage: "Blob Storage"
+        cdn: "Azure CDN"
+        load_balancer: "Application Gateway"
+
+# Configuration Validation
+configuration_validation:
+  required_variables:
+    all_environments:
+      - "NODE_ENV"
+      - "PORT"
+      - "DATABASE_URL"
+      - "SESSION_SECRET"
+
+    production_only:
+      - "REDIS_URL"
+      - "EMAIL_FROM"
+      - "LOG_LEVEL"
+
+  optional_variables:
+    integrations:
+      - "SLACK_BOT_TOKEN"
+      - "GITHUB_TOKEN"
+      - "TEAMS_WEBHOOK_GENERAL"
+
+    monitoring:
+      - "SENTRY_DSN"
+      - "DATADOG_API_KEY"
+
+  validation_rules:
+    - name: "PORT validation"
+      rule: "PORT must be a valid port number (1-65535)"
+      regex: "^([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$"
+
+    - name: "EMAIL validation"
+      rule: "EMAIL_FROM must be a valid email address"
+      regex: "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
+
+    - name: "URL validation"
+      rule: "DATABASE_URL must be a valid PostgreSQL URL"
+      regex: "^postgresql://.*"
+
+# Environment Migration
+migration_procedures:
+  development_to_staging:
+    steps:
+      - "Export development database schema"
+      - "Create staging database with production-like data volume"
+      - "Update environment variables for staging"
+      - "Deploy application to staging environment"
+      - "Run integration tests"
+      - "Performance test with production-like load"
+
+  staging_to_production:
+    steps:
+      - "Verify all staging tests pass"
+      - "Create production database backup point"
+      - "Deploy to production with blue-green deployment"
+      - "Run smoke tests on production"
+      - "Monitor for 24 hours"
+      - "Clean up old deployment if successful"
+
+# Best Practices
+best_practices:
+  environment_variables:
+    - "Never commit secrets to version control"
+    - "Use different secrets for each environment"
+    - "Rotate secrets regularly in production"
+    - "Use environment-specific encryption keys"
+    - "Validate all environment variables on startup"
+
+  database_configuration:
+    - "Use connection pooling in production"
+    - "Enable SSL for all database connections"
+    - "Regular database backups and recovery testing"
+    - "Monitor database performance and slow queries"
+    - "Use read replicas for read-heavy workloads"
+
+  monitoring_and_logging:
+    - "Implement structured logging"
+    - "Set up comprehensive health checks"
+    - "Monitor business metrics, not just technical metrics"
+    - "Set up alerting for critical issues"
+    - "Regular monitoring and alerting rule reviews"
+
+# Troubleshooting Guide
+troubleshooting:
+  common_issues:
+    database_connection:
+      symptoms: ["Connection refused", "Connection timeout"]
+      solutions:
+        - "Check DATABASE_URL format and credentials"
+        - "Verify database server is running and accessible"
+        - "Check network connectivity and firewall rules"
+        - "Verify SSL certificate if using SSL"
+
+    authentication_failures:
+      symptoms: ["Login not working", "Session expired"]
+      solutions:
+        - "Check SESSION_SECRET is set and consistent"
+        - "Verify database session table exists"
+        - "Check OAuth configuration and secrets"
+        - "Verify CORS settings for frontend domain"
+
+    integration_failures:
+      symptoms: ["Slack notifications not working", "GitHub sync failing"]
+      solutions:
+        - "Verify integration tokens and secrets"
+        - "Check network access to external services"
+        - "Verify webhook endpoints are accessible"
+        - "Check rate limiting and service quotas"
+
+# Usage Instructions:
+# 1. **Select Template**: Choose the appropriate environment template for your deployment scenario
+# 2. **Configure Variables**: Set all required environment variables using the provided templates
+# 3. **Platform Setup**: Follow platform-specific configuration guidance
+# 4. **Validation**: Use the validation rules to ensure configuration correctness
+# 5. **Deployment**: Deploy using the platform-specific deployment procedures
+# 6. **Monitoring**: Set up monitoring and alerting as specified in the configuration
+#
+# This template provides comprehensive environment configuration for all supported deployment scenarios.

@@ -1,0 +1,775 @@
+# Business Domain Architecture
+# YAML DSL for Domain Model Organization
+# Version: 1.0
+# Last Updated: 2025-09-25
+
+metadata:
+  name: "Business Platform Domain Architecture"
+  version: "4.0.0"
+  description: "Domain-driven design implementation with 5 core business domains and clear bounded contexts"
+  architecture_pattern: "domain_driven_design"
+  domain_count: 5
+  bounded_contexts: "clearly_defined"
+  cross_cutting_concerns: "shared_services"
+
+domain_architecture:
+  pattern: "modular_monolith_with_domain_boundaries"
+  approach: "domain_driven_design"
+  organization: "business_capability_aligned"
+  integration_strategy: "shared_database_with_clear_boundaries"
+
+# Core Business Domains
+core_business_domains:
+
+  # 1. Project Management Domain
+  project_management_domain:
+    description: "Complete project lifecycle management with advanced features"
+    business_capabilities:
+      - "Project planning and scheduling"
+      - "Task management and tracking"
+      - "Resource allocation and capacity planning"
+      - "Timeline management with Gantt visualization"
+      - "Dependency management and critical path analysis"
+      - "Project templates and standardization"
+      - "Project communication and collaboration"
+      - "Progress monitoring and reporting"
+
+    domain_entities:
+      core_entities:
+        Project:
+          description: "Central project entity with comprehensive tracking"
+          key_attributes:
+            - "name, description, status"
+            - "budget, actualCost, progress"
+            - "startDate, endDate, completedAt"
+            - "managerId, companyId, clientId"
+            - "priority, tags, isClientPortalEnabled"
+
+        Task:
+          description: "Individual work items with dependency support"
+          key_attributes:
+            - "title, description, status, priority"
+            - "estimatedHours, actualHours"
+            - "startDate, dueDate, completedAt"
+            - "assignedTo, createdBy, projectId"
+            - "tags for categorization"
+
+        TaskDependency:
+          description: "Task interdependencies for project scheduling"
+          key_attributes:
+            - "taskId, dependsOnTaskId"
+            - "dependencyType (finish_to_start, etc.)"
+            - "lag time in days"
+
+      supporting_entities:
+        ProjectTemplate:
+          description: "Standardized project structures"
+          attributes:
+            - "name, description, industry, category"
+            - "estimatedDuration, defaultBudget"
+            - "associated TaskTemplates"
+
+        TaskTemplate:
+          description: "Template tasks within project templates"
+          attributes:
+            - "title, description, estimatedHours"
+            - "phase, orderIndex, dependsOnPhase"
+
+        ProjectComment:
+          description: "Project communication and activity"
+          attributes:
+            - "content, type, mentionedUsers"
+            - "attachments, editedAt"
+
+        ProjectActivity:
+          description: "Automatic system activity logging"
+          attributes:
+            - "action, entityType, entityId"
+            - "details in structured format"
+
+    domain_services:
+      ProjectTemplateService:
+        description: "Manage and apply project templates"
+        operations:
+          - "createProjectFromTemplate()"
+          - "generateTasksFromTemplate()"
+          - "customizeTemplateForIndustry()"
+
+      CriticalPathAnalysisService:
+        description: "Calculate and visualize project critical path"
+        operations:
+          - "calculateCriticalPath()"
+          - "identifyBottleneckTasks()"
+          - "suggestScheduleOptimizations()"
+
+      ProjectCommunicationService:
+        description: "Handle project communication workflows"
+        operations:
+          - "processCommentMentions()"
+          - "generateActivityFeed()"
+          - "notifyTeamMembers()"
+
+    business_rules:
+      project_scheduling:
+        - "End date cannot be before start date"
+        - "Tasks cannot start before project start date"
+        - "Dependent tasks must respect dependency lag time"
+        - "Critical path determines minimum project duration"
+
+      resource_allocation:
+        - "Users cannot be over-allocated beyond capacity"
+        - "Skills must match task requirements"
+        - "Budget allocation cannot exceed project budget"
+
+    integration_points:
+      internal:
+        - "Team & Resource Management: user assignments and capacity"
+        - "Financial Management: budget tracking and time entries"
+        - "CRM: project-opportunity relationships"
+
+      external:
+        - "GitHub: repository synchronization and issue tracking"
+        - "Slack/Teams: project update notifications"
+
+  # 2. Customer Relationship Management Domain
+  crm_domain:
+    description: "Comprehensive customer relationship and sales management"
+    business_capabilities:
+      - "Company and contact management"
+      - "Sales pipeline and opportunity tracking"
+      - "Lead qualification and nurturing"
+      - "Communication history and logging"
+      - "Stakeholder relationship mapping"
+      - "Sales forecasting and analytics"
+      - "Opportunity progression tracking"
+
+    domain_entities:
+      core_entities:
+        Company:
+          description: "Business entities and organizations"
+          key_attributes:
+            - "name, industry, size, website"
+            - "address, phone, email"
+            - "revenue, foundedYear"
+            - "assignedTo, tags, isActive"
+
+        Client:
+          description: "Individual contacts within companies"
+          key_attributes:
+            - "name, email, phone, position"
+            - "companyId, department"
+            - "isPrimaryContact, source"
+            - "assignedTo, notes, tags"
+
+        SalesOpportunity:
+          description: "Sales pipeline opportunities"
+          key_attributes:
+            - "title, description, stage, value"
+            - "probability, expectedCloseDate"
+            - "companyId, contactId, assignedTo"
+            - "painPoints, successCriteria"
+            - "budget, budgetStatus, competitorInfo"
+
+      supporting_entities:
+        OpportunityNextStep:
+          description: "Action items for opportunity progression"
+          attributes:
+            - "title, description, dueDate"
+            - "assignedTo, priority, status"
+            - "completedAt, completedBy"
+
+        OpportunityCommunication:
+          description: "Communication history with prospects"
+          attributes:
+            - "type, subject, summary, outcome"
+            - "attendees, followUpRequired"
+            - "attachments, recordedBy"
+
+        OpportunityStakeholder:
+          description: "Key decision makers and influencers"
+          attributes:
+            - "name, role, influence level"
+            - "relationshipStrength, notes"
+
+        OpportunityActivityHistory:
+          description: "Audit trail of opportunity changes"
+          attributes:
+            - "action, details, oldValue, newValue"
+            - "performedBy, performedAt"
+
+        ClientInteraction:
+          description: "General client interaction tracking"
+          attributes:
+            - "type, subject, notes, outcome"
+            - "followUpDate, clientId, userId"
+
+    domain_services:
+      SalesPipelineService:
+        description: "Manage sales pipeline progression"
+        operations:
+          - "moveOpportunityStage()"
+          - "calculatePipelineValue()"
+          - "identifyStaleOpportunities()"
+          - "generateSalesForecast()"
+
+      LeadQualificationService:
+        description: "Qualify and score leads"
+        operations:
+          - "scoreLeadQuality()"
+          - "assignLeadToSalesRep()"
+          - "triggerNurturingWorkflow()"
+
+      StakeholderMappingService:
+        description: "Map and analyze decision-making structures"
+        operations:
+          - "identifyDecisionMakers()"
+          - "analyzeInfluenceNetwork()"
+          - "recommendEngagementStrategy()"
+
+    business_rules:
+      opportunity_management:
+        - "Probability must be 0-100%"
+        - "Closed won opportunities require actual close date"
+        - "Next steps must be assigned to valid users"
+        - "High-value opportunities require manager approval"
+
+      relationship_management:
+        - "Primary contacts must be designated per company"
+        - "Communication history must include follow-up dates"
+        - "Stakeholder influence levels must be updated regularly"
+
+    integration_points:
+      internal:
+        - "Project Management: opportunity-to-project conversion"
+        - "Financial Management: revenue tracking and forecasting"
+        - "Team & Resource Management: sales rep assignments"
+
+      external:
+        - "Email: automated communication tracking"
+        - "Slack/Teams: deal progression notifications"
+
+  # 3. Financial Management Domain
+  financial_management_domain:
+    description: "Comprehensive financial tracking and business intelligence"
+    business_capabilities:
+      - "Time tracking and billable hour management"
+      - "Budget planning and variance analysis"
+      - "Invoice generation and payment tracking"
+      - "Expense management and categorization"
+      - "Profitability analysis per project/client"
+      - "Financial forecasting and reporting"
+      - "Automated billing workflows"
+      - "Cost center management"
+
+    domain_entities:
+      core_entities:
+        TimeEntry:
+          description: "Time tracking for projects and tasks"
+          key_attributes:
+            - "hours, date, description"
+            - "userId, projectId, taskId"
+            - "billable, rate"
+
+        Invoice:
+          description: "Client billing and payment tracking"
+          key_attributes:
+            - "invoiceNumber, amount, tax, total"
+            - "status, dueDate, paidAt"
+            - "companyId, clientId, projectId"
+            - "notes, terms"
+
+        Expense:
+          description: "Business expense tracking"
+          key_attributes:
+            - "description, amount, category"
+            - "projectId, userId, date"
+            - "billable, reimbursed, receiptUrl"
+
+        ProjectBudget:
+          description: "Detailed project budget breakdown"
+          key_attributes:
+            - "projectId, categoryId"
+            - "budgetedAmount, spentAmount"
+            - "committedAmount, forecastAmount"
+
+        BudgetCategory:
+          description: "Expense categorization system"
+          key_attributes:
+            - "name, description, categoryType"
+            - "isActive (labor, materials, software, travel, overhead)"
+
+      supporting_entities:
+        TimeEntryApproval:
+          description: "Time entry approval workflow"
+          attributes:
+            - "timeEntryId, status, approvedBy"
+            - "rejectionReason, approverNotes"
+
+        WorkloadSnapshot:
+          description: "Historical workload and utilization data"
+          attributes:
+            - "userId, snapshotDate"
+            - "totalAllocatedHours, actualWorkedHours"
+            - "utilizationPercentage, overallocationHours"
+
+    domain_services:
+      BudgetManagementService:
+        description: "Advanced budget tracking and analysis"
+        operations:
+          - "calculateBudgetVariance()"
+          - "generateBudgetAlerts()"
+          - "forecastProjectCosts()"
+          - "analyzeProfitability()"
+
+      InvoiceGenerationService:
+        description: "Automated billing workflows"
+        operations:
+          - "generateInvoiceFromTimeEntries()"
+          - "calculateProjectBilling()"
+          - "processRecurringBilling()"
+          - "trackPaymentStatus()"
+
+      FinancialAnalyticsService:
+        description: "Business financial intelligence"
+        operations:
+          - "calculateRevenueTrends()"
+          - "analyzeProfitabilityByClient()"
+          - "generateCashFlowProjections()"
+          - "identifyFinancialRisks()"
+
+    business_rules:
+      time_tracking:
+        - "Time entries cannot be negative"
+        - "Time entries cannot exceed 24 hours per day"
+        - "Billable entries require approved rates"
+        - "Time entry approval required for invoicing"
+
+      budget_management:
+        - "Budget allocations cannot exceed total project budget"
+        - "Expense approvals required above threshold amounts"
+        - "Budget variance alerts at 80% and 100% thresholds"
+
+      invoicing:
+        - "Invoices require unique sequential numbering"
+        - "Invoice amounts must match time entry calculations"
+        - "Payment tracking required for cash flow analysis"
+
+    integration_points:
+      internal:
+        - "Project Management: budget allocation and tracking"
+        - "Team & Resource Management: time tracking and utilization"
+        - "CRM: revenue attribution and client profitability"
+
+      external:
+        - "Payment gateways: automated payment processing"
+        - "Accounting software: financial data synchronization"
+
+  # 4. Team and Resource Management Domain
+  team_resource_management_domain:
+    description: "Comprehensive team performance and resource optimization"
+    business_capabilities:
+      - "Team member capacity planning"
+      - "Skill management and development tracking"
+      - "Workload balancing and utilization analysis"
+      - "Performance monitoring and analytics"
+      - "Resource allocation optimization"
+      - "Availability and vacation management"
+      - "Talent development and career planning"
+      - "Team collaboration enhancement"
+
+    domain_entities:
+      core_entities:
+        User:
+          description: "Team members with comprehensive profiles"
+          key_attributes:
+            - "personal info: name, email, phone"
+            - "role, department, position"
+            - "skills, isActive, authProvider"
+            - "performance metrics and goals"
+
+        UserCapacity:
+          description: "Individual capacity and working hours"
+          key_attributes:
+            - "hoursPerDay, hoursPerWeek"
+            - "overtimeMultiplier"
+            - "effectiveFrom, effectiveTo"
+
+        UserSkills:
+          description: "Individual skill profiles and competencies"
+          key_attributes:
+            - "skillName, category, proficiencyLevel"
+            - "yearsExperience, isCertified"
+            - "certificationName, lastUsed"
+
+        ResourceAllocation:
+          description: "Project and task resource assignments"
+          key_attributes:
+            - "userId, projectId, taskId"
+            - "allocatedHours, hourlyRate"
+            - "startDate, endDate"
+            - "utilizationTarget, priority, status"
+
+      supporting_entities:
+        UserAvailability:
+          description: "Vacation, sick days, and availability tracking"
+          attributes:
+            - "type, status, startDate, endDate"
+            - "hoursPerDay, description"
+            - "approvedBy, approvedAt"
+
+    domain_services:
+      ResourceOptimizationService:
+        description: "Optimize team resource allocation"
+        operations:
+          - "calculateOptimalAllocations()"
+          - "identifyResourceConflicts()"
+          - "suggestReallocationStrategies()"
+          - "balanceTeamWorkloads()"
+
+      PerformanceAnalyticsService:
+        description: "Team and individual performance insights"
+        operations:
+          - "calculateProductivityMetrics()"
+          - "identifyBurnoutRisks()"
+          - "analyzeSkillGaps()"
+          - "generatePerformanceReports()"
+
+      CapacityPlanningService:
+        description: "Strategic capacity management"
+        operations:
+          - "forecastCapacityNeeds()"
+          - "planResourceScaling()"
+          - "optimizeTeamComposition()"
+
+    business_rules:
+      capacity_management:
+        - "Total allocations cannot exceed user capacity"
+        - "Skill requirements must match user competencies"
+        - "Overtime allocations require manager approval"
+        - "Vacation requests require advance notice"
+
+      performance_management:
+        - "Performance reviews required quarterly"
+        - "Skill assessments updated annually"
+        - "Career development plans required for all employees"
+
+    integration_points:
+      internal:
+        - "Project Management: task assignments and scheduling"
+        - "Financial Management: time tracking and cost allocation"
+        - "Analytics: performance metrics and business intelligence"
+
+  # 5. Analytics and Business Intelligence Domain
+  analytics_business_intelligence_domain:
+    description: "AI-powered analytics and strategic business insights"
+    business_capabilities:
+      - "Executive KPI tracking and monitoring"
+      - "Predictive analytics and forecasting"
+      - "Business intelligence and recommendations"
+      - "Multi-dimensional data analysis"
+      - "Performance optimization insights"
+      - "Risk assessment and mitigation"
+      - "Opportunity identification and prioritization"
+      - "Strategic decision support"
+
+    domain_entities:
+      core_entities:
+        CompanyGoal:
+          description: "Strategic business objectives and targets"
+          key_attributes:
+            - "metric, target, year, quarter"
+            - "isActive, createdBy"
+
+        SystemVariable:
+          description: "System configuration and business parameters"
+          key_attributes:
+            - "key, value, description"
+            - "category, dataType, isEditable"
+
+      analytics_aggregates:
+        KPIDashboard:
+          description: "Executive dashboard metrics"
+          components:
+            - "total_revenue, active_projects"
+            - "pipeline_value, team_utilization"
+            - "client_satisfaction, monthly_growth"
+
+        BusinessIntelligence:
+          description: "AI-generated business insights"
+          components:
+            - "predictive_revenue_forecasting"
+            - "risk_assessment_analysis"
+            - "opportunity_detection"
+            - "strategic_recommendations"
+
+    domain_services:
+      PredictiveAnalyticsService:
+        description: "Machine learning-powered forecasting"
+        operations:
+          - "forecastRevenueTrends()"
+          - "predictResourceNeeds()"
+          - "assessProjectRisks()"
+          - "identifyGrowthOpportunities()"
+
+      BusinessIntelligenceService:
+        description: "Strategic insights and recommendations"
+        operations:
+          - "generateStrategicRecommendations()"
+          - "analyzeMarketTrends()"
+          - "identifyPerformanceBottlenecks()"
+          - "optimizeBusinessProcesses()"
+
+      KPIAnalyticsService:
+        description: "Key performance indicator tracking"
+        operations:
+          - "calculateExecutiveKPIs()"
+          - "trackGoalProgress()"
+          - "generatePerformanceTrends()"
+          - "identifyMetricAnomalies()"
+
+    business_rules:
+      analytics_governance:
+        - "KPI calculations must be consistent across reports"
+        - "Predictive models require regular recalibration"
+        - "Business intelligence recommendations require confidence scoring"
+        - "Data privacy must be maintained in analytics"
+
+    integration_points:
+      internal:
+        - "All domains: comprehensive data aggregation"
+        - "Cross-domain: correlation analysis and insights"
+
+# Supporting Domains and Cross-Cutting Concerns
+
+supporting_domains:
+  # Knowledge Management Domain
+  knowledge_management_domain:
+    description: "Organizational knowledge and documentation"
+    entities:
+      - "KnowledgeArticle: SOPs, training, policies"
+      - "Document: file management and versioning"
+    capabilities:
+      - "Content creation and management"
+      - "Document versioning and access control"
+      - "Search and knowledge discovery"
+
+  # Support and Communication Domain
+  support_communication_domain:
+    description: "Customer support and internal communication"
+    entities:
+      - "SupportTicket: issue tracking and resolution"
+      - "MarketingCampaign: marketing activity management"
+    capabilities:
+      - "Ticket lifecycle management"
+      - "Customer satisfaction tracking"
+      - "Communication channel management"
+
+cross_cutting_concerns:
+  notification_service:
+    description: "Real-time notification across all domains"
+    capabilities:
+      - "WebSocket real-time notifications"
+      - "Email notification system"
+      - "Cross-platform integration (Slack, Teams)"
+      - "Notification preferences management"
+
+  audit_logging_service:
+    description: "Comprehensive audit trail across domains"
+    capabilities:
+      - "Activity history tracking"
+      - "Change audit trails"
+      - "Compliance reporting"
+      - "Security event logging"
+
+  integration_service:
+    description: "External service integration management"
+    capabilities:
+      - "Third-party API management"
+      - "Webhook processing"
+      - "Data synchronization"
+      - "Integration health monitoring"
+
+# Domain Boundaries and Interactions
+
+domain_boundaries:
+  clear_boundaries:
+    project_management:
+      owns: "Projects, Tasks, Dependencies, Templates"
+      accesses: "Users (team management), Companies (CRM)"
+
+    crm:
+      owns: "Companies, Clients, Opportunities, Communications"
+      accesses: "Projects (project generation), Users (assignments)"
+
+    financial_management:
+      owns: "TimeEntries, Invoices, Expenses, Budgets"
+      accesses: "Projects (budget tracking), Users (time tracking)"
+
+    team_resource_management:
+      owns: "User profiles, Capacity, Skills, Allocations"
+      accesses: "Projects (assignments), Tasks (workload)"
+
+    analytics_business_intelligence:
+      accesses: "All domains for data aggregation and analysis"
+
+  interaction_patterns:
+    synchronous:
+      - "API calls between domains"
+      - "Shared database access"
+      - "Direct service invocation"
+
+    asynchronous:
+      - "WebSocket notifications"
+      - "Email notifications"
+      - "Integration webhooks"
+
+# Domain Evolution and Scalability
+
+domain_evolution:
+  current_architecture:
+    pattern: "modular_monolith"
+    benefits:
+      - "Clear domain boundaries"
+      - "Shared database for consistency"
+      - "Simplified deployment"
+      - "Fast cross-domain queries"
+
+  future_scalability:
+    potential_microservices:
+      candidates:
+        - "Analytics service (high computational load)"
+        - "Integration service (external dependencies)"
+        - "Notification service (high message volume)"
+
+    domain_extraction_criteria:
+      - "High scalability requirements"
+      - "Independent deployment needs"
+      - "Different technology requirements"
+      - "Team ownership boundaries"
+
+# Business Rules and Invariants
+
+business_invariants:
+  cross_domain_consistency:
+    - "User assignments must reference valid users"
+    - "Project budgets cannot be exceeded without approval"
+    - "Time entries must reference valid projects and tasks"
+    - "Opportunities must be linked to valid companies"
+
+  data_integrity:
+    - "Referential integrity across domain boundaries"
+    - "Audit trail completeness for business-critical operations"
+    - "Notification delivery guarantee for critical events"
+
+# Domain Services and Application Services
+
+domain_services:
+  project_orchestration_service:
+    description: "Coordinate complex project workflows"
+    operations:
+      - "createProjectFromOpportunity()"
+      - "allocateResourcesForProject()"
+      - "generateProjectFinancials()"
+
+  business_intelligence_orchestration:
+    description: "Coordinate analytics across domains"
+    operations:
+      - "generateExecutiveDashboard()"
+      - "createCrossBusinessAnalytics()"
+      - "identifyBusinessOptimizations()"
+
+application_services:
+  workflow_automation_service:
+    description: "Automate business workflows across domains"
+    workflows:
+      - "opportunity_to_project_conversion"
+      - "automatic_invoice_generation"
+      - "resource_reallocation_optimization"
+
+  reporting_service:
+    description: "Generate comprehensive business reports"
+    reports:
+      - "executive_summary_reports"
+      - "project_performance_reports"
+      - "financial_analysis_reports"
+      - "team_productivity_reports"
+
+# Success Metrics and Key Performance Indicators
+
+domain_kpis:
+  project_management:
+    - "Project completion rate"
+    - "Schedule adherence"
+    - "Budget variance"
+    - "Resource utilization"
+
+  crm:
+    - "Lead conversion rate"
+    - "Sales cycle length"
+    - "Pipeline velocity"
+    - "Customer lifetime value"
+
+  financial_management:
+    - "Revenue per employee"
+    - "Profit margins"
+    - "Invoice collection time"
+    - "Budget accuracy"
+
+  team_resource_management:
+    - "Employee utilization rate"
+    - "Skill development progress"
+    - "Employee satisfaction"
+    - "Retention rate"
+
+  analytics_business_intelligence:
+    - "Forecast accuracy"
+    - "Insight actionability"
+    - "Decision support effectiveness"
+    - "Business outcome improvement"
+
+# Integration and Deployment Strategy
+
+integration_strategy:
+  internal_integration:
+    approach: "shared_database_with_service_boundaries"
+    benefits:
+      - "Strong consistency"
+      - "Simple queries across domains"
+      - "Reduced complexity"
+
+  external_integration:
+    approach: "centralized_integration_manager"
+    benefits:
+      - "Unified integration management"
+      - "Consistent error handling"
+      - "Cross-platform coordination"
+
+deployment_strategy:
+  current: "single_deployment_unit"
+  future_options:
+    - "domain_based_microservices"
+    - "serverless_function_deployment"
+    - "containerized_domain_services"
+
+# Quality Attributes by Domain
+
+quality_attributes:
+  reliability:
+    project_management: "99.9% uptime for critical project operations"
+    crm: "99.5% availability for sales processes"
+    financial_management: "99.95% accuracy for financial calculations"
+
+  performance:
+    analytics: "Real-time dashboard updates < 2 seconds"
+    notifications: "Real-time delivery < 100ms latency"
+    api_responses: "Average response time < 500ms"
+
+  security:
+    all_domains: "Enterprise-grade security with audit logging"
+    financial: "Enhanced security for sensitive financial data"
+    crm: "Data privacy compliance for customer information"
+
+  scalability:
+    analytics: "Support for large-scale data processing"
+    notifications: "Handle high-volume real-time messaging"
+    integration: "Scale with external service growth"

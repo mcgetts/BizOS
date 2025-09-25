@@ -1,0 +1,510 @@
+# Security and Authentication Architecture
+# YAML DSL for Security Implementation
+# Version: 1.0
+# Last Updated: 2025-09-25
+
+metadata:
+  name: "Business Platform Security Architecture"
+  version: "4.0.0"
+  description: "Enterprise-grade security implementation with multi-method authentication, session management, and GDPR compliance features."
+  security_level: "enterprise_grade"
+  compliance: ["GDPR", "SOC2_ready"]
+  multi_factor_authentication: true
+  session_management: "secure"
+
+security_overview:
+  architecture_pattern: "defense_in_depth"
+  authentication_methods: ["local", "oauth"]
+  authorization_model: "role_based_access_control"
+  session_security: "enterprise_grade"
+  data_protection: "encryption_at_rest_and_transit"
+
+# Authentication Architecture
+authentication_architecture:
+  multi_method_support:
+    description: "Dual authentication strategy for flexibility and security"
+    methods:
+      local_authentication:
+        enabled: true
+        strategy: "passport-local"
+        implementation: "server/utils/authUtils.ts"
+        features:
+          - "Email and password authentication"
+          - "Bcrypt password hashing (cost factor: 12)"
+          - "Account lockout after failed attempts"
+          - "Password strength validation"
+          - "Email verification requirement"
+
+      oauth_authentication:
+        enabled: true
+        provider: "Replit OAuth"
+        strategy: "passport-replit"
+        implementation: "server/replitAuth.ts"
+        features:
+          - "Seamless OAuth integration"
+          - "Automatic account linking"
+          - "Profile synchronization"
+          - "Session management"
+
+  authentication_flow:
+    registration:
+      endpoint: "/api/auth/register"
+      process:
+        1: "User provides registration data"
+        2: "Password strength validation (client + server)"
+        3: "Email uniqueness check"
+        4: "Password hashing with bcrypt (cost: 12)"
+        5: "User record creation with unverified status"
+        6: "Email verification token generation"
+        7: "Verification email dispatch"
+        8: "Account creation confirmation"
+
+    email_verification:
+      endpoint: "/api/auth/verify-email"
+      token_security:
+        algorithm: "crypto.randomBytes(32)"
+        expiration: "24 hours"
+        single_use: true
+      process:
+        1: "User clicks verification link"
+        2: "Token validation and expiration check"
+        3: "Account status update to verified"
+        4: "Token invalidation"
+        5: "Login capability activation"
+
+    login:
+      endpoint: "/api/auth/login"
+      process:
+        1: "Email and password validation"
+        2: "Account existence and verification check"
+        3: "Rate limiting enforcement (5 attempts per 15 minutes)"
+        4: "Password verification with bcrypt"
+        5: "Account lockout check"
+        6: "Session creation and cookie setting"
+        7: "Login timestamp update"
+        8: "Authentication success response"
+
+    password_reset:
+      endpoints: ["/api/auth/forgot-password", "/api/auth/reset-password"]
+      security_measures:
+        - "Rate limiting: 3 requests per hour per email"
+        - "Secure token generation (32 bytes)"
+        - "Time-limited tokens (1 hour expiration)"
+        - "Single-use token enforcement"
+        - "Password strength re-validation"
+
+# Password Security
+password_security:
+  strength_requirements:
+    minimum_length: 8
+    character_requirements:
+      - "At least one lowercase letter"
+      - "At least one uppercase letter"
+      - "At least one numeric digit"
+    regex_validation: "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)"
+    client_side_validation: "Real-time password strength indicator"
+    server_side_validation: "Zod schema validation"
+
+  hashing_strategy:
+    algorithm: "bcrypt"
+    library: "bcryptjs"
+    version: "3.0.2"
+    cost_factor: 12
+    salt_rounds: "automatic (built into bcrypt)"
+
+  storage_security:
+    password_hash_only: "Never store plaintext passwords"
+    database_field: "users.passwordHash"
+    field_constraints: "VARCHAR, nullable (for OAuth-only accounts)"
+
+# Session Management
+session_management:
+  strategy: "server_side_sessions"
+  implementation: "express-session"
+  storage: "PostgreSQL"
+  storage_library: "connect-pg-simple"
+  version: "10.0.0"
+
+  session_configuration:
+    secret: "environment_variable_SESSION_SECRET"
+    cookie_security:
+      secure: true
+      httpOnly: true
+      sameSite: "strict"
+      maxAge: "24 hours (86400000 ms)"
+
+    session_storage:
+      table: "sessions"
+      schema:
+        sid: "varchar (primary key)"
+        sess: "jsonb (session data)"
+        expire: "timestamp (expiration time)"
+      cleanup: "automatic expired session removal"
+
+  session_lifecycle:
+    creation:
+      trigger: "successful authentication"
+      data_stored:
+        - "user ID"
+        - "email"
+        - "role"
+        - "authentication method"
+        - "login timestamp"
+
+    validation:
+      middleware: "isAuthenticated"
+      process:
+        1: "Session existence check"
+        2: "Session expiration validation"
+        3: "User account status verification"
+        4: "Role and permission loading"
+
+    termination:
+      logout: "explicit session destruction"
+      timeout: "automatic after 24 hours"
+      security_event: "forced logout on suspicious activity"
+
+# Rate Limiting and Security
+rate_limiting:
+  implementation: "server/utils/authUtils.ts - AuthRateLimiter"
+  storage: "in_memory" # Can be upgraded to Redis for production scaling
+
+  rate_limits:
+    login_attempts:
+      limit: 5
+      window: "15 minutes"
+      key: "IP address + email"
+      action_on_exceeded: "temporary account lockout"
+
+    registration_attempts:
+      limit: 3
+      window: "1 hour"
+      key: "IP address"
+      action_on_exceeded: "IP blocking"
+
+    password_reset:
+      limit: 3
+      window: "1 hour"
+      key: "email address"
+      action_on_exceeded: "request blocking"
+
+    api_endpoints:
+      limit: 100
+      window: "15 minutes"
+      key: "user session"
+      action_on_exceeded: "temporary API suspension"
+
+# Account Security
+account_security:
+  account_lockout:
+    trigger: "5 consecutive failed login attempts"
+    duration: "15 minutes"
+    reset_condition: "successful login or time expiration"
+    notification: "security alert email"
+
+  security_events:
+    monitoring:
+      - "multiple failed login attempts"
+      - "login from new IP address"
+      - "password changes"
+      - "email changes"
+      - "account lockouts"
+
+    notifications:
+      email_alerts: "sent for suspicious activity"
+      admin_notifications: "for critical security events"
+      audit_logging: "all security events logged"
+
+  account_verification:
+    email_verification:
+      required: true
+      process: "token-based verification"
+      token_expiry: "24 hours"
+      resend_capability: "rate-limited"
+
+    account_recovery:
+      password_reset: "secure token-based recovery"
+      account_unlock: "automatic after timeout or admin intervention"
+
+# Authorization and Access Control
+authorization:
+  model: "role_based_access_control"
+  implementation: "middleware and route guards"
+
+  roles:
+    admin:
+      permissions:
+        - "full system access"
+        - "user management"
+        - "system configuration"
+        - "integration management"
+        - "audit log access"
+        - "security settings"
+
+    manager:
+      permissions:
+        - "project management"
+        - "team oversight"
+        - "resource allocation"
+        - "budget management"
+        - "analytics access"
+        - "client relationship management"
+
+    employee:
+      permissions:
+        - "task management"
+        - "time tracking"
+        - "project participation"
+        - "document access"
+        - "basic reporting"
+
+    client:
+      permissions:
+        - "project visibility (assigned only)"
+        - "task viewing"
+        - "communication access"
+        - "document access (project-specific)"
+
+  authorization_middleware:
+    isAuthenticated:
+      description: "Verify user is logged in"
+      implementation: "session validation"
+
+    requireRole:
+      description: "Require specific role for access"
+      parameters: ["allowed_roles"]
+      implementation: "role checking against user session"
+
+    resourceOwnership:
+      description: "Verify user owns or has access to resource"
+      implementation: "resource-specific ownership checks"
+
+# Data Protection and Privacy
+data_protection:
+  encryption:
+    data_at_rest:
+      database: "PostgreSQL native encryption"
+      passwords: "bcrypt hashing"
+      tokens: "crypto.randomBytes(32)"
+
+    data_in_transit:
+      https: "TLS 1.2+ enforced"
+      api_communication: "encrypted HTTP headers"
+      websocket: "WSS (WebSocket Secure)"
+
+  privacy_measures:
+    data_minimization: "collect only necessary user data"
+    consent_management: "explicit consent for data processing"
+    data_retention: "configurable retention policies"
+    right_to_deletion: "account deletion capability"
+
+  gdpr_compliance:
+    user_rights:
+      - "right to access personal data"
+      - "right to rectification"
+      - "right to erasure (right to be forgotten)"
+      - "right to data portability"
+      - "right to object to processing"
+
+    implementation:
+      data_export: "user can export their data"
+      data_deletion: "secure account and data deletion"
+      audit_trail: "GDPR compliance audit logging"
+
+# API Security
+api_security:
+  authentication_required: "all endpoints except public auth endpoints"
+  session_validation: "automatic session checking middleware"
+
+  security_headers:
+    content_security_policy: "strict CSP headers"
+    x_frame_options: "DENY"
+    x_content_type_options: "nosniff"
+    x_xss_protection: "1; mode=block"
+
+  request_validation:
+    input_sanitization: "Zod schema validation"
+    sql_injection_prevention: "parameterized queries with Drizzle ORM"
+    xss_prevention: "input sanitization and output encoding"
+
+  cors_configuration:
+    origin: "same-origin policy"
+    credentials: true
+    methods: ["GET", "POST", "PUT", "DELETE"]
+    headers: ["Content-Type", "Authorization"]
+
+# WebSocket Security
+websocket_security:
+  authentication: "session-based authentication for WebSocket connections"
+  connection_validation:
+    session_check: "validate session before WebSocket upgrade"
+    user_identification: "associate connection with authenticated user"
+    permissions: "enforce user permissions for real-time data"
+
+  message_security:
+    input_validation: "validate all incoming WebSocket messages"
+    output_filtering: "filter messages based on user permissions"
+    rate_limiting: "prevent WebSocket message flooding"
+
+# File Upload Security
+file_security:
+  upload_restrictions:
+    file_types: ["image/*", "application/pdf", "text/*", "application/vnd.ms-excel"]
+    max_file_size: "10MB"
+    virus_scanning: "configurable (future enhancement)"
+
+  storage_security:
+    file_path_validation: "prevent directory traversal"
+    access_control: "file access based on user permissions"
+    secure_deletion: "secure file removal when no longer needed"
+
+# Audit and Logging
+security_logging:
+  audit_events:
+    authentication:
+      - "successful/failed login attempts"
+      - "registration attempts"
+      - "password changes"
+      - "email verification"
+      - "account lockouts"
+
+    authorization:
+      - "permission denied events"
+      - "role changes"
+      - "privileged action attempts"
+
+    data_access:
+      - "sensitive data access"
+      - "data export requests"
+      - "data deletion requests"
+
+  log_security:
+    log_integrity: "tamper-proof logging"
+    log_retention: "configurable retention period"
+    log_encryption: "encrypted log storage"
+    access_control: "restricted access to security logs"
+
+# Security Monitoring
+security_monitoring:
+  threat_detection:
+    brute_force_attacks: "detect repeated failed login attempts"
+    unusual_login_patterns: "detect logins from unusual locations/times"
+    privilege_escalation: "monitor for unauthorized role changes"
+    data_exfiltration: "monitor for unusual data access patterns"
+
+  alerting:
+    real_time_alerts: "immediate notification of critical security events"
+    admin_notifications: "security alerts to system administrators"
+    user_notifications: "security alerts to affected users"
+
+  incident_response:
+    automatic_responses: "account lockouts, IP blocking"
+    escalation_procedures: "defined escalation for security incidents"
+    forensic_capabilities: "detailed logging for incident investigation"
+
+# Environment-Specific Security
+environment_security:
+  development:
+    security_measures:
+      - "relaxed CORS for development"
+      - "detailed error messages for debugging"
+      - "test data isolation"
+
+  production:
+    security_measures:
+      - "strict CORS policies"
+      - "error message sanitization"
+      - "security header enforcement"
+      - "performance monitoring"
+      - "intrusion detection"
+
+  replit_environment:
+    specific_considerations:
+      - "Replit OAuth integration"
+      - "environment variable security"
+      - "port configuration security"
+      - "public URL exposure protection"
+
+# Compliance and Standards
+compliance:
+  standards_adherence:
+    owasp_top_10: "protection against OWASP top 10 vulnerabilities"
+    nist_cybersecurity_framework: "alignment with NIST CSF"
+    iso_27001: "security management practices"
+
+  regulatory_compliance:
+    gdpr: "EU General Data Protection Regulation compliance"
+    ccpa: "California Consumer Privacy Act readiness"
+    soc2: "SOC 2 compliance readiness"
+
+# Security Testing
+security_testing:
+  automated_testing:
+    unit_tests: "authentication and authorization logic testing"
+    integration_tests: "security workflow testing"
+    vulnerability_scanning: "automated security scanning"
+
+  manual_testing:
+    penetration_testing: "periodic security assessments"
+    code_reviews: "security-focused code reviews"
+    access_control_testing: "manual permission verification"
+
+# Security Configuration Management
+configuration_management:
+  environment_variables:
+    security_sensitive:
+      - "SESSION_SECRET: secure session signing"
+      - "DATABASE_URL: database connection security"
+      - "EMAIL_SMTP_PASSWORD: email service authentication"
+      - "OAUTH_SECRETS: OAuth provider secrets"
+
+  security_configuration:
+    password_policies: "configurable password requirements"
+    session_timeouts: "configurable session duration"
+    rate_limits: "configurable rate limiting"
+    lockout_policies: "configurable account lockout settings"
+
+# Future Security Enhancements
+security_roadmap:
+  planned_enhancements:
+    multi_factor_authentication:
+      - "TOTP (Time-based One-Time Password)"
+      - "SMS-based 2FA"
+      - "Hardware security keys"
+
+    advanced_monitoring:
+      - "AI-powered threat detection"
+      - "Behavioral analysis"
+      - "Advanced persistent threat detection"
+
+    enterprise_features:
+      - "Single Sign-On (SSO) integration"
+      - "LDAP/Active Directory integration"
+      - "Advanced audit capabilities"
+      - "Risk-based authentication"
+
+  scalability_enhancements:
+    distributed_sessions: "Redis-based session storage"
+    load_balancer_integration: "session affinity configuration"
+    microservices_security: "service-to-service authentication"
+
+# Security Best Practices Implementation
+best_practices:
+  defense_in_depth:
+    layers:
+      - "perimeter security (firewalls, rate limiting)"
+      - "network security (HTTPS, secure WebSocket)"
+      - "application security (authentication, authorization)"
+      - "data security (encryption, access control)"
+      - "monitoring and response (logging, alerting)"
+
+  principle_of_least_privilege:
+    implementation: "users granted minimum necessary permissions"
+    review_process: "regular permission audits"
+    role_segregation: "clear separation of duties"
+
+  security_by_design:
+    secure_defaults: "secure configuration out of the box"
+    fail_secure: "system fails to secure state on errors"
+    input_validation: "comprehensive input sanitization"
+    output_encoding: "proper output encoding to prevent XSS"

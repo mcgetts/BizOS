@@ -1,0 +1,1477 @@
+# Database Schema Definition
+# YAML DSL for Complete Data Model
+# Version: 1.0
+# Last Updated: 2025-09-25
+
+metadata:
+  name: "Business Platform Database Schema"
+  version: "4.0.0"
+  description: "Complete PostgreSQL database schema definition with 25+ tables covering authentication, project management, CRM, financial tracking, and resource management."
+  database_type: "PostgreSQL"
+  orm: "Drizzle ORM"
+  total_tables: 25
+  migration_strategy: "incremental"
+
+database_configuration:
+  provider: "@neondatabase/serverless"
+  connection_pooling: true
+  ssl_mode: "require"
+  timezone: "UTC"
+  charset: "UTF8"
+
+core_tables:
+  # Authentication and User Management
+  sessions:
+    description: "Session storage for authentication (mandatory for Replit Auth)"
+    columns:
+      sid:
+        type: "varchar"
+        primary_key: true
+        description: "Session identifier"
+      sess:
+        type: "jsonb"
+        nullable: false
+        description: "Session data"
+      expire:
+        type: "timestamp"
+        nullable: false
+        description: "Session expiration time"
+    indexes:
+      - name: "IDX_session_expire"
+        columns: ["expire"]
+
+  users:
+    description: "User accounts with multi-method authentication support"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      email:
+        type: "varchar"
+        unique: true
+        description: "User email address"
+      firstName:
+        type: "varchar"
+        description: "User first name"
+      lastName:
+        type: "varchar"
+        description: "User last name"
+      profileImageUrl:
+        type: "varchar"
+        description: "Profile image URL"
+      # Authentication fields
+      passwordHash:
+        type: "varchar"
+        description: "Bcrypt hashed password for local auth"
+      authProvider:
+        type: "varchar"
+        default: "local"
+        description: "Authentication provider (local, replit, google, github)"
+      providerUserId:
+        type: "varchar"
+        description: "ID from OAuth provider"
+      emailVerified:
+        type: "boolean"
+        default: false
+      emailVerificationToken:
+        type: "varchar"
+        description: "Token for email verification"
+      passwordResetToken:
+        type: "varchar"
+        description: "Token for password reset"
+      passwordResetExpires:
+        type: "timestamp"
+        description: "Password reset token expiration"
+      lastLoginAt:
+        type: "timestamp"
+        description: "Last successful login timestamp"
+      # User profile
+      role:
+        type: "varchar"
+        default: "employee"
+        enum: ["admin", "manager", "employee", "client"]
+      department:
+        type: "varchar"
+      position:
+        type: "varchar"
+      phone:
+        type: "varchar"
+      address:
+        type: "text"
+      skills:
+        type: "text[]"
+        description: "Array of user skills"
+      isActive:
+        type: "boolean"
+        default: true
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+      updatedAt:
+        type: "timestamp"
+        default: "now()"
+    indexes:
+      - name: "idx_users_email"
+        columns: ["email"]
+      - name: "idx_users_auth_provider"
+        columns: ["authProvider", "providerUserId"]
+
+  # Company and Client Management
+  companies:
+    description: "Company/organization records for B2B relationships"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      name:
+        type: "varchar"
+        nullable: false
+      industry:
+        type: "varchar"
+        enum: ["web_development", "marketing", "consulting", "design", "ecommerce", "fintech", "healthcare", "education", "manufacturing", "retail", "real_estate", "non_profit"]
+      website:
+        type: "varchar"
+      address:
+        type: "text"
+      phone:
+        type: "varchar"
+      email:
+        type: "varchar"
+      description:
+        type: "text"
+      size:
+        type: "varchar"
+        enum: ["startup", "small", "medium", "large", "enterprise"]
+      revenue:
+        type: "decimal"
+        precision: 12
+        scale: 2
+      foundedYear:
+        type: "integer"
+      linkedinUrl:
+        type: "varchar"
+      twitterUrl:
+        type: "varchar"
+      tags:
+        type: "text[]"
+      assignedTo:
+        type: "varchar"
+        foreign_key: "users.id"
+      isActive:
+        type: "boolean"
+        default: true
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+      updatedAt:
+        type: "timestamp"
+        default: "now()"
+    indexes:
+      - name: "idx_companies_industry"
+        columns: ["industry"]
+      - name: "idx_companies_assigned"
+        columns: ["assignedTo"]
+
+  clients:
+    description: "Individual contacts within companies (normalized from legacy structure)"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      name:
+        type: "varchar"
+        nullable: false
+      email:
+        type: "varchar"
+      phone:
+        type: "varchar"
+      companyId:
+        type: "varchar"
+        foreign_key: "companies.id"
+      position:
+        type: "varchar"
+        description: "Job title/position"
+      department:
+        type: "varchar"
+      isPrimaryContact:
+        type: "boolean"
+        default: false
+      source:
+        type: "varchar"
+        description: "Lead source (referral, website, marketing, etc.)"
+      assignedTo:
+        type: "varchar"
+        foreign_key: "users.id"
+      lastContactDate:
+        type: "timestamp"
+      notes:
+        type: "text"
+      tags:
+        type: "text[]"
+      isActive:
+        type: "boolean"
+        default: true
+      # Legacy fields for backward compatibility
+      company:
+        type: "varchar"
+        description: "Legacy company name field"
+      industry:
+        type: "varchar"
+        description: "Legacy industry field"
+      website:
+        type: "varchar"
+        description: "Legacy website field"
+      address:
+        type: "text"
+        description: "Legacy address field"
+      status:
+        type: "varchar"
+        description: "Legacy status field"
+      totalValue:
+        type: "decimal"
+        precision: 10
+        scale: 2
+        description: "Legacy total value field"
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+      updatedAt:
+        type: "timestamp"
+        default: "now()"
+    indexes:
+      - name: "idx_clients_company"
+        columns: ["companyId"]
+      - name: "idx_clients_assigned"
+        columns: ["assignedTo"]
+      - name: "idx_clients_email"
+        columns: ["email"]
+
+  # Sales and CRM
+  salesOpportunities:
+    description: "Sales pipeline and opportunity tracking"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      title:
+        type: "varchar"
+        nullable: false
+      description:
+        type: "text"
+      companyId:
+        type: "varchar"
+        foreign_key: "companies.id"
+      contactId:
+        type: "varchar"
+        foreign_key: "clients.id"
+        description: "Primary contact for this opportunity"
+      assignedTo:
+        type: "varchar"
+        foreign_key: "users.id"
+      stage:
+        type: "varchar"
+        default: "lead"
+        enum: ["lead", "qualified", "proposal", "negotiation", "closed_won", "closed_lost"]
+      value:
+        type: "decimal"
+        precision: 10
+        scale: 2
+      probability:
+        type: "integer"
+        default: 50
+        description: "Probability percentage (0-100)"
+      expectedCloseDate:
+        type: "timestamp"
+      actualCloseDate:
+        type: "timestamp"
+      source:
+        type: "varchar"
+        description: "Lead source"
+      priority:
+        type: "varchar"
+        default: "medium"
+        enum: ["low", "medium", "high", "urgent"]
+      tags:
+        type: "text[]"
+      notes:
+        type: "text"
+      painPoints:
+        type: "jsonb"
+        description: "Array of client pain points/challenges"
+      successCriteria:
+        type: "jsonb"
+        description: "Success measurement criteria"
+      decisionProcess:
+        type: "text"
+        description: "How decisions are made at the company"
+      budget:
+        type: "decimal"
+        precision: 12
+        scale: 2
+        description: "Known or estimated budget"
+      budgetStatus:
+        type: "varchar"
+        enum: ["approved", "estimated", "unknown", "no_budget"]
+      competitorInfo:
+        type: "jsonb"
+        description: "Competing solutions and vendors"
+      lastActivityDate:
+        type: "timestamp"
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+      updatedAt:
+        type: "timestamp"
+        default: "now()"
+    indexes:
+      - name: "idx_opportunities_stage"
+        columns: ["stage"]
+      - name: "idx_opportunities_assigned"
+        columns: ["assignedTo"]
+      - name: "idx_opportunities_company"
+        columns: ["companyId"]
+
+  # Project Management
+  projects:
+    description: "Core project management with enhanced tracking"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      name:
+        type: "varchar"
+        nullable: false
+      description:
+        type: "text"
+      companyId:
+        type: "varchar"
+        foreign_key: "companies.id"
+      clientId:
+        type: "varchar"
+        foreign_key: "clients.id"
+        description: "Secondary link to primary contact"
+      opportunityId:
+        type: "varchar"
+        foreign_key: "salesOpportunities.id"
+        description: "Link to originating opportunity"
+      managerId:
+        type: "varchar"
+        foreign_key: "users.id"
+      status:
+        type: "varchar"
+        default: "planning"
+        enum: ["planning", "active", "review", "paused", "on_hold", "completed", "cancelled"]
+      priority:
+        type: "varchar"
+        default: "medium"
+        enum: ["low", "medium", "high", "urgent"]
+      budget:
+        type: "decimal"
+        precision: 10
+        scale: 2
+      actualCost:
+        type: "decimal"
+        precision: 10
+        scale: 2
+        default: "0"
+      progress:
+        type: "integer"
+        default: 0
+        description: "Completion percentage (0-100)"
+      startDate:
+        type: "timestamp"
+      endDate:
+        type: "timestamp"
+      completedAt:
+        type: "timestamp"
+      tags:
+        type: "text[]"
+      isClientPortalEnabled:
+        type: "boolean"
+        default: true
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+      updatedAt:
+        type: "timestamp"
+        default: "now()"
+    indexes:
+      - name: "idx_projects_status"
+        columns: ["status"]
+      - name: "idx_projects_manager"
+        columns: ["managerId"]
+      - name: "idx_projects_company"
+        columns: ["companyId"]
+
+  tasks:
+    description: "Task management with enhanced Gantt chart support"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      title:
+        type: "varchar"
+        nullable: false
+      description:
+        type: "text"
+      projectId:
+        type: "varchar"
+        foreign_key: "projects.id"
+      assignedTo:
+        type: "varchar"
+        foreign_key: "users.id"
+      createdBy:
+        type: "varchar"
+        foreign_key: "users.id"
+      status:
+        type: "varchar"
+        default: "todo"
+        enum: ["todo", "in_progress", "review", "completed"]
+      priority:
+        type: "varchar"
+        default: "medium"
+        enum: ["low", "medium", "high", "urgent"]
+      estimatedHours:
+        type: "decimal"
+        precision: 5
+        scale: 2
+      actualHours:
+        type: "decimal"
+        precision: 5
+        scale: 2
+        default: "0"
+      startDate:
+        type: "timestamp"
+        description: "Planned start date for Gantt chart"
+      dueDate:
+        type: "timestamp"
+      completedAt:
+        type: "timestamp"
+      tags:
+        type: "text[]"
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+      updatedAt:
+        type: "timestamp"
+        default: "now()"
+    indexes:
+      - name: "idx_tasks_project"
+        columns: ["projectId"]
+      - name: "idx_tasks_assigned"
+        columns: ["assignedTo"]
+      - name: "idx_tasks_status"
+        columns: ["status"]
+
+  # Project Management Enhancements
+  projectTemplates:
+    description: "Project templates for rapid project creation"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      name:
+        type: "varchar"
+        nullable: false
+      description:
+        type: "text"
+      industry:
+        type: "varchar"
+        enum: ["web_development", "marketing", "consulting"]
+      category:
+        type: "varchar"
+        enum: ["website", "mobile_app", "campaign", "audit", "branding"]
+      estimatedDuration:
+        type: "integer"
+        description: "Duration in days"
+      defaultBudget:
+        type: "decimal"
+        precision: 10
+        scale: 2
+      defaultPriority:
+        type: "varchar"
+        default: "medium"
+        enum: ["low", "medium", "high", "urgent"]
+      tags:
+        type: "text[]"
+      isActive:
+        type: "boolean"
+        default: true
+      createdBy:
+        type: "varchar"
+        foreign_key: "users.id"
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+      updatedAt:
+        type: "timestamp"
+        default: "now()"
+
+  taskTemplates:
+    description: "Task templates within project templates"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      projectTemplateId:
+        type: "varchar"
+        foreign_key: "projectTemplates.id"
+        on_delete: "cascade"
+      title:
+        type: "varchar"
+        nullable: false
+      description:
+        type: "text"
+      estimatedHours:
+        type: "decimal"
+        precision: 5
+        scale: 2
+      priority:
+        type: "varchar"
+        default: "medium"
+        enum: ["low", "medium", "high", "urgent"]
+      phase:
+        type: "varchar"
+        description: "planning, design, development, testing, launch"
+      orderIndex:
+        type: "integer"
+        default: 0
+      dependsOnPhase:
+        type: "varchar"
+        description: "Previous phase dependency"
+      tags:
+        type: "text[]"
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+
+  taskDependencies:
+    description: "Task dependencies for project scheduling"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      taskId:
+        type: "varchar"
+        foreign_key: "tasks.id"
+        on_delete: "cascade"
+      dependsOnTaskId:
+        type: "varchar"
+        foreign_key: "tasks.id"
+        on_delete: "cascade"
+      dependencyType:
+        type: "varchar"
+        default: "finish_to_start"
+        enum: ["finish_to_start", "start_to_start", "finish_to_finish", "start_to_finish"]
+      lag:
+        type: "integer"
+        default: 0
+        description: "Lag time in days"
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+
+  # Communication and Activity
+  projectComments:
+    description: "Project comments and activity feed"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      projectId:
+        type: "varchar"
+        foreign_key: "projects.id"
+        on_delete: "cascade"
+      userId:
+        type: "varchar"
+        foreign_key: "users.id"
+      content:
+        type: "text"
+        nullable: false
+      type:
+        type: "varchar"
+        default: "comment"
+        enum: ["comment", "status_update", "milestone", "file_upload"]
+      mentionedUsers:
+        type: "text[]"
+        description: "Array of user IDs mentioned in comment"
+      attachments:
+        type: "jsonb"
+        description: "File references"
+      editedAt:
+        type: "timestamp"
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+    indexes:
+      - name: "idx_comments_project"
+        columns: ["projectId"]
+
+  projectActivity:
+    description: "Automatic system activity logging"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      projectId:
+        type: "varchar"
+        foreign_key: "projects.id"
+        on_delete: "cascade"
+      userId:
+        type: "varchar"
+        foreign_key: "users.id"
+      action:
+        type: "varchar"
+        nullable: false
+        description: "Action type (created, updated, task_added, etc.)"
+      entityType:
+        type: "varchar"
+        description: "Type of entity affected (project, task, comment, file)"
+      entityId:
+        type: "varchar"
+        description: "ID of affected entity"
+      details:
+        type: "jsonb"
+        description: "Structured data about the change"
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+
+  # Financial Management
+  timeEntries:
+    description: "Time tracking for projects and tasks"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      userId:
+        type: "varchar"
+        foreign_key: "users.id"
+      projectId:
+        type: "varchar"
+        foreign_key: "projects.id"
+      taskId:
+        type: "varchar"
+        foreign_key: "tasks.id"
+      description:
+        type: "text"
+      hours:
+        type: "decimal"
+        precision: 5
+        scale: 2
+        nullable: false
+      date:
+        type: "timestamp"
+        nullable: false
+      billable:
+        type: "boolean"
+        default: true
+      rate:
+        type: "decimal"
+        precision: 8
+        scale: 2
+        description: "Hourly rate"
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+    indexes:
+      - name: "idx_time_entries_user"
+        columns: ["userId"]
+      - name: "idx_time_entries_project"
+        columns: ["projectId"]
+      - name: "idx_time_entries_date"
+        columns: ["date"]
+
+  invoices:
+    description: "Invoice generation and management"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      invoiceNumber:
+        type: "varchar"
+        unique: true
+        nullable: false
+      companyId:
+        type: "varchar"
+        foreign_key: "companies.id"
+      clientId:
+        type: "varchar"
+        foreign_key: "clients.id"
+        description: "Contact person"
+      projectId:
+        type: "varchar"
+        foreign_key: "projects.id"
+      amount:
+        type: "decimal"
+        precision: 10
+        scale: 2
+        nullable: false
+      tax:
+        type: "decimal"
+        precision: 10
+        scale: 2
+        default: "0"
+      total:
+        type: "decimal"
+        precision: 10
+        scale: 2
+        nullable: false
+      status:
+        type: "varchar"
+        default: "draft"
+        enum: ["draft", "sent", "paid", "overdue", "cancelled"]
+      dueDate:
+        type: "timestamp"
+      paidAt:
+        type: "timestamp"
+      notes:
+        type: "text"
+      terms:
+        type: "text"
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+      updatedAt:
+        type: "timestamp"
+        default: "now()"
+
+  expenses:
+    description: "Expense tracking and management"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      description:
+        type: "text"
+        nullable: false
+      amount:
+        type: "decimal"
+        precision: 10
+        scale: 2
+        nullable: false
+      category:
+        type: "varchar"
+        description: "travel, meals, supplies, software, etc."
+      projectId:
+        type: "varchar"
+        foreign_key: "projects.id"
+      userId:
+        type: "varchar"
+        foreign_key: "users.id"
+      receiptUrl:
+        type: "varchar"
+      billable:
+        type: "boolean"
+        default: false
+      reimbursed:
+        type: "boolean"
+        default: false
+      date:
+        type: "timestamp"
+        nullable: false
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+
+# Resource Management Tables
+resource_management_tables:
+  userCapacity:
+    description: "User capacity and availability tracking"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      userId:
+        type: "varchar"
+        foreign_key: "users.id"
+      hoursPerDay:
+        type: "decimal"
+        precision: 4
+        scale: 2
+        default: "8.00"
+      hoursPerWeek:
+        type: "decimal"
+        precision: 4
+        scale: 2
+        default: "40.00"
+      overtimeMultiplier:
+        type: "decimal"
+        precision: 3
+        scale: 2
+        default: "1.50"
+      effectiveFrom:
+        type: "timestamp"
+        default: "now()"
+      effectiveTo:
+        type: "timestamp"
+        nullable: true
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+      updatedAt:
+        type: "timestamp"
+        default: "now()"
+
+  userAvailability:
+    description: "User availability periods (vacations, holidays, etc.)"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      userId:
+        type: "varchar"
+        foreign_key: "users.id"
+      type:
+        type: "varchar"
+        nullable: false
+        enum: ["vacation", "sick", "holiday", "training", "partial_day"]
+      status:
+        type: "varchar"
+        default: "approved"
+        enum: ["pending", "approved", "denied"]
+      startDate:
+        type: "timestamp"
+        nullable: false
+      endDate:
+        type: "timestamp"
+        nullable: false
+      hoursPerDay:
+        type: "decimal"
+        precision: 4
+        scale: 2
+        description: "For partial days"
+      description:
+        type: "text"
+      approvedBy:
+        type: "varchar"
+        foreign_key: "users.id"
+      approvedAt:
+        type: "timestamp"
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+      updatedAt:
+        type: "timestamp"
+        default: "now()"
+
+  userSkills:
+    description: "User skills and competencies for resource allocation"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      userId:
+        type: "varchar"
+        foreign_key: "users.id"
+      skillName:
+        type: "varchar"
+        nullable: false
+      category:
+        type: "varchar"
+        enum: ["technical", "soft_skills", "domain_knowledge", "tools"]
+      proficiencyLevel:
+        type: "integer"
+        default: 1
+        description: "1-5 scale"
+      yearsExperience:
+        type: "decimal"
+        precision: 3
+        scale: 1
+      isCertified:
+        type: "boolean"
+        default: false
+      certificationName:
+        type: "varchar"
+      lastUsed:
+        type: "timestamp"
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+      updatedAt:
+        type: "timestamp"
+        default: "now()"
+
+  resourceAllocations:
+    description: "Resource allocations for projects and tasks"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      userId:
+        type: "varchar"
+        foreign_key: "users.id"
+      projectId:
+        type: "varchar"
+        foreign_key: "projects.id"
+      taskId:
+        type: "varchar"
+        foreign_key: "tasks.id"
+        nullable: true
+      allocationType:
+        type: "varchar"
+        default: "project"
+        enum: ["project", "task", "milestone"]
+      allocatedHours:
+        type: "decimal"
+        precision: 6
+        scale: 2
+        nullable: false
+      hourlyRate:
+        type: "decimal"
+        precision: 8
+        scale: 2
+      startDate:
+        type: "timestamp"
+        nullable: false
+      endDate:
+        type: "timestamp"
+        nullable: false
+      utilizationTarget:
+        type: "integer"
+        default: 100
+        description: "Percentage of capacity to allocate"
+      priority:
+        type: "varchar"
+        default: "medium"
+        enum: ["low", "medium", "high", "urgent"]
+      status:
+        type: "varchar"
+        default: "active"
+        enum: ["active", "completed", "cancelled", "on_hold"]
+      notes:
+        type: "text"
+      createdBy:
+        type: "varchar"
+        foreign_key: "users.id"
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+      updatedAt:
+        type: "timestamp"
+        default: "now()"
+
+# Budget Management Tables
+budget_management_tables:
+  budgetCategories:
+    description: "Budget categories for granular tracking"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      name:
+        type: "varchar"
+        nullable: false
+      description:
+        type: "text"
+      categoryType:
+        type: "varchar"
+        nullable: false
+        enum: ["labor", "materials", "software", "travel", "overhead"]
+      isActive:
+        type: "boolean"
+        default: true
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+
+  projectBudgets:
+    description: "Project budget breakdown by category"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      projectId:
+        type: "varchar"
+        foreign_key: "projects.id"
+      categoryId:
+        type: "varchar"
+        foreign_key: "budgetCategories.id"
+      budgetedAmount:
+        type: "decimal"
+        precision: 10
+        scale: 2
+        nullable: false
+      spentAmount:
+        type: "decimal"
+        precision: 10
+        scale: 2
+        default: "0"
+      committedAmount:
+        type: "decimal"
+        precision: 10
+        scale: 2
+        default: "0"
+        description: "Purchase orders, contracts"
+      forecastAmount:
+        type: "decimal"
+        precision: 10
+        scale: 2
+        default: "0"
+        description: "Projected final cost"
+      notes:
+        type: "text"
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+      updatedAt:
+        type: "timestamp"
+        default: "now()"
+
+# Support and Knowledge Management
+support_knowledge_tables:
+  supportTickets:
+    description: "Support ticket management system"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      ticketNumber:
+        type: "varchar"
+        unique: true
+        nullable: false
+      title:
+        type: "varchar"
+        nullable: false
+      description:
+        type: "text"
+        nullable: false
+      category:
+        type: "varchar"
+        enum: ["technical", "billing", "general"]
+      priority:
+        type: "varchar"
+        default: "medium"
+        enum: ["low", "medium", "high", "urgent"]
+      status:
+        type: "varchar"
+        default: "open"
+        enum: ["open", "in_progress", "waiting_for_customer", "resolved", "closed"]
+      clientId:
+        type: "varchar"
+        foreign_key: "clients.id"
+      assignedTo:
+        type: "varchar"
+        foreign_key: "users.id"
+      createdBy:
+        type: "varchar"
+        foreign_key: "users.id"
+      resolution:
+        type: "text"
+      satisfactionRating:
+        type: "integer"
+        description: "1-5 rating"
+      resolvedAt:
+        type: "timestamp"
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+      updatedAt:
+        type: "timestamp"
+        default: "now()"
+
+  knowledgeArticles:
+    description: "Knowledge base articles and documentation"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      title:
+        type: "varchar"
+        nullable: false
+      content:
+        type: "text"
+        nullable: false
+      category:
+        type: "varchar"
+        enum: ["sop", "training", "policy", "faq"]
+      tags:
+        type: "text[]"
+      authorId:
+        type: "varchar"
+        foreign_key: "users.id"
+      status:
+        type: "varchar"
+        default: "draft"
+        enum: ["draft", "published", "archived"]
+      isPublic:
+        type: "boolean"
+        default: false
+      viewCount:
+        type: "integer"
+        default: 0
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+      updatedAt:
+        type: "timestamp"
+        default: "now()"
+
+  documents:
+    description: "Document and file management"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      name:
+        type: "varchar"
+        nullable: false
+      description:
+        type: "text"
+      fileUrl:
+        type: "varchar"
+        nullable: false
+      fileSize:
+        type: "integer"
+      mimeType:
+        type: "varchar"
+      category:
+        type: "varchar"
+        enum: ["contract", "proposal", "report", "sop", "training"]
+      projectId:
+        type: "varchar"
+        foreign_key: "projects.id"
+      clientId:
+        type: "varchar"
+        foreign_key: "clients.id"
+      uploadedBy:
+        type: "varchar"
+        foreign_key: "users.id"
+      version:
+        type: "varchar"
+        default: "1.0"
+      isPublic:
+        type: "boolean"
+        default: false
+      tags:
+        type: "text[]"
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+      updatedAt:
+        type: "timestamp"
+        default: "now()"
+
+# Marketing and Communications
+marketing_tables:
+  marketingCampaigns:
+    description: "Marketing campaign management"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      name:
+        type: "varchar"
+        nullable: false
+      description:
+        type: "text"
+      type:
+        type: "varchar"
+        enum: ["email", "social", "paid_ads", "content"]
+      status:
+        type: "varchar"
+        default: "planning"
+        enum: ["planning", "active", "paused", "completed"]
+      budget:
+        type: "decimal"
+        precision: 10
+        scale: 2
+      spent:
+        type: "decimal"
+        precision: 10
+        scale: 2
+        default: "0"
+      targetAudience:
+        type: "text"
+      channels:
+        type: "text[]"
+        description: "email, facebook, google, linkedin, etc."
+      metrics:
+        type: "jsonb"
+        description: "impressions, clicks, conversions, etc."
+      startDate:
+        type: "timestamp"
+      endDate:
+        type: "timestamp"
+      managerId:
+        type: "varchar"
+        foreign_key: "users.id"
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+      updatedAt:
+        type: "timestamp"
+        default: "now()"
+
+# Real-time and Notifications
+notification_tables:
+  notifications:
+    description: "Real-time notification system"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      userId:
+        type: "varchar"
+        foreign_key: "users.id"
+        nullable: false
+      type:
+        type: "varchar"
+        nullable: false
+        enum: ["task_created", "task_updated", "task_completed", "project_updated", "comment_added", "dependency_changed"]
+      title:
+        type: "varchar"
+        nullable: false
+      message:
+        type: "text"
+        nullable: false
+      data:
+        type: "jsonb"
+        description: "Additional context data (task ID, project ID, etc.)"
+      read:
+        type: "boolean"
+        default: false
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+      updatedAt:
+        type: "timestamp"
+        default: "now()"
+    indexes:
+      - name: "idx_notifications_user"
+        columns: ["userId"]
+      - name: "idx_notifications_read"
+        columns: ["read"]
+
+# Additional CRM Tables
+additional_crm_tables:
+  opportunityNextSteps:
+    description: "Next steps tracking for sales opportunities"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      opportunityId:
+        type: "varchar"
+        foreign_key: "salesOpportunities.id"
+        on_delete: "cascade"
+      title:
+        type: "varchar"
+        nullable: false
+      description:
+        type: "text"
+      assignedTo:
+        type: "varchar"
+        foreign_key: "users.id"
+      dueDate:
+        type: "timestamp"
+      priority:
+        type: "varchar"
+        default: "medium"
+        enum: ["low", "medium", "high", "urgent"]
+      status:
+        type: "varchar"
+        default: "pending"
+        enum: ["pending", "in_progress", "completed", "cancelled"]
+      completedAt:
+        type: "timestamp"
+      completedBy:
+        type: "varchar"
+        foreign_key: "users.id"
+      createdBy:
+        type: "varchar"
+        foreign_key: "users.id"
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+      updatedAt:
+        type: "timestamp"
+        default: "now()"
+
+  opportunityCommunications:
+    description: "Communication history for opportunities"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      opportunityId:
+        type: "varchar"
+        foreign_key: "salesOpportunities.id"
+        on_delete: "cascade"
+      type:
+        type: "varchar"
+        nullable: false
+        enum: ["call", "email", "meeting", "demo", "proposal", "contract"]
+      subject:
+        type: "varchar"
+      summary:
+        type: "text"
+      outcome:
+        type: "varchar"
+        enum: ["positive", "neutral", "negative", "no_response"]
+      attendees:
+        type: "text[]"
+        description: "Contact names/emails who attended"
+      followUpRequired:
+        type: "boolean"
+        default: false
+      followUpDate:
+        type: "timestamp"
+      attachments:
+        type: "jsonb"
+        description: "File references or URLs"
+      recordedBy:
+        type: "varchar"
+        foreign_key: "users.id"
+      communicationDate:
+        type: "timestamp"
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+      updatedAt:
+        type: "timestamp"
+        default: "now()"
+
+  opportunityStakeholders:
+    description: "Stakeholder mapping for opportunities"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      opportunityId:
+        type: "varchar"
+        foreign_key: "salesOpportunities.id"
+        on_delete: "cascade"
+      name:
+        type: "varchar"
+        nullable: false
+      role:
+        type: "varchar"
+        enum: ["decision_maker", "influencer", "user", "blocker", "champion"]
+      email:
+        type: "varchar"
+      phone:
+        type: "varchar"
+      influence:
+        type: "varchar"
+        default: "medium"
+        enum: ["low", "medium", "high"]
+      relationshipStrength:
+        type: "varchar"
+        default: "neutral"
+        enum: ["strong", "neutral", "weak", "unknown"]
+      notes:
+        type: "text"
+      createdBy:
+        type: "varchar"
+        foreign_key: "users.id"
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+      updatedAt:
+        type: "timestamp"
+        default: "now()"
+
+database_relationships:
+  one_to_many:
+    - parent: "companies"
+      child: "clients"
+      description: "Company has many client contacts"
+
+    - parent: "users"
+      child: "projects"
+      description: "User manages many projects"
+
+    - parent: "projects"
+      child: "tasks"
+      description: "Project has many tasks"
+
+    - parent: "projects"
+      child: "timeEntries"
+      description: "Project has many time entries"
+
+    - parent: "salesOpportunities"
+      child: "opportunityNextSteps"
+      description: "Opportunity has many next steps"
+
+  many_to_many:
+    - table1: "tasks"
+      table2: "tasks"
+      junction: "taskDependencies"
+      description: "Tasks can depend on multiple other tasks"
+
+performance_optimizations:
+  indexes:
+    - table: "users"
+      columns: ["email", "authProvider"]
+      type: "composite"
+
+    - table: "projects"
+      columns: ["status", "managerId"]
+      type: "composite"
+
+    - table: "tasks"
+      columns: ["projectId", "assignedTo", "status"]
+      type: "composite"
+
+    - table: "timeEntries"
+      columns: ["userId", "date"]
+      type: "composite"
+
+  partitioning:
+    strategy: "none"
+    future_consideration: "date-based partitioning for large time_entries table"
+
+data_validation:
+  constraints:
+    - table: "users"
+      field: "email"
+      rule: "unique, not null for local auth"
+
+    - table: "projects"
+      field: "endDate"
+      rule: "must be after startDate"
+
+    - table: "tasks"
+      field: "priority"
+      rule: "enum validation"
+
+migration_strategy:
+  approach: "incremental"
+  tool: "drizzle-kit"
+  versioning: "semantic_versioning"
+  rollback_strategy: "backup_before_migration"
+
+backup_recovery:
+  frequency: "daily"
+  retention: "30_days"
+  location: "cloud_storage"
+  recovery_testing: "monthly"

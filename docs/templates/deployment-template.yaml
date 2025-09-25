@@ -1,0 +1,564 @@
+# Deployment Configuration Template
+# YAML DSL for Business Platform Deployment
+# Version: 4.0.0
+# Last Updated: 2025-09-25
+
+metadata:
+  name: "Business Platform Deployment Template"
+  version: "4.0.0"
+  description: "Complete deployment configuration for the business management platform"
+  template_type: "deployment"
+  target_environments: ["development", "staging", "production"]
+
+# Environment Configuration
+environments:
+  development:
+    description: "Local development environment"
+    configuration:
+      database:
+        type: "postgresql"
+        host: "localhost"
+        port: 5432
+        database: "business_platform_dev"
+        ssl: false
+        connection_pool_size: 10
+
+      server:
+        port: 3001
+        host: "0.0.0.0"
+        node_env: "development"
+        session_secret: "${SESSION_SECRET_DEV}"
+        cors:
+          origin: ["http://localhost:3000", "http://localhost:3001"]
+          credentials: true
+
+      authentication:
+        local_auth: true
+        oauth_providers:
+          replit:
+            enabled: true
+            client_id: "${REPLIT_CLIENT_ID}"
+            client_secret: "${REPLIT_CLIENT_SECRET}"
+        password_policy:
+          min_length: 8
+          require_uppercase: true
+          require_lowercase: true
+          require_numbers: true
+
+      integrations:
+        slack:
+          enabled: false  # Disable in dev to avoid spam
+        github:
+          enabled: true
+          token: "${GITHUB_TOKEN_DEV}"
+        teams:
+          enabled: false  # Disable in dev
+        email:
+          provider: "development"  # Console logging only
+
+      features:
+        websocket: true
+        real_time_notifications: true
+        file_uploads: true
+        analytics: true
+        mobile_optimization: true
+
+  staging:
+    description: "Staging environment for pre-production testing"
+    configuration:
+      database:
+        type: "postgresql"
+        host: "${DATABASE_HOST_STAGING}"
+        port: 5432
+        database: "business_platform_staging"
+        ssl: true
+        connection_pool_size: 20
+        backup_enabled: true
+        backup_frequency: "daily"
+
+      server:
+        port: 5000
+        host: "0.0.0.0"
+        node_env: "staging"
+        session_secret: "${SESSION_SECRET_STAGING}"
+        cors:
+          origin: ["${STAGING_DOMAIN}"]
+          credentials: true
+
+      authentication:
+        local_auth: true
+        oauth_providers:
+          replit:
+            enabled: true
+            client_id: "${REPLIT_CLIENT_ID_STAGING}"
+            client_secret: "${REPLIT_CLIENT_SECRET_STAGING}"
+        rate_limiting:
+          enabled: true
+          max_attempts: 5
+          window_minutes: 15
+
+      integrations:
+        slack:
+          enabled: true
+          bot_token: "${SLACK_BOT_TOKEN_STAGING}"
+          channels:
+            general: "staging-notifications"
+            alerts: "staging-alerts"
+        github:
+          enabled: true
+          token: "${GITHUB_TOKEN_STAGING}"
+        teams:
+          enabled: true
+          webhook_url: "${TEAMS_WEBHOOK_STAGING}"
+        email:
+          provider: "smtp"
+          host: "${SMTP_HOST}"
+          port: 587
+          secure: true
+          auth:
+            user: "${SMTP_USER_STAGING}"
+            pass: "${SMTP_PASSWORD_STAGING}"
+
+      monitoring:
+        enabled: true
+        health_checks: true
+        performance_monitoring: true
+        error_tracking: true
+
+      security:
+        https_only: true
+        security_headers: true
+        rate_limiting: true
+        audit_logging: true
+
+  production:
+    description: "Production environment for live operations"
+    configuration:
+      database:
+        type: "postgresql"
+        host: "${DATABASE_HOST_PROD}"
+        port: 5432
+        database: "business_platform_prod"
+        ssl: true
+        connection_pool_size: 50
+        backup_enabled: true
+        backup_frequency: "hourly"
+        backup_retention: "30_days"
+        read_replicas: true
+        monitoring: true
+
+      server:
+        port: 5000
+        host: "0.0.0.0"
+        node_env: "production"
+        session_secret: "${SESSION_SECRET_PROD}"
+        cors:
+          origin: ["${PRODUCTION_DOMAIN}"]
+          credentials: true
+        clustering:
+          enabled: true
+          workers: "auto"  # Based on CPU cores
+
+      authentication:
+        local_auth: true
+        oauth_providers:
+          replit:
+            enabled: true
+            client_id: "${REPLIT_CLIENT_ID_PROD}"
+            client_secret: "${REPLIT_CLIENT_SECRET_PROD}"
+        security:
+          session_timeout: "24h"
+          password_expiry: "90_days"
+          mfa_required_for_admins: true
+        rate_limiting:
+          enabled: true
+          max_attempts: 5
+          window_minutes: 15
+          ip_whitelist: []  # Admin IP addresses
+
+      integrations:
+        slack:
+          enabled: true
+          bot_token: "${SLACK_BOT_TOKEN_PROD}"
+          signing_secret: "${SLACK_SIGNING_SECRET_PROD}"
+          channels:
+            general: "business-platform"
+            alerts: "platform-alerts"
+            digest: "daily-digest"
+        github:
+          enabled: true
+          token: "${GITHUB_TOKEN_PROD}"
+          app_id: "${GITHUB_APP_ID_PROD}"
+          private_key: "${GITHUB_PRIVATE_KEY_PROD}"
+          webhook_secret: "${GITHUB_WEBHOOK_SECRET_PROD}"
+        teams:
+          enabled: true
+          webhook_general: "${TEAMS_WEBHOOK_GENERAL_PROD}"
+          webhook_alerts: "${TEAMS_WEBHOOK_ALERTS_PROD}"
+        email:
+          provider: "smtp"
+          host: "${SMTP_HOST_PROD}"
+          port: 587
+          secure: true
+          auth:
+            user: "${SMTP_USER_PROD}"
+            pass: "${SMTP_PASSWORD_PROD}"
+          from_address: "${EMAIL_FROM_PROD}"
+
+      monitoring:
+        enabled: true
+        health_checks: true
+        uptime_monitoring: true
+        performance_monitoring: true
+        error_tracking: true
+        log_aggregation: true
+        alerting:
+          enabled: true
+          channels: ["email", "slack", "teams"]
+          thresholds:
+            error_rate: 5  # percent
+            response_time: 1000  # milliseconds
+            cpu_usage: 80  # percent
+            memory_usage: 85  # percent
+
+      security:
+        https_only: true
+        hsts: true
+        security_headers: true
+        rate_limiting: true
+        ddos_protection: true
+        audit_logging: true
+        vulnerability_scanning: true
+        penetration_testing: "quarterly"
+
+      performance:
+        caching:
+          enabled: true
+          redis_url: "${REDIS_URL_PROD}"
+          ttl: 3600  # 1 hour
+        cdn:
+          enabled: true
+          provider: "cloudflare"
+        load_balancing:
+          enabled: true
+          strategy: "round_robin"
+        compression:
+          enabled: true
+          algorithms: ["gzip", "brotli"]
+
+# Infrastructure Requirements
+infrastructure:
+  minimum_requirements:
+    cpu_cores: 2
+    ram_gb: 4
+    storage_gb: 20
+    network: "1Gbps"
+
+  recommended_production:
+    cpu_cores: 4
+    ram_gb: 8
+    storage_gb: 100
+    network: "1Gbps"
+    load_balancer: true
+    cdn: true
+    monitoring: true
+
+# Environment Variables Template
+environment_variables:
+  required:
+    # Database
+    - name: "DATABASE_URL"
+      description: "PostgreSQL connection string"
+      example: "postgresql://user:password@host:5432/database"
+      sensitive: true
+
+    # Authentication
+    - name: "SESSION_SECRET"
+      description: "Secret key for session signing"
+      example: "your-super-secret-session-key-here"
+      sensitive: true
+      generate: "random_64_chars"
+
+    # OAuth (if enabled)
+    - name: "REPLIT_CLIENT_ID"
+      description: "Replit OAuth client ID"
+      example: "your-replit-client-id"
+      sensitive: false
+
+    - name: "REPLIT_CLIENT_SECRET"
+      description: "Replit OAuth client secret"
+      example: "your-replit-client-secret"
+      sensitive: true
+
+  optional_integrations:
+    # Slack Integration
+    - name: "SLACK_BOT_TOKEN"
+      description: "Slack bot user OAuth token"
+      example: "xoxb-your-slack-bot-token"
+      sensitive: true
+      required_for: "slack_integration"
+
+    - name: "SLACK_SIGNING_SECRET"
+      description: "Slack app signing secret for webhook verification"
+      example: "your-slack-signing-secret"
+      sensitive: true
+      required_for: "slack_webhooks"
+
+    # Microsoft Teams
+    - name: "TEAMS_WEBHOOK_GENERAL"
+      description: "Teams webhook URL for general notifications"
+      example: "https://outlook.office.com/webhook/..."
+      sensitive: true
+      required_for: "teams_integration"
+
+    # GitHub Integration
+    - name: "GITHUB_TOKEN"
+      description: "GitHub personal access token or app token"
+      example: "ghp_your-github-token"
+      sensitive: true
+      required_for: "github_integration"
+
+    - name: "GITHUB_APP_ID"
+      description: "GitHub App ID (if using GitHub App)"
+      example: "123456"
+      sensitive: false
+      required_for: "github_app"
+
+    # Email Service
+    - name: "SMTP_HOST"
+      description: "SMTP server hostname"
+      example: "smtp.gmail.com"
+      sensitive: false
+      required_for: "email_service"
+
+    - name: "SMTP_USER"
+      description: "SMTP username"
+      example: "your-email@company.com"
+      sensitive: false
+      required_for: "email_service"
+
+    - name: "SMTP_PASSWORD"
+      description: "SMTP password or app password"
+      example: "your-smtp-password"
+      sensitive: true
+      required_for: "email_service"
+
+# Deployment Steps
+deployment_steps:
+  preparation:
+    - step: "Environment Setup"
+      tasks:
+        - "Provision infrastructure (server, database, storage)"
+        - "Configure networking and security groups"
+        - "Set up monitoring and logging infrastructure"
+        - "Configure SSL certificates"
+
+    - step: "Dependencies Installation"
+      tasks:
+        - "Install Node.js (version 18+)"
+        - "Install PostgreSQL (version 14+)"
+        - "Install PM2 or similar process manager"
+        - "Install monitoring agents"
+
+  database_setup:
+    - step: "Database Initialization"
+      commands:
+        - "createdb business_platform"
+        - "npm run db:push"  # Apply schema migrations
+        - "npm run tsx server/seed.ts"  # Seed initial data
+
+    - step: "Database Security"
+      tasks:
+        - "Create dedicated database user with limited privileges"
+        - "Configure SSL connections"
+        - "Set up automated backups"
+        - "Configure connection pooling"
+
+  application_deployment:
+    - step: "Application Setup"
+      commands:
+        - "git clone <repository-url>"
+        - "npm install --production"
+        - "npm run build"
+        - "npm run check"  # Type checking
+
+    - step: "Configuration"
+      tasks:
+        - "Set environment variables from template"
+        - "Configure integration secrets"
+        - "Set up file upload directories"
+        - "Configure logging"
+
+    - step: "Process Management"
+      commands:
+        - "pm2 start ecosystem.config.js"
+        - "pm2 save"
+        - "pm2 startup"
+
+  post_deployment:
+    - step: "Health Checks"
+      tasks:
+        - "Verify application starts successfully"
+        - "Test database connectivity"
+        - "Test authentication flows"
+        - "Verify integration connectivity"
+
+    - step: "Monitoring Setup"
+      tasks:
+        - "Configure application monitoring"
+        - "Set up log aggregation"
+        - "Configure alerting rules"
+        - "Set up uptime monitoring"
+
+# Process Management (PM2 Configuration)
+process_management:
+  pm2_config:
+    apps:
+      - name: "business-platform"
+        script: "dist/index.js"
+        instances: "max"  # Use all CPU cores in production
+        exec_mode: "cluster"
+        env:
+          NODE_ENV: "production"
+          PORT: 5000
+        env_development:
+          NODE_ENV: "development"
+          PORT: 3001
+        log_file: "./logs/app.log"
+        error_file: "./logs/error.log"
+        out_file: "./logs/out.log"
+        max_memory_restart: "1G"
+        node_args: "--max-old-space-size=1024"
+        watch: false  # Disable in production
+        ignore_watch: ["node_modules", "logs", "uploads"]
+
+# Health Check Configuration
+health_checks:
+  application:
+    endpoint: "/health"
+    expected_status: 200
+    timeout_seconds: 30
+    interval_seconds: 60
+
+  database:
+    query: "SELECT 1"
+    timeout_seconds: 10
+    interval_seconds: 30
+
+  integrations:
+    slack:
+      endpoint: "https://slack.com/api/auth.test"
+      check_interval: 300  # 5 minutes
+    github:
+      endpoint: "https://api.github.com/user"
+      check_interval: 300
+    email:
+      check_type: "smtp_connect"
+      check_interval: 600  # 10 minutes
+
+# Backup Configuration
+backup_configuration:
+  database:
+    frequency: "daily"
+    retention_days: 30
+    backup_location: "s3://backups/business-platform/"
+    encryption: true
+    compression: true
+
+  application_data:
+    frequency: "weekly"
+    retention_weeks: 12
+    includes:
+      - "uploads/"
+      - "logs/"
+      - "configuration files"
+
+# Rollback Procedures
+rollback_procedures:
+  quick_rollback:
+    - "Stop current application: pm2 stop business-platform"
+    - "Switch to previous version: git checkout <previous-tag>"
+    - "Restore dependencies: npm install --production"
+    - "Start application: pm2 start business-platform"
+
+  database_rollback:
+    - "Stop application to prevent new writes"
+    - "Restore database from backup"
+    - "Update application to compatible version"
+    - "Restart application and verify"
+
+# Security Hardening
+security_hardening:
+  server_security:
+    - "Disable root login"
+    - "Configure firewall (UFW/iptables)"
+    - "Set up SSH key authentication only"
+    - "Install security updates automatically"
+    - "Configure fail2ban for intrusion prevention"
+
+  application_security:
+    - "Use least privilege principle for database user"
+    - "Configure security headers"
+    - "Enable rate limiting"
+    - "Set up audit logging"
+    - "Regular security updates"
+
+  network_security:
+    - "Use HTTPS only"
+    - "Configure proper CORS policies"
+    - "Set up DDoS protection"
+    - "Use secure session configuration"
+    - "Regular SSL certificate renewal"
+
+# Monitoring and Alerting
+monitoring_configuration:
+  metrics_collection:
+    - "Application performance metrics"
+    - "System resource utilization"
+    - "Database performance"
+    - "User activity metrics"
+    - "Error rates and response times"
+
+  alerting_rules:
+    critical:
+      - condition: "Error rate > 5%"
+        notification: ["email", "slack"]
+      - condition: "Response time > 5 seconds"
+        notification: ["email", "slack"]
+      - condition: "Database connections > 90%"
+        notification: ["email", "slack", "teams"]
+
+    warning:
+      - condition: "CPU usage > 80%"
+        notification: ["slack"]
+      - condition: "Memory usage > 85%"
+        notification: ["slack"]
+      - condition: "Disk usage > 90%"
+        notification: ["email", "slack"]
+
+# Maintenance Windows
+maintenance:
+  scheduled_maintenance:
+    frequency: "monthly"
+    duration: "2 hours"
+    preferred_time: "Sunday 02:00 UTC"
+    activities:
+      - "Security updates"
+      - "Dependency updates"
+      - "Database maintenance"
+      - "Log rotation"
+      - "Backup verification"
+
+  emergency_maintenance:
+    response_time: "1 hour"
+    escalation_procedures: "defined in runbook"
+    communication_channels: ["status page", "email", "slack"]
+
+# Usage Instructions:
+# 1. **Choose Environment**: Select development, staging, or production configuration
+# 2. **Set Environment Variables**: Use the template to configure all required variables
+# 3. **Follow Deployment Steps**: Execute steps in order for proper deployment
+# 4. **Configure Monitoring**: Set up health checks and alerting
+# 5. **Test Thoroughly**: Verify all functionality before going live
+#
+# This template provides a complete deployment blueprint for the business platform across all environments.
