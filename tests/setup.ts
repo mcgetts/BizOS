@@ -4,13 +4,37 @@ import {
   users, clients, companies, projects, tasks, invoices, expenses,
   knowledgeArticles, marketingCampaigns, supportTickets,
   timeEntries, clientInteractions, documents, salesOpportunities,
-  opportunityNextSteps, opportunityCommunications, opportunityStakeholders
+  opportunityNextSteps, opportunityCommunications, opportunityStakeholders,
+  projectBudgets, taskDependencies, projectComments, projectActivity,
+  userCapacity, userAvailability, userSkills, resourceAllocations,
+  budgetCategories, timeEntryApprovals, workloadSnapshots, notifications,
+  projectTemplates, taskTemplates, opportunityFileAttachments,
+  companyGoals, systemVariables, opportunityActivityHistory
 } from '@shared/schema';
 
 // Test database cleanup utilities
 export async function cleanupDatabase() {
   // Clean tables in reverse dependency order to avoid foreign key constraints
+
+  // Clean up notification and activity logs first
+  await db.delete(notifications);
+  await db.delete(projectActivity);
+  await db.delete(projectComments);
+
+  // Clean up time tracking and approvals
+  await db.delete(timeEntryApprovals);
   await db.delete(timeEntries);
+
+  // Clean up resource management
+  await db.delete(workloadSnapshots);
+  await db.delete(resourceAllocations);
+  await db.delete(userAvailability);
+  await db.delete(userSkills);
+  await db.delete(userCapacity);
+
+  // Clean up project-specific data
+  await db.delete(taskDependencies);
+  await db.delete(projectBudgets);
   await db.delete(clientInteractions);
   await db.delete(supportTickets);
   await db.delete(marketingCampaigns);
@@ -21,14 +45,29 @@ export async function cleanupDatabase() {
   await db.delete(tasks);
   await db.delete(projects);
 
-  // Clean up opportunity-related tables first (in dependency order)
+  // Clean up templates
+  await db.delete(taskTemplates);
+  await db.delete(projectTemplates);
+
+  // Clean up opportunity-related tables (in dependency order)
+  await db.delete(opportunityFileAttachments);
+  await db.delete(opportunityActivityHistory);
   await db.delete(opportunityNextSteps);
   await db.delete(opportunityCommunications);
   await db.delete(opportunityStakeholders);
   await db.delete(salesOpportunities);
 
+  // Clean up company-related data
+  await db.delete(companyGoals);
   await db.delete(clients);
   await db.delete(companies);
+
+  // Clean up budget categories
+  await db.delete(budgetCategories);
+
+  // Clean up system variables
+  await db.delete(systemVariables);
+
   // Note: Keep users for authentication tests
 }
 

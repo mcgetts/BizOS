@@ -84,7 +84,7 @@ export async function calculateUserWorkload(
     .orderBy(desc(userCapacity.effectiveFrom))
     .limit(1);
 
-  const userCapacityData = capacity[0];
+  let userCapacityData = capacity[0];
   if (!userCapacityData) {
     // Create default capacity data if none exists
     console.warn(`No capacity data found for user ${userId}, using defaults`);
