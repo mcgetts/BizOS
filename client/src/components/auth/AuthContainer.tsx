@@ -12,10 +12,11 @@ type AuthMode = 'login' | 'register' | 'forgot-password';
 
 interface AuthContainerProps {
   onSuccess?: () => void;
+  initialMode?: AuthMode;
 }
 
-export function AuthContainer({ onSuccess }: AuthContainerProps) {
-  const [mode, setMode] = useState<AuthMode>('login');
+export function AuthContainer({ onSuccess, initialMode = 'login' }: AuthContainerProps) {
+  const [mode, setMode] = useState<AuthMode>(initialMode);
   const [resetSuccess, setResetSuccess] = useState(false);
 
   // Login mutation

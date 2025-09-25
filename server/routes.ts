@@ -306,6 +306,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Generate email verification token
       const emailVerificationToken = PasswordUtils.generateEmailVerificationToken();
 
+      // In development mode without SMTP, automatically verify emails
+      const emailVerified = !emailService.isEmailConfigured();
+
       // Create user
       const [newUser] = await db
         .insert(users)
@@ -318,8 +321,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           position: position || null,
           passwordHash,
           authProvider: 'local',
-          emailVerified: false, // Require email verification
-          emailVerificationToken,
+          emailVerified, // Auto-verify in dev mode, require verification in production
+          emailVerificationToken: emailVerified ? null : emailVerificationToken,
           role: 'employee', // Default role
           isActive: true
         })
@@ -350,8 +353,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Clear rate limiting on successful registration
       AuthRateLimiter.clearAttempts(identifier);
 
+      const successMessage = emailVerified
+        ? 'Registration successful! Your account is ready to use - you can now log in.'
+        : 'Registration successful! Please check your email to verify your account.';
+
       res.status(201).json({
-        message: 'Registration successful! Please check your email to verify your account.',
+        message: successMessage,
         user: {
           id: newUser.id,
           email: newUser.email,

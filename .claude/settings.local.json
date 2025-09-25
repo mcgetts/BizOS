@@ -45,7 +45,8 @@
       "Bash(chmod:*)",
       "Bash(bash:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Read(//proc/201/net/**)"
     ],
     "deny": [],
     "ask": []

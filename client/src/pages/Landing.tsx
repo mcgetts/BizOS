@@ -2,10 +2,11 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AuthContainer } from "@/components/auth/AuthContainer";
-import { Building2, Users, FolderOpen, PoundSterling, BookOpen, Megaphone, ArrowRight, Monitor } from "lucide-react";
+import { Building2, Users, FolderOpen, PoundSterling, BookOpen, Megaphone, Monitor } from "lucide-react";
 
 export default function Landing() {
   const [showAuth, setShowAuth] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
 
   const handleDevLogin = async () => {
     // Use dev login only in development mode
@@ -45,7 +46,10 @@ export default function Landing() {
             </p>
           </div>
 
-          <AuthContainer onSuccess={() => window.location.reload()} />
+          <AuthContainer
+            onSuccess={() => window.location.reload()}
+            initialMode={authMode}
+          />
 
           <div className="text-center mt-8">
             <Button
@@ -123,13 +127,19 @@ export default function Landing() {
           <div className="flex items-center space-x-4">
             <Button
               variant="ghost"
-              onClick={() => setShowAuth(true)}
+              onClick={() => {
+                setAuthMode('login');
+                setShowAuth(true);
+              }}
               data-testid="button-login"
             >
               Sign In
             </Button>
             <Button
-              onClick={() => setShowAuth(true)}
+              onClick={() => {
+                setAuthMode('register');
+                setShowAuth(true);
+              }}
               data-testid="button-signup"
             >
               Sign Up
@@ -149,24 +159,6 @@ export default function Landing() {
             into one unified, professional-grade system. Streamline your operations, enhance productivity, 
             and drive growth with BizOS.
           </p>
-          <div className="flex items-center justify-center space-x-4">
-            <Button
-              size="lg"
-              onClick={() => setShowAuth(true)}
-              data-testid="button-get-started"
-            >
-              Get Started
-              <ArrowRight className="ml-2 h-5 w-5" />
-            </Button>
-            <Button
-              variant="outline"
-              size="lg"
-              onClick={() => setShowAuth(true)}
-              data-testid="button-sign-in"
-            >
-              Sign In
-            </Button>
-          </div>
         </div>
 
         {/* Features Grid */}
@@ -200,7 +192,14 @@ export default function Landing() {
                 Join thousands of businesses that have streamlined their operations with BizOS. 
                 Get started today and experience the difference.
               </p>
-              <Button size="lg" onClick={() => setShowAuth(true)} data-testid="button-start-free">
+              <Button
+                size="lg"
+                onClick={() => {
+                  setAuthMode('register');
+                  setShowAuth(true);
+                }}
+                data-testid="button-start-free"
+              >
                 Start Your Journey
               </Button>
             </CardContent>

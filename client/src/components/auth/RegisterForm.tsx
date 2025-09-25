@@ -75,15 +75,15 @@ export function RegisterForm({
   error
 }: RegisterFormProps) {
   const [showPassword, setShowPassword] = useState(false);
-  const [password, setPassword] = useState("");
 
   const {
     register,
     handleSubmit,
     watch,
-    formState: { errors, isSubmitting }
+    formState: { errors, isSubmitting, isValid }
   } = useForm<RegisterUser>({
     resolver: zodResolver(registerUserSchema),
+    mode: "onChange",
     defaultValues: {
       email: "",
       password: "",
@@ -169,7 +169,6 @@ export function RegisterForm({
                 {...register("password")}
                 disabled={loading}
                 className="pr-10"
-                onChange={(e) => setPassword(e.target.value)}
               />
               <button
                 type="button"
@@ -268,7 +267,7 @@ export function RegisterForm({
           <Button
             type="submit"
             className="w-full"
-            disabled={loading || passwordStrength.score < 50}
+            disabled={loading || !isValid}
           >
             {loading ? (
               <>

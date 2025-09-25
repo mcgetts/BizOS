@@ -365,6 +365,20 @@ Project Management Team
   ) {
     const verificationUrl = `${protocol}://${host}/verify-email?token=${verificationToken}`;
 
+    // In development mode without SMTP, log the verification link instead of sending email
+    if (!this.isConfigured) {
+      console.log('\n=== EMAIL VERIFICATION ===');
+      console.log(`To: ${userEmail}`);
+      console.log(`Subject: Verify Your Email Address`);
+      console.log(`\nHello ${userName},`);
+      console.log('\nWelcome! Please verify your email address to complete your account setup.');
+      console.log('\nClick the following link to verify your email:');
+      console.log(`${verificationUrl}`);
+      console.log('\nIf you didn\'t create this account, you can safely ignore this email.');
+      console.log('=========================\n');
+      return true;
+    }
+
     const subject = 'Verify Your Email Address';
 
     const text = `
