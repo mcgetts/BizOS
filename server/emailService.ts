@@ -24,14 +24,32 @@ class EmailService {
 
   private initializeTransporter() {
     // Check if email configuration is available
+    const port = parseInt(process.env.SMTP_PORT || '587');
+    const isSecurePort = port === 465;
     const emailConfig = {
       host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: process.env.SMTP_SECURE === 'true',
+      port: port,
+      secure: isSecurePort, // Only true for port 465
+      requireTLS: !isSecurePort, // Force TLS for non-secure ports
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
       },
+      // Additional TLS options to handle SSL/TLS issues
+      tls: {
+        // Allow self-signed certificates
+        rejectUnauthorized: false,
+        // Let Node.js handle TLS version negotiation automatically
+        minVersion: 'TLSv1.2',
+        maxVersion: 'TLSv1.3'
+      },
+      // Connection options
+      connectionTimeout: 60000, // 60 seconds
+      greetingTimeout: 30000, // 30 seconds  
+      socketTimeout: 60000, // 60 seconds
+      // Enable debug for troubleshooting
+      debug: process.env.NODE_ENV === 'development',
+      logger: process.env.NODE_ENV === 'development'
     };
 
     if (!emailConfig.host || !emailConfig.auth.user || !emailConfig.auth.pass) {
@@ -365,9 +383,9 @@ Project Management Team
   ) {
     const verificationUrl = `${protocol}://${host}/verify-email?token=${verificationToken}`;
 
-    // In development mode without SMTP, log the verification link instead of sending email
+    // In development mode without SMTP OR if SMTP authentication fails, log the verification link
     if (!this.isConfigured) {
-      console.log('\n=== EMAIL VERIFICATION ===');
+      console.log('\n=== EMAIL VERIFICATION (Development Mode) ===');
       console.log(`To: ${userEmail}`);
       console.log(`Subject: Verify Your Email Address`);
       console.log(`\nHello ${userName},`);
@@ -431,7 +449,23 @@ Your Team
 </html>
     `.trim();
 
-    return this.sendEmail({ to: userEmail, subject, text, html });
+    // Try to send email, but fall back to console logging if authentication fails
+    const success = await this.sendEmail({ to: userEmail, subject, text, html });
+    
+    if (!success && process.env.NODE_ENV === 'development') {
+      console.log('\n=== EMAIL VERIFICATION (Fallback - SMTP Auth Failed) ===');
+      console.log(`To: ${userEmail}`);
+      console.log(`Subject: ${subject}`);
+      console.log(`\nHello ${userName},`);
+      console.log('\nWelcome! Please verify your email address to complete your account setup.');
+      console.log('\nClick the following link to verify your email:');
+      console.log(`${verificationUrl}`);
+      console.log('\nNOTE: In production, this would be sent via email.');
+      console.log('=========================\n');
+      return true; // Return true in development so registration can complete
+    }
+    
+    return success;
   }
 
   public async sendPasswordReset(
