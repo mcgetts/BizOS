@@ -38,7 +38,7 @@ const navigationGroups = [
         icon: Megaphone,
       },
       {
-        title: "CRM",
+        title: "Sales",
         href: "/clients",
         icon: Users,
       },
