@@ -522,7 +522,13 @@ export default function Team() {
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Avg Productivity</p>
                   <p className="text-2xl font-bold" data-testid="text-avg-productivity">
-                    N/A
+                    {(() => {
+                      if (!tasks || tasks.length === 0) return 'N/A';
+                      const completedTasks = tasks.filter(task => task.status === 'completed').length;
+                      const totalTasks = tasks.length;
+                      const productivity = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+                      return `${productivity}%`;
+                    })()}
                   </p>
                 </div>
                 <Award className="w-8 h-8 text-warning" />
@@ -1257,8 +1263,49 @@ export default function Team() {
                   variant="destructive"
                   onClick={() => {
                     if (selectedMember) {
-                      setIsDetailsDialogOpen(false);
-                      // Delete functionality - implement API call
+                      const deleteMember = async () => {
+                        try {
+                          const response = await fetch(`/api/users/${selectedMember.id}`, {
+                            method: 'DELETE',
+                          });
+
+                          if (response.ok) {
+                            queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+                            toast({
+                              title: "Success",
+                              description: `${getUserDisplayName(selectedMember)} has been deleted successfully`,
+                            });
+                            setIsDetailsDialogOpen(false);
+                          } else {
+                            const errorData = await response.text();
+                            let errorMessage = 'Failed to delete team member';
+                            try {
+                              const parsedError = JSON.parse(errorData);
+                              errorMessage = parsedError.message || errorMessage;
+                            } catch {
+                              errorMessage = response.status === 401 ? 'Unauthorized - please log in again' :
+                                         response.status === 403 ? 'Permission denied - admin role required' :
+                                         errorMessage;
+                            }
+                            toast({
+                              title: "Error",
+                              description: errorMessage,
+                              variant: "destructive",
+                            });
+                          }
+                        } catch (error) {
+                          console.error('Failed to delete member:', error);
+                          toast({
+                            title: "Error",
+                            description: "Failed to delete team member. Please try again.",
+                            variant: "destructive",
+                          });
+                        }
+                      };
+
+                      if (confirm(`Are you sure you want to delete ${getUserDisplayName(selectedMember)}? This action cannot be undone.`)) {
+                        deleteMember();
+                      }
                     }
                   }}
                 >

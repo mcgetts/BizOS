@@ -4,3 +4,8 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+
+# Documentation - ensure YAML DSL files are tracked
+!docs/
+!docs/**/*.yaml
+!docs/**/*.md

@@ -237,12 +237,12 @@ export function GanttChart({ tasks, projects, users, dependencies }: GanttChartP
 
     // Generate connection lines
     dependencies.forEach(dep => {
-      const fromTask = taskPositions.get(dep.dependencyId);
+      const fromTask = taskPositions.get(dep.dependsOnTaskId);
       const toTask = taskPositions.get(dep.taskId);
 
-      if (fromTask && toTask) {
+      if (fromTask && toTask && dep.dependsOnTaskId && dep.taskId) {
         connections.push({
-          from: { x: fromTask.x + fromTask.width / 2, y: fromTask.y, taskId: dep.dependencyId },
+          from: { x: fromTask.x + fromTask.width / 2, y: fromTask.y, taskId: dep.dependsOnTaskId },
           to: { x: toTask.x - toTask.width / 2, y: toTask.y, taskId: dep.taskId }
         });
       }
@@ -540,7 +540,9 @@ export function GanttChart({ tasks, projects, users, dependencies }: GanttChartP
                                   {task.assignedUser && (
                                     <div className="flex items-center gap-1 text-muted-foreground">
                                       <Users className="h-3 w-3" />
-                                      <span className="truncate">{task.assignedUser.name}</span>
+                                      <span className="truncate">
+                                        {`${task.assignedUser.firstName || ''} ${task.assignedUser.lastName || ''}`.trim() || task.assignedUser.email || 'Unknown User'}
+                                      </span>
                                     </div>
                                   )}
                                   {task.dependencies && task.dependencies.length > 0 && (

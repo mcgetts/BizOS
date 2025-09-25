@@ -79,15 +79,17 @@ export function ProjectCommunication({ projectId, projectName }: ProjectCommunic
     },
   });
 
-  const getUserName = (userId: string) => {
+  const getUserName = (userId: string | null) => {
+    if (!userId) return "Unknown User";
     const userRecord = users?.find(u => u.id === userId);
-    return userRecord ? `${userRecord.firstName} ${userRecord.lastName}` : "Unknown User";
+    return userRecord ? `${userRecord.firstName || ''} ${userRecord.lastName || ''}`.trim() || userRecord.email || "Unknown User" : "Unknown User";
   };
 
-  const getUserInitials = (userId: string) => {
+  const getUserInitials = (userId: string | null) => {
+    if (!userId) return "?";
     const userRecord = users?.find(u => u.id === userId);
     if (!userRecord) return "?";
-    return `${userRecord.firstName?.[0] || ""}${userRecord.lastName?.[0] || ""}`.toUpperCase();
+    return `${userRecord.firstName?.[0] || ""}${userRecord.lastName?.[0] || ""}`.toUpperCase() || userRecord.email?.[0]?.toUpperCase() || "?";
   };
 
   const handleAddComment = () => {
@@ -207,7 +209,7 @@ export function ProjectCommunication({ projectId, projectName }: ProjectCommunic
                         </div>
                         <div className="flex items-center gap-1 text-xs text-muted-foreground">
                           <Clock className="w-3 h-3" />
-                          {formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true })}
+                          {comment.createdAt ? formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true }) : 'Unknown time'}
                         </div>
                       </div>
                       <p className="text-sm whitespace-pre-wrap">{comment.content}</p>

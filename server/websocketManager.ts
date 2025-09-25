@@ -4,7 +4,7 @@ import { db } from './db';
 import { notifications, insertNotificationSchema, users } from '../shared/schema';
 import { emailService } from './emailService.js';
 import type { InsertNotification } from '../shared/schema';
-import { eq } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 
 interface AuthenticatedWebSocket extends WebSocket {
   userId?: string;
@@ -373,6 +373,3 @@ class WebSocketManager {
 
 // Create singleton instance
 export const wsManager = new WebSocketManager();
-
-// Import necessary functions for database operations
-import { eq, desc } from 'drizzle-orm';

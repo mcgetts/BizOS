@@ -74,7 +74,10 @@ export async function calculateUserWorkload(
         eq(userCapacity.userId, userId),
         or(
           eq(userCapacity.effectiveTo, null),
-          between(startDate, userCapacity.effectiveFrom, userCapacity.effectiveTo)
+          and(
+            sql`${userCapacity.effectiveFrom} <= ${startDate}`,
+            sql`${userCapacity.effectiveTo} >= ${startDate}`
+          )
         )
       )
     )
@@ -83,7 +86,34 @@ export async function calculateUserWorkload(
 
   const userCapacityData = capacity[0];
   if (!userCapacityData) {
-    throw new Error(`No capacity data found for user ${userId}`);
+    // Create default capacity data if none exists
+    console.warn(`No capacity data found for user ${userId}, using defaults`);
+    const defaultCapacity = {
+      userId,
+      hoursPerDay: "8.00",
+      hoursPerWeek: "40.00",
+      overtimeMultiplier: "1.50",
+      effectiveFrom: new Date(),
+      effectiveTo: null,
+    };
+
+    // Insert default capacity for future use
+    try {
+      await db.insert(userCapacity).values(defaultCapacity);
+    } catch (error) {
+      console.warn('Failed to create default capacity, continuing with runtime defaults');
+    }
+
+    // Use runtime defaults for this calculation
+    const runtimeDefaults = {
+      userId,
+      hoursPerDay: "8.00",
+      hoursPerWeek: "40.00",
+      overtimeMultiplier: "1.50",
+      effectiveFrom: new Date(),
+      effectiveTo: null,
+    };
+    userCapacityData = runtimeDefaults as any;
   }
 
   // Calculate working days in the period (excluding weekends)
@@ -100,10 +130,12 @@ export async function calculateUserWorkload(
         eq(userAvailability.status, "approved"),
         or(
           and(
-            between(userAvailability.startDate, startDate, endDate)
+            sql`${userAvailability.startDate} >= ${startDate}`,
+            sql`${userAvailability.startDate} <= ${endDate}`
           ),
           and(
-            between(userAvailability.endDate, startDate, endDate)
+            sql`${userAvailability.endDate} >= ${startDate}`,
+            sql`${userAvailability.endDate} <= ${endDate}`
           ),
           and(
             sql`${userAvailability.startDate} <= ${startDate}`,
@@ -139,10 +171,12 @@ export async function calculateUserWorkload(
         eq(resourceAllocations.status, "active"),
         or(
           and(
-            between(resourceAllocations.startDate, startDate, endDate)
+            sql`${resourceAllocations.startDate} >= ${startDate}`,
+            sql`${resourceAllocations.startDate} <= ${endDate}`
           ),
           and(
-            between(resourceAllocations.endDate, startDate, endDate)
+            sql`${resourceAllocations.endDate} >= ${startDate}`,
+            sql`${resourceAllocations.endDate} <= ${endDate}`
           ),
           and(
             sql`${resourceAllocations.startDate} <= ${startDate}`,
@@ -163,7 +197,8 @@ export async function calculateUserWorkload(
     .where(
       and(
         eq(timeEntries.userId, userId),
-        between(timeEntries.date, startDate, endDate)
+        sql`${timeEntries.date} >= ${startDate}`,
+        sql`${timeEntries.date} <= ${endDate}`
       )
     );
 
