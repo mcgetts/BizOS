@@ -125,6 +125,33 @@
   transition: width 0.3s ease-in-out;
 }
 
+/* Mobile utilities */
+.touch-manipulation {
+  touch-action: manipulation;
+}
+
+.safe-area-inset {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+@media (max-width: 768px) {
+  .mobile-padding {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .mobile-text-sm {
+    font-size: 0.875rem;
+  }
+
+  .mobile-spacing {
+    gap: 0.5rem;
+  }
+}
+
 /* Animation utilities */
 .animate-slide-up {
   animation: slideUp 0.3s ease-out;

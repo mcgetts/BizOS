@@ -9,6 +9,7 @@ import { ChevronDown, ChevronRight, Calendar, Clock, GitBranch, Users } from "lu
 import type { Task, Project, User, TaskDependency } from "@shared/schema";
 import { getStatusBadge, getPriorityBadge } from "@/lib/statusUtils";
 import { calculateCriticalPath, getCriticalTasksForProject, type CriticalPathResult } from "@/lib/criticalPathAnalysis";
+import { MobileGantt } from "@/components/mobile/MobileGantt";
 
 interface GanttChartProps {
   tasks: Task[];
@@ -41,6 +42,11 @@ export function GanttChart({ tasks, projects, users, dependencies }: GanttChartP
   const [draggedTask, setDraggedTask] = useState<TaskWithProject | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [showCriticalPath, setShowCriticalPath] = useState<boolean>(true);
+
+  // Return mobile-optimized Gantt chart for small screens
+  if (isMobile) {
+    return <MobileGantt tasks={tasks} projects={projects} users={users} dependencies={dependencies} />;
+  }
 
   // Calculate timeline configuration
   const timelineConfig = useMemo((): TimelineConfig => {

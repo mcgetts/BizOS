@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   LayoutDashboard,
   Users,
@@ -18,7 +19,10 @@ import {
   Target,
   Clock,
   Calculator,
+  X,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 // Executive Dashboard - Top Level
 const execDashboard = {
@@ -123,21 +127,25 @@ interface SidebarProps {
     role?: string;
     profileImageUrl?: string;
   };
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export function Sidebar({ user }: SidebarProps) {
+export function Sidebar({ user, isOpen = false, onOpenChange }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [location] = useLocation();
+  const isMobile = useIsMobile();
 
-  const userDisplayName = user?.firstName && user?.lastName 
+  const userDisplayName = user?.firstName && user?.lastName
     ? `${user.firstName} ${user.lastName}`
     : user?.firstName || "User";
 
-  return (
+  // Create the sidebar content component
+  const SidebarContent = ({ className = "", showCloseButton = false }: { className?: string; showCloseButton?: boolean }) => (
     <div
       className={cn(
-        "bg-sidebar/70 glassmorphism border-r border-sidebar-border flex flex-col transition-width",
-        collapsed ? "sidebar-collapsed" : "sidebar-expanded"
+        "flex flex-col h-full",
+        className
       )}
       data-testid="sidebar"
     >
@@ -147,17 +155,29 @@ export function Sidebar({ user }: SidebarProps) {
           <div className="w-8 h-8 bg-sidebar-primary rounded-lg flex items-center justify-center">
             <Building2 className="w-5 h-5 text-sidebar-primary-foreground" />
           </div>
-          {!collapsed && (
+          {(!collapsed || isMobile) && (
             <span className="font-semibold text-lg text-sidebar-foreground">BizOS</span>
           )}
         </div>
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="p-1 rounded-md hover:bg-sidebar-accent transition-colors"
-          data-testid="button-sidebar-toggle"
-        >
-          <Menu className="w-5 h-5 text-sidebar-foreground" />
-        </button>
+        {showCloseButton && onOpenChange ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onOpenChange(false)}
+            className="p-1 rounded-md hover:bg-sidebar-accent transition-colors"
+            data-testid="button-sidebar-close"
+          >
+            <X className="w-5 h-5 text-sidebar-foreground" />
+          </Button>
+        ) : !isMobile ? (
+          <button
+            onClick={() => setCollapsed(!collapsed)}
+            className="p-1 rounded-md hover:bg-sidebar-accent transition-colors"
+            data-testid="button-sidebar-toggle"
+          >
+            <Menu className="w-5 h-5 text-sidebar-foreground" />
+          </button>
+        ) : null}
       </div>
 
       {/* Navigation Menu */}
@@ -167,10 +187,10 @@ export function Sidebar({ user }: SidebarProps) {
           {(() => {
             const isActive = location === execDashboard.href;
             const Icon = execDashboard.icon;
-            
+
             return (
-              <Link 
-                key={execDashboard.href} 
+              <Link
+                key={execDashboard.href}
                 href={execDashboard.href}
                 className={cn(
                   "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors",
@@ -179,9 +199,10 @@ export function Sidebar({ user }: SidebarProps) {
                     : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                 )}
                 data-testid={`link-dashboard`}
+                onClick={() => isMobile && onOpenChange?.(false)}
               >
                 <Icon className="w-5 h-5" />
-                {!collapsed && <span>{execDashboard.title}</span>}
+                {(!collapsed || isMobile) && <span>{execDashboard.title}</span>}
               </Link>
             );
           })()}
@@ -191,22 +212,22 @@ export function Sidebar({ user }: SidebarProps) {
         {navigationGroups.map((group, groupIndex) => (
           <div key={group.title} className={cn("space-y-1", groupIndex > 0 && "mt-6")}>
             {/* Group Header */}
-            {!collapsed && (
+            {(!collapsed || isMobile) && (
               <div className="px-3 py-1">
                 <span className="text-xs font-medium text-sidebar-foreground/60 uppercase tracking-wider">
                   {group.title}
                 </span>
               </div>
             )}
-            
+
             {/* Group Items */}
             {group.items.map((item) => {
               const isActive = location === item.href;
               const Icon = item.icon;
-              
+
               return (
-                <Link 
-                  key={item.href} 
+                <Link
+                  key={item.href}
                   href={item.href}
                   className={cn(
                     "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors",
@@ -215,9 +236,10 @@ export function Sidebar({ user }: SidebarProps) {
                       : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                   )}
                   data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}
+                  onClick={() => isMobile && onOpenChange?.(false)}
                 >
                   <Icon className="w-5 h-5" />
-                  {!collapsed && <span>{item.title}</span>}
+                  {(!collapsed || isMobile) && <span>{item.title}</span>}
                 </Link>
               );
             })}
@@ -230,14 +252,14 @@ export function Sidebar({ user }: SidebarProps) {
         <div className="flex items-center space-x-3">
           <img
             src={
-              user?.profileImageUrl || 
+              user?.profileImageUrl ||
               "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&h=100"
             }
             alt="Profile"
             className="w-8 h-8 rounded-full object-cover"
             data-testid="img-profile"
           />
-          {!collapsed && (
+          {(!collapsed || isMobile) && (
             <div>
               <div className="text-sm font-medium text-sidebar-foreground" data-testid="text-username">
                 {userDisplayName}
@@ -249,6 +271,32 @@ export function Sidebar({ user }: SidebarProps) {
           )}
         </div>
       </div>
+    </div>
+  );
+
+  // Mobile: return sheet-based sidebar
+  if (isMobile) {
+    return (
+      <Sheet open={isOpen} onOpenChange={onOpenChange}>
+        <SheetContent
+          side="left"
+          className="w-[280px] p-0 bg-sidebar/70 glassmorphism border-sidebar-border text-sidebar-foreground"
+        >
+          <SidebarContent showCloseButton={true} />
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
+  // Desktop: return regular sidebar
+  return (
+    <div
+      className={cn(
+        "bg-sidebar/70 glassmorphism border-r border-sidebar-border transition-width",
+        collapsed ? "sidebar-collapsed" : "sidebar-expanded"
+      )}
+    >
+      <SidebarContent />
     </div>
   );
 }
