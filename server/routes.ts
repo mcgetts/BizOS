@@ -3197,6 +3197,338 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // =============================================================================
+  // INTEGRATION MANAGEMENT ENDPOINTS
+  // =============================================================================
+
+  // Integration configuration and status
+  app.get('/api/integrations/status', isAuthenticated, requireRole(['admin']), async (req, res) => {
+    try {
+      const integrationManager = (req.app as any).integrationManager;
+
+      if (!integrationManager) {
+        return res.json({
+          overall: 'unhealthy',
+          services: {
+            slack: { status: 'disconnected', message: 'Integration manager not initialized' },
+            github: { status: 'disconnected', message: 'Integration manager not initialized' },
+            teams: { status: 'disconnected', message: 'Integration manager not initialized' }
+          }
+        });
+      }
+
+      const health = await integrationManager.getHealthStatus();
+      res.json(health);
+    } catch (error) {
+      console.error('Error getting integration status:', error);
+      res.status(500).json({ message: 'Failed to get integration status' });
+    }
+  });
+
+  app.get('/api/integrations/stats', isAuthenticated, requireRole(['admin']), async (req, res) => {
+    try {
+      const integrationManager = (req.app as any).integrationManager;
+
+      if (!integrationManager) {
+        return res.json({
+          slack: { enabled: false, messagessSent: 0, status: 'disconnected' },
+          github: { enabled: false, issuesCreated: 0, repositories: 0, status: 'disconnected' },
+          teams: { enabled: false, messagessSent: 0, status: 'disconnected' }
+        });
+      }
+
+      const stats = integrationManager.getStats();
+      res.json(stats);
+    } catch (error) {
+      console.error('Error getting integration stats:', error);
+      res.status(500).json({ message: 'Failed to get integration stats' });
+    }
+  });
+
+  // Send test notifications
+  app.post('/api/integrations/test/slack', isAuthenticated, requireRole(['admin']), async (req, res) => {
+    try {
+      const { message = 'Test message from Business Platform' } = req.body;
+      const integrationManager = (req.app as any).integrationManager;
+
+      if (!integrationManager) {
+        return res.status(503).json({ message: 'Integration manager not available' });
+      }
+
+      await integrationManager.sendAlert(message, 'info');
+      res.json({ success: true, message: 'Test message sent to Slack' });
+    } catch (error) {
+      console.error('Error sending Slack test:', error);
+      res.status(500).json({ message: 'Failed to send test message' });
+    }
+  });
+
+  app.post('/api/integrations/test/teams', isAuthenticated, requireRole(['admin']), async (req, res) => {
+    try {
+      const { message = 'Test message from Business Platform' } = req.body;
+      const integrationManager = (req.app as any).integrationManager;
+
+      if (!integrationManager) {
+        return res.status(503).json({ message: 'Integration manager not available' });
+      }
+
+      await integrationManager.sendCrossplatformMessage('Test Notification', message, 'info');
+      res.json({ success: true, message: 'Test message sent to Teams' });
+    } catch (error) {
+      console.error('Error sending Teams test:', error);
+      res.status(500).json({ message: 'Failed to send test message' });
+    }
+  });
+
+  app.post('/api/integrations/test/github', isAuthenticated, requireRole(['admin']), async (req, res) => {
+    try {
+      const { owner, repo } = req.body;
+
+      if (!owner || !repo) {
+        return res.status(400).json({ message: 'Owner and repo are required' });
+      }
+
+      const integrationManager = (req.app as any).integrationManager;
+
+      if (!integrationManager) {
+        return res.status(503).json({ message: 'Integration manager not available' });
+      }
+
+      const data = await integrationManager.syncRepositoryData(owner, repo);
+      res.json({ success: true, message: 'GitHub sync completed', data: {
+        commits: data.commits.length,
+        pullRequests: data.pullRequests.length,
+        issues: data.issues.length
+      }});
+    } catch (error) {
+      console.error('Error testing GitHub integration:', error);
+      res.status(500).json({ message: 'Failed to test GitHub integration' });
+    }
+  });
+
+  // GitHub-specific endpoints
+  app.get('/api/integrations/github/repositories/:owner/:repo/commits', isAuthenticated, requireRole(['admin']), async (req, res) => {
+    try {
+      const { owner, repo } = req.params;
+      const { since } = req.query;
+
+      const integrationManager = (req.app as any).integrationManager;
+
+      if (!integrationManager) {
+        return res.status(503).json({ message: 'Integration manager not available' });
+      }
+
+      const sinceDate = since ? new Date(since as string) : undefined;
+      const commits = await integrationManager.getCommitActivity(owner, repo, sinceDate);
+
+      res.json(commits);
+    } catch (error) {
+      console.error('Error getting GitHub commits:', error);
+      res.status(500).json({ message: 'Failed to get GitHub commits' });
+    }
+  });
+
+  app.post('/api/integrations/github/repositories/:owner/:repo/create-project', isAuthenticated, requireRole(['admin']), async (req, res) => {
+    try {
+      const { owner, repo } = req.params;
+
+      const integrationManager = (req.app as any).integrationManager;
+
+      if (!integrationManager) {
+        return res.status(503).json({ message: 'Integration manager not available' });
+      }
+
+      const projectData = await integrationManager.createProjectFromRepository(owner, repo);
+
+      if (projectData) {
+        // Create the project in the database
+        const [project] = await db
+          .insert(projects)
+          .values({
+            ...projectData,
+            id: crypto.randomUUID(),
+            createdAt: new Date(),
+            updatedAt: new Date()
+          } as any)
+          .returning();
+
+        res.json({ success: true, project });
+      } else {
+        res.status(500).json({ message: 'Failed to create project from repository' });
+      }
+    } catch (error) {
+      console.error('Error creating project from GitHub repository:', error);
+      res.status(500).json({ message: 'Failed to create project from repository' });
+    }
+  });
+
+  // GitHub webhook handler
+  app.post('/api/integrations/github/webhook', async (req, res) => {
+    try {
+      const event = req.headers['x-github-event'] as string;
+
+      if (!event) {
+        return res.status(400).json({ message: 'Missing GitHub event header' });
+      }
+
+      const integrationManager = (req.app as any).integrationManager;
+
+      if (!integrationManager) {
+        console.log('GitHub webhook received but integration manager not available');
+        return res.status(200).json({ message: 'Webhook received' });
+      }
+
+      const processed = integrationManager.handleGitHubWebhook(event, req.body);
+
+      if (processed) {
+        console.log('GitHub webhook processed:', processed.type, processed.action);
+      }
+
+      res.status(200).json({ message: 'Webhook processed' });
+    } catch (error) {
+      console.error('Error handling GitHub webhook:', error);
+      res.status(500).json({ message: 'Webhook processing failed' });
+    }
+  });
+
+  // Manual notification sending
+  app.post('/api/integrations/notify/project', isAuthenticated, async (req, res) => {
+    try {
+      const { projectId, message, type } = req.body;
+
+      if (!projectId || !message || !type) {
+        return res.status(400).json({ message: 'Project ID, message, and type are required' });
+      }
+
+      const [project] = await db
+        .select()
+        .from(projects)
+        .where(eq(projects.id, projectId));
+
+      if (!project) {
+        return res.status(404).json({ message: 'Project not found' });
+      }
+
+      const integrationManager = (req.app as any).integrationManager;
+
+      if (integrationManager) {
+        await integrationManager.notifyProjectEvent(project, message, type);
+        res.json({ success: true, message: 'Notifications sent' });
+      } else {
+        res.status(503).json({ message: 'Integration manager not available' });
+      }
+    } catch (error) {
+      console.error('Error sending project notification:', error);
+      res.status(500).json({ message: 'Failed to send notifications' });
+    }
+  });
+
+  app.post('/api/integrations/notify/task', isAuthenticated, async (req, res) => {
+    try {
+      const { taskId, type } = req.body;
+
+      if (!taskId || !type) {
+        return res.status(400).json({ message: 'Task ID and type are required' });
+      }
+
+      const [task] = await db
+        .select()
+        .from(tasks)
+        .where(eq(tasks.id, taskId));
+
+      if (!task) {
+        return res.status(404).json({ message: 'Task not found' });
+      }
+
+      const [project] = await db
+        .select()
+        .from(projects)
+        .where(eq(projects.id, task.projectId || ''));
+
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, task.assignedTo || ''));
+
+      const integrationManager = (req.app as any).integrationManager;
+
+      if (integrationManager && project && user) {
+        await integrationManager.notifyTaskEvent(task, project, user, type);
+        res.json({ success: true, message: 'Notifications sent' });
+      } else {
+        res.status(503).json({ message: 'Integration manager not available or missing dependencies' });
+      }
+    } catch (error) {
+      console.error('Error sending task notification:', error);
+      res.status(500).json({ message: 'Failed to send notifications' });
+    }
+  });
+
+  // Daily digest trigger
+  app.post('/api/integrations/digest/send', isAuthenticated, requireRole(['admin']), async (req, res) => {
+    try {
+      const integrationManager = (req.app as any).integrationManager;
+
+      if (!integrationManager) {
+        return res.status(503).json({ message: 'Integration manager not available' });
+      }
+
+      // Calculate digest stats
+      const today = new Date();
+      const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+
+      const [completedTasks] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(tasks)
+        .where(and(
+          eq(tasks.status, 'completed'),
+          sql`${tasks.updatedAt} >= ${yesterday}`
+        ));
+
+      const [newProjects] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(projects)
+        .where(sql`${projects.createdAt} >= ${yesterday}`);
+
+      const [overdueItems] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(tasks)
+        .where(and(
+          sql`${tasks.dueDate} < ${today}`,
+          sql`${tasks.status} != 'completed'`
+        ));
+
+      const recentActivity = await db
+        .select({
+          title: tasks.title,
+          project: projects.name,
+          status: tasks.status
+        })
+        .from(tasks)
+        .leftJoin(projects, eq(tasks.projectId, projects.id))
+        .where(sql`${tasks.updatedAt} >= ${yesterday}`)
+        .orderBy(desc(tasks.updatedAt))
+        .limit(5);
+
+      const teamActivity = recentActivity.map(item =>
+        `• ${item.title} in ${item.project || 'Unknown'} - ${item.status}`
+      );
+
+      const stats = {
+        completedTasks: completedTasks.count,
+        newProjects: newProjects.count,
+        overdueItems: overdueItems.count,
+        teamActivity
+      };
+
+      await integrationManager.sendDailyDigest(stats);
+      res.json({ success: true, message: 'Daily digest sent', stats });
+    } catch (error) {
+      console.error('Error sending daily digest:', error);
+      res.status(500).json({ message: 'Failed to send daily digest' });
+    }
+  });
+
   // API 404 handler - catch any unmatched /api routes before SPA fallback
   app.use('/api/*', (req, res) => {
     res.status(404).json({ message: 'API endpoint not found' });
