@@ -3190,6 +3190,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Budget Summary
+  app.get('/api/budget/summary', isAuthenticated, async (req, res) => {
+    try {
+      // Get all projects
+      const allProjects = await db.select().from(projects);
+      
+      // Get all project budgets
+      const allBudgets = await db.select().from(projectBudgets);
+      
+      // Get all invoices for revenue calculation
+      const allInvoices = await db.select().from(invoices);
+      
+      // Calculate budget summary
+      const totalBudget = allBudgets.reduce((sum, budget) => {
+        return sum + parseFloat(budget.budgetedAmount || '0');
+      }, 0);
+      
+      const totalSpent = allBudgets.reduce((sum, budget) => {
+        return sum + parseFloat(budget.spentAmount || '0');
+      }, 0);
+      
+      const totalRevenue = allInvoices
+        .filter(invoice => invoice.status === 'paid')
+        .reduce((sum, invoice) => {
+          return sum + parseFloat(invoice.total || '0');
+        }, 0);
+      
+      const profitMargin = totalRevenue > 0 ? ((totalRevenue - totalSpent) / totalRevenue) * 100 : 0;
+      
+      const activeProjects = allProjects.filter(project => project.status === 'active').length;
+      
+      const overBudgetProjects = allBudgets.filter(budget => {
+        const budgeted = parseFloat(budget.budgetedAmount || '0');
+        const spent = parseFloat(budget.spentAmount || '0');
+        return spent > budgeted && budgeted > 0;
+      }).length;
+      
+      const budgetSummary = {
+        totalBudget,
+        totalSpent,
+        totalRevenue,
+        profitMargin,
+        activeProjects,
+        overBudgetProjects
+      };
+      
+      res.json(budgetSummary);
+    } catch (error) {
+      console.error("Error fetching budget summary:", error);
+      res.status(500).json({ message: "Failed to fetch budget summary" });
+    }
+  });
+
   // Workload Snapshots
   app.get('/api/workload-snapshots', isAuthenticated, requireRole(['admin', 'manager']), async (req, res) => {
     try {
