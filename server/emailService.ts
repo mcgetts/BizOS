@@ -535,6 +535,203 @@ Your Team
 
     return this.sendEmail({ to: userEmail, subject, text, html });
   }
+
+  /**
+   * Send escalation notification email
+   */
+  public async sendEscalationNotification(
+    userEmail: string,
+    ticket: any,
+    escalationLevel: number,
+    reason: string
+  ): Promise<boolean> {
+    const subject = `🚨 Support Ticket Escalated - Action Required #${ticket.ticketNumber}`;
+
+    const text = `
+Support Ticket Escalation Notice
+
+Ticket #${ticket.ticketNumber} has been escalated to Level ${escalationLevel}
+
+Title: ${ticket.title}
+Priority: ${ticket.priority}
+Category: ${ticket.category}
+Reason: ${reason}
+
+Please review and take action immediately.
+
+Best regards,
+Support Team
+    `.trim();
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #dc3545; color: white; padding: 15px; border-radius: 5px; }
+    .content { padding: 20px; background: #f9f9f9; border-radius: 5px; margin: 10px 0; }
+    .ticket-info { background: white; padding: 15px; border-radius: 5px; border-left: 4px solid #dc3545; }
+    .priority-urgent { color: #dc3545; font-weight: bold; }
+    .priority-high { color: #fd7e14; font-weight: bold; }
+    .priority-medium { color: #ffc107; font-weight: bold; }
+    .priority-low { color: #28a745; font-weight: bold; }
+    .action-button {
+      display: inline-block;
+      padding: 12px 25px;
+      background: #dc3545;
+      color: white;
+      text-decoration: none;
+      border-radius: 5px;
+      margin: 15px 0;
+    }
+    .footer { text-align: center; color: #666; font-size: 12px; }
+    .escalation-badge {
+      background: #dc3545;
+      color: white;
+      padding: 5px 10px;
+      border-radius: 15px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h2>🚨 Support Ticket Escalated</h2>
+      <span class="escalation-badge">Level ${escalationLevel} Escalation</span>
+    </div>
+    <div class="content">
+      <p><strong>Action Required:</strong> A support ticket has been escalated to you and requires immediate attention.</p>
+
+      <div class="ticket-info">
+        <h3>Ticket Details</h3>
+        <p><strong>Ticket Number:</strong> #${ticket.ticketNumber}</p>
+        <p><strong>Title:</strong> ${ticket.title}</p>
+        <p><strong>Priority:</strong> <span class="priority-${ticket.priority || 'medium'}">${(ticket.priority || 'medium').toUpperCase()}</span></p>
+        <p><strong>Category:</strong> ${ticket.category || 'General'}</p>
+        <p><strong>Business Impact:</strong> ${ticket.businessImpact || 'Medium'}</p>
+        <p><strong>Escalation Reason:</strong> ${reason}</p>
+        <p><strong>Created:</strong> ${new Date(ticket.createdAt).toLocaleString()}</p>
+      </div>
+
+      <p><strong>Description:</strong></p>
+      <p style="background: white; padding: 15px; border-radius: 5px;">${ticket.description}</p>
+
+      <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/support?ticket=${ticket.id}" class="action-button">
+        View Ticket Details
+      </a>
+
+      <p><strong>Next Steps:</strong></p>
+      <ul>
+        <li>Review the ticket details immediately</li>
+        <li>Assess the situation and take appropriate action</li>
+        <li>Update the ticket status and add resolution notes</li>
+        <li>Contact the client if necessary</li>
+      </ul>
+    </div>
+    <div class="footer">
+      <p>This is an automated escalation notification.<br>
+      Please do not reply to this email.</p>
+    </div>
+  </div>
+</body>
+</html>
+    `.trim();
+
+    return this.sendEmail({ to: userEmail, subject, text, html });
+  }
+
+  /**
+   * Send SLA breach notification email
+   */
+  public async sendSlaBreachNotification(
+    userEmail: string,
+    ticket: any
+  ): Promise<boolean> {
+    const subject = `⚠️ SLA Breach Alert - Ticket #${ticket.ticketNumber}`;
+
+    const text = `
+SLA Breach Alert
+
+Ticket #${ticket.ticketNumber} has breached its Service Level Agreement.
+
+Title: ${ticket.title}
+Priority: ${ticket.priority}
+Time Since Created: ${Math.floor((Date.now() - new Date(ticket.createdAt).getTime()) / (1000 * 60 * 60))} hours
+
+Immediate action required to prevent further escalation.
+
+Best regards,
+Support Team
+    `.trim();
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #ffc107; color: #212529; padding: 15px; border-radius: 5px; }
+    .content { padding: 20px; background: #f9f9f9; border-radius: 5px; margin: 10px 0; }
+    .breach-info { background: #fff3cd; padding: 15px; border-radius: 5px; border-left: 4px solid #ffc107; }
+    .action-button {
+      display: inline-block;
+      padding: 12px 25px;
+      background: #ffc107;
+      color: #212529;
+      text-decoration: none;
+      border-radius: 5px;
+      margin: 15px 0;
+      font-weight: bold;
+    }
+    .footer { text-align: center; color: #666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h2>⚠️ SLA Breach Alert</h2>
+    </div>
+    <div class="content">
+      <p><strong>Service Level Agreement Breach Detected</strong></p>
+
+      <div class="breach-info">
+        <h3>Ticket Information</h3>
+        <p><strong>Ticket:</strong> #${ticket.ticketNumber}</p>
+        <p><strong>Title:</strong> ${ticket.title}</p>
+        <p><strong>Priority:</strong> ${ticket.priority || 'Medium'}</p>
+        <p><strong>Status:</strong> ${ticket.status}</p>
+        <p><strong>Created:</strong> ${new Date(ticket.createdAt).toLocaleString()}</p>
+        <p><strong>Time Elapsed:</strong> ${Math.floor((Date.now() - new Date(ticket.createdAt).getTime()) / (1000 * 60 * 60))} hours</p>
+      </div>
+
+      <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/support?ticket=${ticket.id}" class="action-button">
+        Resolve Immediately
+      </a>
+
+      <p><strong>Required Actions:</strong></p>
+      <ul>
+        <li>Take immediate action to resolve the issue</li>
+        <li>Update ticket status and progress</li>
+        <li>Communicate with client if appropriate</li>
+        <li>Document resolution steps</li>
+      </ul>
+    </div>
+    <div class="footer">
+      <p>Automated SLA monitoring system<br>
+      Please respond immediately to prevent further escalation.</p>
+    </div>
+  </div>
+</body>
+</html>
+    `.trim();
+
+    return this.sendEmail({ to: userEmail, subject, text, html });
+  }
 }
 
 export const emailService = new EmailService();

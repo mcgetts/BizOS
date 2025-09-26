@@ -278,8 +278,62 @@ export const supportTickets = pgTable("support_tickets", {
   resolution: text("resolution"),
   satisfactionRating: integer("satisfaction_rating"), // 1-5
   resolvedAt: timestamp("resolved_at"),
+  // SLA and escalation tracking fields
+  firstResponseAt: timestamp("first_response_at"), // When first response was given
+  slaBreachAt: timestamp("sla_breach_at"), // When SLA will be/was breached
+  escalatedAt: timestamp("escalated_at"), // When ticket was escalated
+  escalationLevel: integer("escalation_level").default(0), // 0=none, 1=manager, 2=senior, 3=executive
+  businessImpact: varchar("business_impact").default("low"), // low, medium, high, critical
+  urgency: varchar("urgency").default("medium"), // low, medium, high, critical
+  responseTimeHours: integer("response_time_hours"), // Target response time in hours
+  resolutionTimeHours: integer("resolution_time_hours"), // Target resolution time in hours
+  actualResponseMinutes: integer("actual_response_minutes"), // Actual response time in minutes
+  actualResolutionMinutes: integer("actual_resolution_minutes"), // Actual resolution time in minutes
+  slaStatus: varchar("sla_status").default("on_track"), // on_track, at_risk, breached
+  lastActivityAt: timestamp("last_activity_at").defaultNow(), // Last activity timestamp
+  tags: text("tags"), // JSON array of tags for categorization
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Support ticket comments table for internal collaboration
+export const supportTicketComments = pgTable("support_ticket_comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ticketId: varchar("ticket_id").references(() => supportTickets.id, { onDelete: 'cascade' }).notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  content: text("content").notNull(),
+  isInternal: boolean("is_internal").default(true), // true for internal, false for client-visible
+  attachments: text("attachments"), // JSON array of file attachments
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// SLA configuration table
+export const slaConfigurations = pgTable("sla_configurations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name").notNull(),
+  priority: varchar("priority").notNull(), // low, medium, high, urgent
+  category: varchar("category"), // technical, billing, general, etc.
+  businessImpact: varchar("business_impact"), // low, medium, high, critical
+  responseTimeHours: integer("response_time_hours").notNull(),
+  resolutionTimeHours: integer("resolution_time_hours").notNull(),
+  escalationLevels: text("escalation_levels"), // JSON array of escalation rules
+  isActive: boolean("is_active").default(true),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Ticket escalation history
+export const ticketEscalations = pgTable("ticket_escalations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ticketId: varchar("ticket_id").references(() => supportTickets.id, { onDelete: 'cascade' }).notNull(),
+  fromUserId: varchar("from_user_id").references(() => users.id),
+  toUserId: varchar("to_user_id").references(() => users.id).notNull(),
+  escalationLevel: integer("escalation_level").notNull(),
+  reason: text("reason").notNull(),
+  automatedRule: varchar("automated_rule"), // Rule that triggered auto-escalation
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 // Company goals table
@@ -911,6 +965,40 @@ export const updateSupportTicketSchema = createInsertSchema(supportTickets).omit
   updatedAt: true,
 }).partial();
 
+// Support ticket comments schemas
+export const insertSupportTicketCommentSchema = createInsertSchema(supportTicketComments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const updateSupportTicketCommentSchema = createInsertSchema(supportTicketComments).omit({
+  id: true,
+  ticketId: true,
+  userId: true,
+  createdAt: true,
+  updatedAt: true,
+}).partial();
+
+// SLA configuration schemas
+export const insertSlaConfigurationSchema = createInsertSchema(slaConfigurations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const updateSlaConfigurationSchema = createInsertSchema(slaConfigurations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).partial();
+
+// Ticket escalation schemas
+export const insertTicketEscalationSchema = createInsertSchema(ticketEscalations).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertCompanyGoalSchema = createInsertSchema(companyGoals).omit({
   id: true,
   createdAt: true,
@@ -1366,6 +1454,14 @@ export type MarketingCampaign = typeof marketingCampaigns.$inferSelect;
 export type InsertSupportTicket = z.infer<typeof insertSupportTicketSchema>;
 export type UpdateSupportTicket = z.infer<typeof updateSupportTicketSchema>;
 export type SupportTicket = typeof supportTickets.$inferSelect;
+export type InsertSupportTicketComment = z.infer<typeof insertSupportTicketCommentSchema>;
+export type UpdateSupportTicketComment = z.infer<typeof updateSupportTicketCommentSchema>;
+export type SupportTicketComment = typeof supportTicketComments.$inferSelect;
+export type InsertSlaConfiguration = z.infer<typeof insertSlaConfigurationSchema>;
+export type UpdateSlaConfiguration = z.infer<typeof updateSlaConfigurationSchema>;
+export type SlaConfiguration = typeof slaConfigurations.$inferSelect;
+export type InsertTicketEscalation = z.infer<typeof insertTicketEscalationSchema>;
+export type TicketEscalation = typeof ticketEscalations.$inferSelect;
 export type InsertCompanyGoal = z.infer<typeof insertCompanyGoalSchema>;
 export type UpdateCompanyGoal = z.infer<typeof updateCompanyGoalSchema>;
 export type CompanyGoal = typeof companyGoals.$inferSelect;

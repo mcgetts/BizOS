@@ -5,12 +5,13 @@
 
 metadata:
   name: "Business Platform Domain Architecture"
-  version: "5.0.0"
-  description: "Domain-driven design implementation with 5 core business domains and clear bounded contexts"
+  version: "6.0.0"
+  description: "Domain-driven design implementation with 5 core business domains, advanced task management platform, and AI-powered productivity intelligence"
   architecture_pattern: "domain_driven_design"
   domain_count: 5
   bounded_contexts: "clearly_defined"
   cross_cutting_concerns: "shared_services"
+  latest_enhancements: "advanced_task_management_platform"
 
 domain_architecture:
   pattern: "modular_monolith_with_domain_boundaries"
@@ -23,16 +24,20 @@ core_business_domains:
 
   # 1. Project Management Domain
   project_management_domain:
-    description: "Complete project lifecycle management with advanced features"
+    description: "Complete project lifecycle management with advanced task management platform and AI-powered productivity intelligence"
     business_capabilities:
       - "Project planning and scheduling"
-      - "Task management and tracking"
+      - "Advanced task management with integrated time tracking"
       - "Resource allocation and capacity planning"
       - "Timeline management with Gantt visualization"
       - "Dependency management and critical path analysis"
       - "Project templates and standardization"
       - "Project communication and collaboration"
       - "Progress monitoring and reporting"
+      - "AI-powered productivity analytics"
+      - "Mobile-first task management"
+      - "Template-driven workflow automation"
+      - "Project health monitoring and risk assessment"
 
     domain_entities:
       core_entities:
@@ -46,7 +51,7 @@ core_business_domains:
             - "priority, tags, isClientPortalEnabled"
 
         Task:
-          description: "Individual work items with dependency support"
+          description: "Individual work items with advanced tracking, time management, and productivity intelligence"
           key_attributes:
             - "title, description, status, priority"
             - "estimatedHours, actualHours"
@@ -70,10 +75,33 @@ core_business_domains:
             - "associated TaskTemplates"
 
         TaskTemplate:
-          description: "Template tasks within project templates"
+          description: "Template tasks within project templates with categorized workflows"
           attributes:
             - "title, description, estimatedHours"
             - "phase, orderIndex, dependsOnPhase"
+            - "category (development, client, planning, documentation)"
+            - "priority, workflow automation rules"
+
+        TimeEntry:
+          description: "Time tracking entries for tasks with billing integration"
+          attributes:
+            - "taskId, userId, hours, description"
+            - "date, billable, costPerHour"
+            - "budgetImpact, utilizationPercent"
+
+        TaskNotification:
+          description: "Task-specific notifications with granular preferences"
+          attributes:
+            - "taskId, userId, type, message"
+            - "read, priority, deliveryChannel"
+            - "preferences, burnoutRisk"
+
+        ProductivityMetrics:
+          description: "AI-powered productivity analytics and insights"
+          attributes:
+            - "userId, date, tasksCompleted"
+            - "efficiencyScore, streakDays, burnoutRisk"
+            - "averageCompletionTime, predictions"
 
         ProjectComment:
           description: "Project communication and activity"
@@ -109,6 +137,46 @@ core_business_domains:
           - "generateActivityFeed()"
           - "notifyTeamMembers()"
 
+      TimeTrackingService:
+        description: "Integrated time tracking with budget impact calculations"
+        operations:
+          - "startTimer(taskId, description)"
+          - "stopTimer(taskId, timeEntry)"
+          - "calculateBudgetImpact(taskId, hours)"
+          - "generateBillingEntries()"
+
+      TaskAnalyticsService:
+        description: "AI-powered productivity analytics and insights"
+        operations:
+          - "calculateProductivityMetrics(userId, timeRange)"
+          - "generateTeamInsights(timeRange)"
+          - "predictTaskCompletion(taskId)"
+          - "assessBurnoutRisk(userId)"
+
+      TaskNotificationService:
+        description: "Granular task-specific notification management"
+        operations:
+          - "sendTaskNotification(taskId, type, users)"
+          - "updateNotificationPreferences(userId, taskId, settings)"
+          - "processOverdueAlerts()"
+          - "manageBurnoutAlerts(userId)"
+
+      TaskTemplateService:
+        description: "Template-driven task creation with workflow automation"
+        operations:
+          - "createTaskFromTemplate(templateId, projectId)"
+          - "categorizeTemplates(category)"
+          - "suggestTemplates(projectType)"
+          - "automateWorkflows(templateId)"
+
+      ProjectHealthService:
+        description: "Real-time project health monitoring and risk assessment"
+        operations:
+          - "calculateProjectHealth(projectId)"
+          - "assessProjectRisk(projectId)"
+          - "generateHealthIndicators()"
+          - "provideActionableInsights(projectId)"
+
     business_rules:
       project_scheduling:
         - "End date cannot be before start date"
@@ -120,6 +188,30 @@ core_business_domains:
         - "Users cannot be over-allocated beyond capacity"
         - "Skills must match task requirements"
         - "Budget allocation cannot exceed project budget"
+
+      time_tracking:
+        - "Time entries must be associated with valid tasks"
+        - "Timer sessions cannot exceed 24 hours"
+        - "Budget impact calculations update in real-time"
+        - "Billing entries generate automatically from time entries"
+
+      task_analytics:
+        - "Efficiency scores calculated using AI algorithms"
+        - "Burnout risk assessed based on workload patterns"
+        - "Productivity metrics updated daily"
+        - "Team insights consider collaboration patterns"
+
+      task_notifications:
+        - "Users control granular notification preferences"
+        - "Overdue alerts escalate based on priority"
+        - "Burnout warnings trigger at medium risk level"
+        - "Notification delivery respects user preferences"
+
+      task_templates:
+        - "Templates categorized by workflow type"
+        - "Template estimates based on historical data"
+        - "Automation rules execute on template selection"
+        - "Custom templates inherit from category defaults"
 
     integration_points:
       internal:

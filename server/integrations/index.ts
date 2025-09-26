@@ -441,6 +441,171 @@ export class IntegrationManager {
 
     await Promise.allSettled(promises);
   }
+
+  // Support ticket notifications
+  async notifyTicketEvent(
+    ticket: any,
+    type: 'created' | 'updated' | 'escalated' | 'resolved' | 'sla_breach',
+    metadata?: { escalationLevel?: number; reason?: string; assignedUser?: any }
+  ) {
+    const promises = [];
+
+    const message = this.formatTicketEventMessage(ticket, type, metadata);
+    if (!message) return;
+
+    // Slack notification
+    if (this.config.slack.enabled) {
+      promises.push(
+        this.slack.sendMessage(
+          this.config.slack.channels.notifications || this.config.slack.channels.general,
+          message,
+          this.getTicketPriority(ticket.priority, type),
+          {
+            ticketId: ticket.id,
+            ticketNumber: ticket.ticketNumber,
+            type,
+            metadata
+          }
+        ).catch(error => {
+          console.error('Failed to send Slack ticket notification:', error);
+          this.stats.slack.status = 'error';
+        })
+      );
+    }
+
+    // Teams notification
+    if (this.config.teams.enabled) {
+      promises.push(
+        this.teams.sendTicketNotification(ticket, type, metadata).catch(error => {
+          console.error('Failed to send Teams ticket notification:', error);
+          this.stats.teams.status = 'error';
+        })
+      );
+    }
+
+    await Promise.allSettled(promises);
+
+    // Update stats
+    this.stats.slack.lastMessage = new Date();
+    this.stats.teams.lastMessage = new Date();
+  }
+
+  // Support escalation notifications (high priority)
+  async notifyEscalation(
+    ticket: any,
+    escalationLevel: number,
+    reason: string,
+    assignedUser: any
+  ) {
+    await this.notifyTicketEvent(ticket, 'escalated', {
+      escalationLevel,
+      reason,
+      assignedUser
+    });
+  }
+
+  // SLA breach notifications (urgent)
+  async notifySLABreach(ticket: any) {
+    await this.notifyTicketEvent(ticket, 'sla_breach');
+  }
+
+  private formatTicketEventMessage(
+    ticket: any,
+    type: 'created' | 'updated' | 'escalated' | 'resolved' | 'sla_breach',
+    metadata?: any
+  ): string | null {
+    const ticketUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/support?ticket=${ticket.id}`;
+    const priorityEmoji = this.getPriorityEmoji(ticket.priority);
+    const statusEmoji = this.getStatusEmoji(type);
+
+    switch (type) {
+      case 'created':
+        return `${statusEmoji} **New Support Ticket Created**\n` +
+               `${priorityEmoji} **#${ticket.ticketNumber}** - ${ticket.title}\n` +
+               `**Priority:** ${ticket.priority || 'Medium'} | **Category:** ${ticket.category || 'General'}\n` +
+               `**Client:** ${ticket.clientName || 'Internal'}\n` +
+               `[View Ticket](${ticketUrl})`;
+
+      case 'escalated':
+        return `🚨 **TICKET ESCALATED - Level ${metadata?.escalationLevel}**\n` +
+               `${priorityEmoji} **#${ticket.ticketNumber}** - ${ticket.title}\n` +
+               `**Assigned to:** ${metadata?.assignedUser?.firstName} ${metadata?.assignedUser?.lastName}\n` +
+               `**Reason:** ${metadata?.reason}\n` +
+               `**Action Required:** Immediate attention needed\n` +
+               `[View Ticket](${ticketUrl})`;
+
+      case 'sla_breach':
+        return `⚠️ **SLA BREACH ALERT**\n` +
+               `${priorityEmoji} **#${ticket.ticketNumber}** - ${ticket.title}\n` +
+               `**Status:** ${ticket.status} | **Priority:** ${ticket.priority}\n` +
+               `**Created:** ${new Date(ticket.createdAt).toLocaleString()}\n` +
+               `**URGENT:** SLA has been breached - immediate action required\n` +
+               `[Resolve Now](${ticketUrl})`;
+
+      case 'resolved':
+        return `✅ **Ticket Resolved**\n` +
+               `${priorityEmoji} **#${ticket.ticketNumber}** - ${ticket.title}\n` +
+               `**Resolution Time:** ${this.calculateResolutionTime(ticket)}\n` +
+               `[View Details](${ticketUrl})`;
+
+      case 'updated':
+        return `📝 **Ticket Updated**\n` +
+               `${priorityEmoji} **#${ticket.ticketNumber}** - ${ticket.title}\n` +
+               `**Status:** ${ticket.status} | **Priority:** ${ticket.priority}\n` +
+               `[View Ticket](${ticketUrl})`;
+
+      default:
+        return null;
+    }
+  }
+
+  private getPriorityEmoji(priority?: string): string {
+    switch (priority?.toLowerCase()) {
+      case 'urgent': return '🔴';
+      case 'high': return '🟠';
+      case 'medium': return '🟡';
+      case 'low': return '🟢';
+      default: return '🔵';
+    }
+  }
+
+  private getStatusEmoji(type: string): string {
+    switch (type) {
+      case 'created': return '🎫';
+      case 'escalated': return '🚨';
+      case 'sla_breach': return '⚠️';
+      case 'resolved': return '✅';
+      case 'updated': return '📝';
+      default: return '📋';
+    }
+  }
+
+  private getTicketPriority(priority?: string, type?: string): 'low' | 'normal' | 'high' | 'urgent' {
+    if (type === 'escalated' || type === 'sla_breach') return 'urgent';
+    if (priority === 'urgent') return 'urgent';
+    if (priority === 'high') return 'high';
+    return 'normal';
+  }
+
+  private calculateResolutionTime(ticket: any): string {
+    if (!ticket.resolvedAt || !ticket.createdAt) return 'Unknown';
+
+    const created = new Date(ticket.createdAt);
+    const resolved = new Date(ticket.resolvedAt);
+    const diffMs = resolved.getTime() - created.getTime();
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+    if (hours > 24) {
+      const days = Math.floor(hours / 24);
+      const remainingHours = hours % 24;
+      return `${days}d ${remainingHours}h`;
+    } else if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    } else {
+      return `${minutes}m`;
+    }
+  }
 }
 
 // Default configuration

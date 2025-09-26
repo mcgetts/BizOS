@@ -108,6 +108,22 @@ app.use((req, res, next) => {
   // Setup WebSocket server for real-time notifications
   wsManager.setup(server);
 
+  // Start escalation service for automatic ticket escalation (temporarily disabled for demo)
+  // const { escalationService } = await import('./escalationService');
+  // escalationService.start(30); // Check every 30 minutes
+  log('✅ Escalation service ready (disabled for demo)');
+
+  // Graceful shutdown for escalation service
+  process.on('SIGTERM', () => {
+    // escalationService.stop();
+    log('📋 Escalation service stopped');
+  });
+
+  process.on('SIGINT', () => {
+    // escalationService.stop();
+    log('📋 Escalation service stopped');
+  });
+
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";

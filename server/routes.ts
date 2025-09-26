@@ -93,6 +93,7 @@ import { wsManager } from "./websocketManager";
 import { PasswordUtils, AuthRateLimiter } from "./utils/authUtils";
 import { emailService } from "./emailService";
 import { updateProjectProgress, calculateProjectProgress, estimateProjectCompletion } from "./utils/projectProgressCalculations";
+import { IntegrationManager, defaultIntegrationConfig } from "./integrations";
 import passport from "passport";
 
 // Helper function to log activity history
@@ -243,6 +244,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Auth middleware
   await setupAuth(app);
+
+  // Initialize integration manager for third-party notifications
+  const integrationManager = new IntegrationManager(defaultIntegrationConfig);
 
   // Development-only authentication endpoint for testing - AFTER auth setup
   app.post('/api/auth/dev-login', async (req: any, res) => {
@@ -3515,6 +3519,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validatedData = insertSupportTicketSchema.parse(req.body);
       const ticket = await storage.createSupportTicket(validatedData);
+
+      // Send notification to third-party integrations
+      try {
+        await integrationManager.notifyTicketEvent(ticket, 'created');
+      } catch (notificationError) {
+        console.error('Failed to send ticket creation notification:', notificationError);
+        // Don't fail the ticket creation if notifications fail
+      }
+
       res.status(201).json(ticket);
     } catch (error) {
       console.error("Error creating support ticket:", error);
@@ -3540,6 +3553,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Use secure validation schema that excludes system fields
       const validatedData = updateSupportTicketSchema.parse(req.body);
       const ticket = await storage.updateSupportTicket(req.params.id, validatedData);
+
+      // Send notification to third-party integrations for significant updates
+      try {
+        const notificationType = ticket.status === 'resolved' ? 'resolved' : 'updated';
+        await integrationManager.notifyTicketEvent(ticket, notificationType);
+      } catch (notificationError) {
+        console.error('Failed to send ticket update notification:', notificationError);
+        // Don't fail the ticket update if notifications fail
+      }
+
       res.json(ticket);
     } catch (error) {
       console.error("Error updating support ticket:", error);
@@ -3559,6 +3582,253 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting support ticket:", error);
       res.status(500).json({ message: "Failed to delete support ticket" });
+    }
+  });
+
+  // Support ticket comments routes
+  app.get('/api/support/tickets/:id/comments', isAuthenticated, async (req, res) => {
+    try {
+      const comments = await storage.getSupportTicketComments(req.params.id);
+      res.json(comments);
+    } catch (error) {
+      console.error("Error fetching ticket comments:", error);
+      res.status(500).json({ message: "Failed to fetch ticket comments" });
+    }
+  });
+
+  app.post('/api/support/tickets/:id/comments', isAuthenticated, async (req, res) => {
+    try {
+      const comment = await storage.createSupportTicketComment({
+        ...req.body,
+        ticketId: req.params.id,
+        userId: req.user.id
+      });
+      res.status(201).json(comment);
+    } catch (error) {
+      console.error("Error creating ticket comment:", error);
+      res.status(400).json({ message: "Failed to create ticket comment" });
+    }
+  });
+
+  app.put('/api/support/comments/:id', isAuthenticated, async (req, res) => {
+    try {
+      const comment = await storage.updateSupportTicketComment(req.params.id, req.body);
+      res.json(comment);
+    } catch (error) {
+      console.error("Error updating ticket comment:", error);
+      res.status(400).json({ message: "Failed to update ticket comment" });
+    }
+  });
+
+  app.delete('/api/support/comments/:id', requireRole(['admin', 'manager']), async (req, res) => {
+    try {
+      await storage.deleteSupportTicketComment(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting ticket comment:", error);
+      res.status(500).json({ message: "Failed to delete ticket comment" });
+    }
+  });
+
+  // SLA configuration routes
+  app.get('/api/support/sla-configs', isAuthenticated, async (req, res) => {
+    try {
+      const configs = await storage.getSlaConfigurations();
+      res.json(configs);
+    } catch (error) {
+      console.error("Error fetching SLA configurations:", error);
+      res.status(500).json({ message: "Failed to fetch SLA configurations" });
+    }
+  });
+
+  app.post('/api/support/sla-configs', requireRole(['admin', 'manager']), async (req, res) => {
+    try {
+      const config = await storage.createSlaConfiguration({
+        ...req.body,
+        createdBy: req.user.id
+      });
+      res.status(201).json(config);
+    } catch (error) {
+      console.error("Error creating SLA configuration:", error);
+      res.status(400).json({ message: "Failed to create SLA configuration" });
+    }
+  });
+
+  app.put('/api/support/sla-configs/:id', requireRole(['admin', 'manager']), async (req, res) => {
+    try {
+      const config = await storage.updateSlaConfiguration(req.params.id, req.body);
+      res.json(config);
+    } catch (error) {
+      console.error("Error updating SLA configuration:", error);
+      res.status(400).json({ message: "Failed to update SLA configuration" });
+    }
+  });
+
+  app.delete('/api/support/sla-configs/:id', requireRole(['admin', 'manager']), async (req, res) => {
+    try {
+      await storage.deleteSlaConfiguration(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting SLA configuration:", error);
+      res.status(500).json({ message: "Failed to delete SLA configuration" });
+    }
+  });
+
+  // Support escalation routes
+  app.get('/api/support/tickets/:id/escalations', isAuthenticated, async (req, res) => {
+    try {
+      const escalations = await storage.getTicketEscalations(req.params.id);
+      res.json(escalations);
+    } catch (error) {
+      console.error("Error fetching ticket escalations:", error);
+      res.status(500).json({ message: "Failed to fetch ticket escalations" });
+    }
+  });
+
+  app.post('/api/support/tickets/:id/escalate', requireRole(['admin', 'manager', 'employee']), async (req, res) => {
+    try {
+      const { escalationService } = await import('./escalationService');
+      const { toUserId, reason, level } = req.body;
+
+      const escalation = await escalationService.escalateTicket(
+        req.params.id,
+        req.user.id,
+        toUserId,
+        reason,
+        level
+      );
+
+      res.status(201).json(escalation);
+    } catch (error) {
+      console.error("Error escalating ticket:", error);
+      res.status(400).json({ message: error.message || "Failed to escalate ticket" });
+    }
+  });
+
+  // Support analytics routes
+  app.get('/api/support/analytics/overdue', isAuthenticated, async (req, res) => {
+    try {
+      const overdueTickets = await storage.getOverdueTickets();
+      res.json(overdueTickets);
+    } catch (error) {
+      console.error("Error fetching overdue tickets:", error);
+      res.status(500).json({ message: "Failed to fetch overdue tickets" });
+    }
+  });
+
+  app.get('/api/support/analytics/escalation-status', isAuthenticated, async (req, res) => {
+    try {
+      const { escalationService } = await import('./escalationService');
+      const status = await escalationService.getEscalationStatus();
+      res.json(status);
+    } catch (error) {
+      console.error("Error fetching escalation status:", error);
+      res.status(500).json({ message: "Failed to fetch escalation status" });
+    }
+  });
+
+  app.post('/api/support/analytics/process-escalations', requireRole(['admin', 'manager']), async (req, res) => {
+    try {
+      const { escalationService } = await import('./escalationService');
+      const results = await escalationService.processEscalations();
+      res.json({
+        message: `Processed ${results.length} escalations`,
+        results
+      });
+    } catch (error) {
+      console.error("Error processing escalations:", error);
+      res.status(500).json({ message: "Failed to process escalations" });
+    }
+  });
+
+  // Enhanced support analytics routes
+  app.get('/api/support/analytics/dashboard', isAuthenticated, async (req, res) => {
+    try {
+      const { period = '30' } = req.query;
+      const days = parseInt(period as string);
+      const endDate = new Date();
+      const startDate = new Date(endDate.getTime() - (days * 24 * 60 * 60 * 1000));
+
+      const analytics = await storage.getSupportAnalytics({ start: startDate, end: endDate });
+      res.json(analytics);
+    } catch (error) {
+      console.error("Error fetching support analytics:", error);
+      res.status(500).json({ message: "Failed to fetch support analytics" });
+    }
+  });
+
+  app.get('/api/support/analytics/agent-performance', isAuthenticated, async (req, res) => {
+    try {
+      const { period = '30' } = req.query;
+      const days = parseInt(period as string);
+      const endDate = new Date();
+      const startDate = new Date(endDate.getTime() - (days * 24 * 60 * 60 * 1000));
+
+      const performance = await storage.getAgentPerformanceMetrics({ start: startDate, end: endDate });
+      res.json(performance);
+    } catch (error) {
+      console.error("Error fetching agent performance metrics:", error);
+      res.status(500).json({ message: "Failed to fetch agent performance metrics" });
+    }
+  });
+
+  app.get('/api/support/analytics/trends', isAuthenticated, async (req, res) => {
+    try {
+      const { period = '30' } = req.query;
+      const days = parseInt(period as string);
+      const endDate = new Date();
+      const startDate = new Date(endDate.getTime() - (days * 24 * 60 * 60 * 1000));
+
+      const trends = await storage.getSupportTrends({ start: startDate, end: endDate });
+      res.json(trends);
+    } catch (error) {
+      console.error("Error fetching support trends:", error);
+      res.status(500).json({ message: "Failed to fetch support trends" });
+    }
+  });
+
+  app.get('/api/support/analytics/volume-by-category', isAuthenticated, async (req, res) => {
+    try {
+      const { period = '30' } = req.query;
+      const days = parseInt(period as string);
+      const endDate = new Date();
+      const startDate = new Date(endDate.getTime() - (days * 24 * 60 * 60 * 1000));
+
+      const volumeData = await storage.getTicketVolumeByCategory({ start: startDate, end: endDate });
+      res.json(volumeData);
+    } catch (error) {
+      console.error("Error fetching ticket volume by category:", error);
+      res.status(500).json({ message: "Failed to fetch ticket volume by category" });
+    }
+  });
+
+  app.get('/api/support/analytics/response-times', isAuthenticated, async (req, res) => {
+    try {
+      const { period = '30' } = req.query;
+      const days = parseInt(period as string);
+      const endDate = new Date();
+      const startDate = new Date(endDate.getTime() - (days * 24 * 60 * 60 * 1000));
+
+      const metrics = await storage.getResponseTimeMetrics({ start: startDate, end: endDate });
+      res.json(metrics);
+    } catch (error) {
+      console.error("Error fetching response time metrics:", error);
+      res.status(500).json({ message: "Failed to fetch response time metrics" });
+    }
+  });
+
+  app.get('/api/support/analytics/sla-compliance', isAuthenticated, async (req, res) => {
+    try {
+      const { period = '30' } = req.query;
+      const days = parseInt(period as string);
+      const endDate = new Date();
+      const startDate = new Date(endDate.getTime() - (days * 24 * 60 * 60 * 1000));
+
+      const report = await storage.getSLAComplianceReport({ start: startDate, end: endDate });
+      res.json(report);
+    } catch (error) {
+      console.error("Error fetching SLA compliance report:", error);
+      res.status(500).json({ message: "Failed to fetch SLA compliance report" });
     }
   });
 

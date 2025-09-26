@@ -14,6 +14,9 @@ import {
   knowledgeArticles,
   marketingCampaigns,
   supportTickets,
+  supportTicketComments,
+  slaConfigurations,
+  ticketEscalations,
   timeEntries,
   clientInteractions,
   systemVariables,
@@ -51,6 +54,14 @@ import {
   type InsertSupportTicket,
   type SupportTicket,
   type UpdateSupportTicket,
+  type InsertSupportTicketComment,
+  type SupportTicketComment,
+  type UpdateSupportTicketComment,
+  type InsertSlaConfiguration,
+  type SlaConfiguration,
+  type UpdateSlaConfiguration,
+  type InsertTicketEscalation,
+  type TicketEscalation,
   type InsertSystemVariable,
   type UpdateSystemVariable,
   type SystemVariable,
@@ -59,6 +70,7 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, like, sql, count, gte, lte } from "drizzle-orm";
+import { calculateSlaMetrics, calculateBusinessImpact, DEFAULT_SLA_CONFIGS } from "@shared/slaUtils";
 
 // Interface for storage operations
 export interface IStorage {
@@ -162,6 +174,35 @@ export interface IStorage {
   updateSupportTicket(id: string, ticket: UpdateSupportTicket): Promise<SupportTicket>;
   deleteSupportTicket(id: string): Promise<void>;
 
+  // Support ticket comments operations
+  getSupportTicketComments(ticketId: string): Promise<SupportTicketComment[]>;
+  createSupportTicketComment(comment: InsertSupportTicketComment): Promise<SupportTicketComment>;
+  updateSupportTicketComment(id: string, comment: UpdateSupportTicketComment): Promise<SupportTicketComment>;
+  deleteSupportTicketComment(id: string): Promise<void>;
+
+  // SLA configuration operations
+  getSlaConfigurations(): Promise<SlaConfiguration[]>;
+  getSlaConfiguration(id: string): Promise<SlaConfiguration | undefined>;
+  createSlaConfiguration(config: InsertSlaConfiguration): Promise<SlaConfiguration>;
+  updateSlaConfiguration(id: string, config: UpdateSlaConfiguration): Promise<SlaConfiguration>;
+  deleteSlaConfiguration(id: string): Promise<void>;
+
+  // Ticket escalation operations
+  getTicketEscalations(ticketId: string): Promise<TicketEscalation[]>;
+  createTicketEscalation(escalation: InsertTicketEscalation): Promise<TicketEscalation>;
+
+  // Enhanced support operations
+  updateTicketSlaMetrics(ticketId: string, metrics: Partial<SupportTicket>): Promise<SupportTicket>;
+  getOverdueTickets(): Promise<SupportTicket[]>;
+  getTicketsNeedingEscalation(): Promise<SupportTicket[]>;
+
+  // Support analytics operations
+  getSupportAnalytics(timeRange: { start: Date; end: Date }): Promise<any>;
+  getAgentPerformanceMetrics(timeRange: { start: Date; end: Date }): Promise<any[]>;
+  getSupportTrends(timeRange: { start: Date; end: Date }): Promise<any>;
+  getTicketVolumeByCategory(timeRange: { start: Date; end: Date }): Promise<any[]>;
+  getResponseTimeMetrics(timeRange: { start: Date; end: Date }): Promise<any>;
+  getSLAComplianceReport(timeRange: { start: Date; end: Date }): Promise<any>;
 
   // System variables operations
   getSystemVariables(): Promise<SystemVariable[]>;
@@ -1080,15 +1121,39 @@ export class DatabaseStorage implements IStorage {
   async createSupportTicket(ticket: InsertSupportTicket): Promise<SupportTicket> {
     // Server-side ticket number generation (never trust client)
     const ticketNumber = await this.generateUniqueTicketNumber();
-    
+
+    // Calculate business impact if not provided
+    const businessImpact = ticket.businessImpact || calculateBusinessImpact(
+      ticket.category || 'general',
+      ticket.priority || 'medium'
+    );
+
+    // Get SLA configuration for this ticket type
+    const slaKey = `${ticket.priority || 'medium'}-${businessImpact}`;
+    const slaConfig = DEFAULT_SLA_CONFIGS[slaKey] || DEFAULT_SLA_CONFIGS['medium-medium'];
+
+    const now = new Date();
+    const responseTimeHours = ticket.responseTimeHours || slaConfig.responseTimeHours || 8;
+    const resolutionTimeHours = ticket.resolutionTimeHours || slaConfig.resolutionTimeHours || 48;
+
+    // Calculate SLA breach time
+    const slaBreachAt = new Date(now.getTime() + (resolutionTimeHours * 60 * 60 * 1000));
+
     const ticketData = {
       ...ticket,
       ticketNumber,
+      businessImpact,
+      responseTimeHours,
+      resolutionTimeHours,
+      slaBreachAt,
+      slaStatus: 'on_track' as const,
+      lastActivityAt: now,
+      urgency: ticket.urgency || ticket.priority || 'medium',
       // Server always controls these timestamps
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: now,
+      updatedAt: now,
     };
-    
+
     const [newTicket] = await db.insert(supportTickets).values(ticketData).returning();
     return newTicket;
   }
@@ -1139,6 +1204,369 @@ export class DatabaseStorage implements IStorage {
     await db.delete(supportTickets).where(eq(supportTickets.id, id));
   }
 
+  // Support ticket comments operations
+  async getSupportTicketComments(ticketId: string): Promise<SupportTicketComment[]> {
+    return await db
+      .select()
+      .from(supportTicketComments)
+      .where(eq(supportTicketComments.ticketId, ticketId))
+      .orderBy(supportTicketComments.createdAt);
+  }
+
+  async createSupportTicketComment(comment: InsertSupportTicketComment): Promise<SupportTicketComment> {
+    const [newComment] = await db
+      .insert(supportTicketComments)
+      .values({
+        ...comment,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
+    return newComment;
+  }
+
+  async updateSupportTicketComment(id: string, comment: UpdateSupportTicketComment): Promise<SupportTicketComment> {
+    const [updatedComment] = await db
+      .update(supportTicketComments)
+      .set({
+        ...comment,
+        updatedAt: new Date(),
+      })
+      .where(eq(supportTicketComments.id, id))
+      .returning();
+    return updatedComment;
+  }
+
+  async deleteSupportTicketComment(id: string): Promise<void> {
+    await db.delete(supportTicketComments).where(eq(supportTicketComments.id, id));
+  }
+
+  // SLA configuration operations
+  async getSlaConfigurations(): Promise<SlaConfiguration[]> {
+    return await db
+      .select()
+      .from(slaConfigurations)
+      .where(eq(slaConfigurations.isActive, true))
+      .orderBy(slaConfigurations.priority, slaConfigurations.name);
+  }
+
+  async getSlaConfiguration(id: string): Promise<SlaConfiguration | undefined> {
+    const [config] = await db
+      .select()
+      .from(slaConfigurations)
+      .where(eq(slaConfigurations.id, id));
+    return config;
+  }
+
+  async createSlaConfiguration(config: InsertSlaConfiguration): Promise<SlaConfiguration> {
+    const [newConfig] = await db
+      .insert(slaConfigurations)
+      .values({
+        ...config,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
+    return newConfig;
+  }
+
+  async updateSlaConfiguration(id: string, config: UpdateSlaConfiguration): Promise<SlaConfiguration> {
+    const [updatedConfig] = await db
+      .update(slaConfigurations)
+      .set({
+        ...config,
+        updatedAt: new Date(),
+      })
+      .where(eq(slaConfigurations.id, id))
+      .returning();
+    return updatedConfig;
+  }
+
+  async deleteSlaConfiguration(id: string): Promise<void> {
+    await db.update(slaConfigurations)
+      .set({ isActive: false })
+      .where(eq(slaConfigurations.id, id));
+  }
+
+  // Ticket escalation operations
+  async getTicketEscalations(ticketId: string): Promise<TicketEscalation[]> {
+    return await db
+      .select()
+      .from(ticketEscalations)
+      .where(eq(ticketEscalations.ticketId, ticketId))
+      .orderBy(ticketEscalations.createdAt);
+  }
+
+  async createTicketEscalation(escalation: InsertTicketEscalation): Promise<TicketEscalation> {
+    const [newEscalation] = await db
+      .insert(ticketEscalations)
+      .values({
+        ...escalation,
+        createdAt: new Date(),
+      })
+      .returning();
+    return newEscalation;
+  }
+
+  // Enhanced support operations
+  async updateTicketSlaMetrics(ticketId: string, metrics: Partial<SupportTicket>): Promise<SupportTicket> {
+    const [updatedTicket] = await db
+      .update(supportTickets)
+      .set({
+        ...metrics,
+        updatedAt: new Date(),
+        lastActivityAt: new Date(),
+      })
+      .where(eq(supportTickets.id, ticketId))
+      .returning();
+    return updatedTicket;
+  }
+
+  async getOverdueTickets(): Promise<SupportTicket[]> {
+    const now = new Date();
+    return await db
+      .select()
+      .from(supportTickets)
+      .where(
+        and(
+          or(
+            eq(supportTickets.status, 'open'),
+            eq(supportTickets.status, 'in_progress')
+          ),
+          lte(supportTickets.slaBreachAt, now)
+        )
+      )
+      .orderBy(supportTickets.slaBreachAt);
+  }
+
+  async getTicketsNeedingEscalation(): Promise<SupportTicket[]> {
+    const now = new Date();
+    // Get tickets that are open/in_progress and past their escalation time
+    return await db
+      .select()
+      .from(supportTickets)
+      .where(
+        and(
+          or(
+            eq(supportTickets.status, 'open'),
+            eq(supportTickets.status, 'in_progress')
+          ),
+          lte(supportTickets.escalatedAt, now)
+        )
+      )
+      .orderBy(supportTickets.createdAt);
+  }
+
+  // Support analytics operations
+  async getSupportAnalytics(timeRange: { start: Date; end: Date }): Promise<any> {
+    const { calculateSupportKPIs, calculateSupportTrends, generateSupportPredictions } = await import('@shared/supportAnalytics');
+
+    // Get tickets in time range
+    const tickets = await db
+      .select()
+      .from(supportTickets)
+      .where(
+        and(
+          gte(supportTickets.createdAt, timeRange.start),
+          lte(supportTickets.createdAt, timeRange.end)
+        )
+      );
+
+    // Get previous period for comparison
+    const periodLength = timeRange.end.getTime() - timeRange.start.getTime();
+    const previousStart = new Date(timeRange.start.getTime() - periodLength);
+    const previousEnd = timeRange.start;
+
+    const previousTickets = await db
+      .select()
+      .from(supportTickets)
+      .where(
+        and(
+          gte(supportTickets.createdAt, previousStart),
+          lte(supportTickets.createdAt, previousEnd)
+        )
+      );
+
+    // Calculate KPIs and trends
+    const kpis = calculateSupportKPIs(tickets, timeRange, previousTickets);
+    const trends = calculateSupportTrends(tickets, timeRange);
+    const predictions = generateSupportPredictions(tickets, trends);
+
+    return {
+      kpis,
+      trends,
+      predictions,
+      timeRange,
+      ticketCount: tickets.length
+    };
+  }
+
+  async getAgentPerformanceMetrics(timeRange: { start: Date; end: Date }): Promise<any[]> {
+    const { calculateAgentPerformance } = await import('@shared/supportAnalytics');
+
+    // Get tickets and users
+    const tickets = await db
+      .select()
+      .from(supportTickets)
+      .where(
+        and(
+          gte(supportTickets.createdAt, timeRange.start),
+          lte(supportTickets.createdAt, timeRange.end)
+        )
+      );
+
+    const allUsers = await db.select().from(users);
+
+    return calculateAgentPerformance(tickets, allUsers);
+  }
+
+  async getSupportTrends(timeRange: { start: Date; end: Date }): Promise<any> {
+    const { calculateSupportTrends } = await import('@shared/supportAnalytics');
+
+    const tickets = await db
+      .select()
+      .from(supportTickets)
+      .where(
+        and(
+          gte(supportTickets.createdAt, timeRange.start),
+          lte(supportTickets.createdAt, timeRange.end)
+        )
+      );
+
+    return calculateSupportTrends(tickets, timeRange);
+  }
+
+  async getTicketVolumeByCategory(timeRange: { start: Date; end: Date }): Promise<any[]> {
+    const results = await db
+      .select({
+        category: supportTickets.category,
+        count: sql<number>`count(*)`,
+        avgResolutionTime: sql<number>`avg(actual_resolution_minutes)`,
+        slaCompliance: sql<number>`count(case when sla_status = 'on_track' then 1 end) * 100.0 / count(*)`
+      })
+      .from(supportTickets)
+      .where(
+        and(
+          gte(supportTickets.createdAt, timeRange.start),
+          lte(supportTickets.createdAt, timeRange.end)
+        )
+      )
+      .groupBy(supportTickets.category)
+      .orderBy(desc(sql`count(*)`));
+
+    return results.map(row => ({
+      category: row.category || 'general',
+      count: Number(row.count),
+      avgResolutionTime: Number(row.avgResolutionTime) || 0,
+      slaCompliance: Number(row.slaCompliance) || 0
+    }));
+  }
+
+  async getResponseTimeMetrics(timeRange: { start: Date; end: Date }): Promise<any> {
+    const [result] = await db
+      .select({
+        avgResponseTime: sql<number>`avg(actual_response_minutes)`,
+        medianResponseTime: sql<number>`percentile_cont(0.5) within group (order by actual_response_minutes)`,
+        p90ResponseTime: sql<number>`percentile_cont(0.9) within group (order by actual_response_minutes)`,
+        avgResolutionTime: sql<number>`avg(actual_resolution_minutes)`,
+        medianResolutionTime: sql<number>`percentile_cont(0.5) within group (order by actual_resolution_minutes)`,
+        p90ResolutionTime: sql<number>`percentile_cont(0.9) within group (order by actual_resolution_minutes)`,
+        totalTickets: sql<number>`count(*)`,
+        respondedTickets: sql<number>`count(actual_response_minutes)`,
+        resolvedTickets: sql<number>`count(actual_resolution_minutes)`
+      })
+      .from(supportTickets)
+      .where(
+        and(
+          gte(supportTickets.createdAt, timeRange.start),
+          lte(supportTickets.createdAt, timeRange.end)
+        )
+      );
+
+    return {
+      avgResponseTime: Number(result.avgResponseTime) || 0,
+      medianResponseTime: Number(result.medianResponseTime) || 0,
+      p90ResponseTime: Number(result.p90ResponseTime) || 0,
+      avgResolutionTime: Number(result.avgResolutionTime) || 0,
+      medianResolutionTime: Number(result.medianResolutionTime) || 0,
+      p90ResolutionTime: Number(result.p90ResolutionTime) || 0,
+      responseRate: result.totalTickets > 0 ? (Number(result.respondedTickets) / Number(result.totalTickets)) * 100 : 0,
+      resolutionRate: result.totalTickets > 0 ? (Number(result.resolvedTickets) / Number(result.totalTickets)) * 100 : 0
+    };
+  }
+
+  async getSLAComplianceReport(timeRange: { start: Date; end: Date }): Promise<any> {
+    const [overall] = await db
+      .select({
+        totalTickets: sql<number>`count(*)`,
+        onTrack: sql<number>`count(case when sla_status = 'on_track' then 1 end)`,
+        atRisk: sql<number>`count(case when sla_status = 'at_risk' then 1 end)`,
+        breached: sql<number>`count(case when sla_status = 'breached' then 1 end)`,
+        avgSatisfaction: sql<number>`avg(satisfaction_rating)`
+      })
+      .from(supportTickets)
+      .where(
+        and(
+          gte(supportTickets.createdAt, timeRange.start),
+          lte(supportTickets.createdAt, timeRange.end)
+        )
+      );
+
+    const byPriority = await db
+      .select({
+        priority: supportTickets.priority,
+        totalTickets: sql<number>`count(*)`,
+        onTrack: sql<number>`count(case when sla_status = 'on_track' then 1 end)`,
+        breached: sql<number>`count(case when sla_status = 'breached' then 1 end)`,
+        complianceRate: sql<number>`count(case when sla_status = 'on_track' then 1 end) * 100.0 / count(*)`
+      })
+      .from(supportTickets)
+      .where(
+        and(
+          gte(supportTickets.createdAt, timeRange.start),
+          lte(supportTickets.createdAt, timeRange.end)
+        )
+      )
+      .groupBy(supportTickets.priority);
+
+    const byCategory = await db
+      .select({
+        category: supportTickets.category,
+        totalTickets: sql<number>`count(*)`,
+        complianceRate: sql<number>`count(case when sla_status = 'on_track' then 1 end) * 100.0 / count(*)`
+      })
+      .from(supportTickets)
+      .where(
+        and(
+          gte(supportTickets.createdAt, timeRange.start),
+          lte(supportTickets.createdAt, timeRange.end)
+        )
+      )
+      .groupBy(supportTickets.category);
+
+    return {
+      overall: {
+        totalTickets: Number(overall.totalTickets),
+        onTrack: Number(overall.onTrack),
+        atRisk: Number(overall.atRisk),
+        breached: Number(overall.breached),
+        complianceRate: overall.totalTickets > 0 ? (Number(overall.onTrack) / Number(overall.totalTickets)) * 100 : 100,
+        avgSatisfaction: Number(overall.avgSatisfaction) || 0
+      },
+      byPriority: byPriority.map(row => ({
+        priority: row.priority || 'medium',
+        totalTickets: Number(row.totalTickets),
+        onTrack: Number(row.onTrack),
+        breached: Number(row.breached),
+        complianceRate: Number(row.complianceRate) || 0
+      })),
+      byCategory: byCategory.map(row => ({
+        category: row.category || 'general',
+        totalTickets: Number(row.totalTickets),
+        complianceRate: Number(row.complianceRate) || 0
+      }))
+    };
+  }
 
   // System variables operations
   async getSystemVariables(): Promise<SystemVariable[]> {

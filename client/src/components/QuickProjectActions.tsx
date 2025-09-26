@@ -141,13 +141,60 @@ export function QuickProjectActions({ task, onNavigateToProject, compact = true 
                 </Badge>
               </div>
 
-              {/* Project Progress */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">Progress</span>
-                  <span className="font-medium">{project.progress || 0}%</span>
+              {/* Project Progress & Health */}
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Progress</span>
+                    <span className="font-medium">{project.progress || 0}%</span>
+                  </div>
+                  <Progress value={project.progress || 0} className="h-2" />
                 </div>
-                <Progress value={project.progress || 0} className="h-2" />
+
+                {/* Project Health Indicators */}
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <div className="text-center">
+                    <div className="flex items-center justify-center gap-1">
+                      <div className={`w-2 h-2 rounded-full ${
+                        projectTasks.filter(t => t.status === 'completed').length / Math.max(projectTasks.length, 1) > 0.8
+                          ? 'bg-green-500'
+                          : projectTasks.filter(t => t.status === 'completed').length / Math.max(projectTasks.length, 1) > 0.5
+                          ? 'bg-yellow-500'
+                          : 'bg-red-500'
+                      }`} />
+                      <span className="text-muted-foreground">Health</span>
+                    </div>
+                    <div className="font-medium">
+                      {projectTasks.length > 0
+                        ? Math.round((projectTasks.filter(t => t.status === 'completed').length / projectTasks.length) * 100)
+                        : 0
+                      }%
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <div className="flex items-center justify-center gap-1">
+                      <Clock className="w-3 h-3 text-muted-foreground" />
+                      <span className="text-muted-foreground">Tasks</span>
+                    </div>
+                    <div className="font-medium">{projectTasks.length}</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="flex items-center justify-center gap-1">
+                      {projectTasks.some(t => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== 'completed') ? (
+                        <AlertCircle className="w-3 h-3 text-red-500" />
+                      ) : (
+                        <TrendingUp className="w-3 h-3 text-green-500" />
+                      )}
+                      <span className="text-muted-foreground">Status</span>
+                    </div>
+                    <div className="font-medium text-xs">
+                      {projectTasks.some(t => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== 'completed')
+                        ? 'At Risk'
+                        : 'On Track'
+                      }
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Project Details */}
@@ -264,12 +311,68 @@ export function QuickProjectActions({ task, onNavigateToProject, compact = true 
               </Badge>
             </div>
 
-            <div className="space-y-3">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Progress</span>
-                <span className="font-medium">{project.progress || 0}%</span>
+            <div className="space-y-4">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Progress</span>
+                  <span className="font-medium">{project.progress || 0}%</span>
+                </div>
+                <Progress value={project.progress || 0} className="h-3" />
               </div>
-              <Progress value={project.progress || 0} className="h-3" />
+
+              {/* Detailed Health Metrics */}
+              <div className="grid grid-cols-4 gap-4 p-3 bg-muted/30 rounded">
+                <div className="text-center">
+                  <div className="flex items-center justify-center gap-1 mb-1">
+                    <div className={`w-3 h-3 rounded-full ${
+                      projectTasks.filter(t => t.status === 'completed').length / Math.max(projectTasks.length, 1) > 0.8
+                        ? 'bg-green-500'
+                        : projectTasks.filter(t => t.status === 'completed').length / Math.max(projectTasks.length, 1) > 0.5
+                        ? 'bg-yellow-500'
+                        : 'bg-red-500'
+                    }`} />
+                    <span className="text-xs text-muted-foreground">Health</span>
+                  </div>
+                  <div className="font-medium text-sm">
+                    {projectTasks.length > 0
+                      ? Math.round((projectTasks.filter(t => t.status === 'completed').length / projectTasks.length) * 100)
+                      : 0
+                    }%
+                  </div>
+                </div>
+                <div className="text-center">
+                  <div className="flex items-center justify-center gap-1 mb-1">
+                    <Clock className="w-3 h-3 text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">Active</span>
+                  </div>
+                  <div className="font-medium text-sm">
+                    {projectTasks.filter(t => t.status === 'in_progress').length}
+                  </div>
+                </div>
+                <div className="text-center">
+                  <div className="flex items-center justify-center gap-1 mb-1">
+                    <Users className="w-3 h-3 text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">Total</span>
+                  </div>
+                  <div className="font-medium text-sm">{projectTasks.length}</div>
+                </div>
+                <div className="text-center">
+                  <div className="flex items-center justify-center gap-1 mb-1">
+                    {projectTasks.some(t => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== 'completed') ? (
+                      <AlertCircle className="w-3 h-3 text-red-500" />
+                    ) : (
+                      <TrendingUp className="w-3 h-3 text-green-500" />
+                    )}
+                    <span className="text-xs text-muted-foreground">Status</span>
+                  </div>
+                  <div className="font-medium text-xs">
+                    {projectTasks.some(t => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== 'completed')
+                      ? 'At Risk'
+                      : 'On Track'
+                    }
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4 text-sm">

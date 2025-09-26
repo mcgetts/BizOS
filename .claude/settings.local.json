@@ -48,7 +48,10 @@
       "Bash(git commit:*)",
       "Read(//proc/201/net/**)",
       "Bash(git checkout:*)",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(git push:*)",
+      "Bash(git remote add:*)",
+      "Bash(printf:*)"
     ],
     "deny": [],
     "ask": []

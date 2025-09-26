@@ -27,6 +27,9 @@ import { GanttChart } from "@/components/GanttChart";
 import { getStatusBadge, getPriorityBadge, statusConfig } from "@/lib/statusUtils";
 import { QuickProjectActions } from "@/components/QuickProjectActions";
 import { DependencyVisualization } from "@/components/DependencyVisualization";
+import { TaskTimeTracker } from "@/components/TaskTimeTracker";
+import { TaskNotifications } from "@/components/TaskNotifications";
+import { TaskAnalytics } from "@/components/TaskAnalytics";
 import { 
   Plus,
   Search,
@@ -358,7 +361,7 @@ export default function Tasks() {
   const [projectFilter, setProjectFilter] = useState("all");
   const [assigneeFilter, setAssigneeFilter] = useState("all");
   const [companyFilter, setCompanyFilter] = useState("all");
-  const [viewMode, setViewMode] = useState<"table" | "kanban" | "gantt" | "dependencies">("table");
+  const [viewMode, setViewMode] = useState<"table" | "kanban" | "gantt" | "dependencies" | "analytics">("table");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [viewingTask, setViewingTask] = useState<Task | null>(null);
@@ -415,11 +418,61 @@ export default function Tasks() {
     }
   }, [error, toast]);
 
+  // Touch and Drag handlers
+  const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
+  const [isTouchDragging, setIsTouchDragging] = useState(false);
+
   // Drag and Drop Handlers
   const handleDragStart = (e: React.DragEvent, task: Task) => {
     setDraggedTask(task);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/html', task.id);
+  };
+
+  // Touch handlers for mobile drag and drop
+  const handleTouchStart = (e: React.TouchEvent, task: Task) => {
+    const touch = e.touches[0];
+    setTouchStart({ x: touch.clientX, y: touch.clientY });
+    setDraggedTask(task);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStart || !draggedTask) return;
+
+    const touch = e.touches[0];
+    const deltaX = Math.abs(touch.clientX - touchStart.x);
+    const deltaY = Math.abs(touch.clientY - touchStart.y);
+
+    // Start dragging if moved more than 10px
+    if (deltaX > 10 || deltaY > 10) {
+      setIsTouchDragging(true);
+      e.preventDefault();
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!isTouchDragging || !draggedTask) {
+      setTouchStart(null);
+      setIsTouchDragging(false);
+      setDraggedTask(null);
+      return;
+    }
+
+    // Find the drop target
+    const touch = e.changedTouches[0];
+    const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+    const dropColumn = elementBelow?.closest('[data-status-column]');
+
+    if (dropColumn) {
+      const newStatus = dropColumn.getAttribute('data-status-column');
+      if (newStatus && newStatus !== draggedTask.status) {
+        handleDrop(e as any, newStatus);
+      }
+    }
+
+    setTouchStart(null);
+    setIsTouchDragging(false);
+    setDraggedTask(null);
   };
 
   const handleDragOver = (e: React.DragEvent, status: string) => {
@@ -616,7 +669,7 @@ export default function Tasks() {
     <Layout title="Task Management">
       <div className="p-6 space-y-6">
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Active Tasks</CardTitle>
@@ -665,6 +718,12 @@ export default function Tasks() {
               </p>
             </CardContent>
           </Card>
+          <TaskAnalytics
+            tasks={tasks || []}
+            users={users || []}
+            projects={projects || []}
+            compact={true}
+          />
         </div>
 
         {/* Filters and Search */}
@@ -787,6 +846,15 @@ export default function Tasks() {
               <Network className="h-4 w-4" />
               Dependencies
             </Button>
+            <Button
+              variant={viewMode === "analytics" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setViewMode("analytics")}
+              className="gap-2"
+            >
+              <BarChart3 className="h-4 w-4" />
+              Analytics
+            </Button>
           </div>
 
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
@@ -808,7 +876,8 @@ export default function Tasks() {
         {/* Tasks Views */}
         <div key={viewMode}>
         {viewMode === "table" ? (
-          <div className="border rounded-lg">
+          <div className="border rounded-lg overflow-x-auto">
+            <div className="min-w-[800px]">
             <TableComponent>
               <TableHeader>
                 <TableRow>
@@ -869,6 +938,8 @@ export default function Tasks() {
                     Hours
                   </SortableTableHead>
                   <th className="w-[120px] p-2">Dependencies</th>
+                  <th className="w-[100px] p-2">Time Tracking</th>
+                  <th className="w-[60px] p-2">Notifications</th>
                   <th className="w-[50px] p-2">Actions</th>
                 </TableRow>
               </TableHeader>
@@ -959,6 +1030,12 @@ export default function Tasks() {
                       })()}
                     </TableCell>
                     <TableCell>
+                      <TaskTimeTracker task={task} compact={true} />
+                    </TableCell>
+                    <TableCell>
+                      <TaskNotifications task={task} compact={true} />
+                    </TableCell>
+                    <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="sm" data-testid={`button-task-menu-${task.id}`}>
@@ -1003,6 +1080,7 @@ export default function Tasks() {
                 ))}
               </TableBody>
             </TableComponent>
+            </div>
           </div>
         ) : viewMode === "kanban" ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
@@ -1021,6 +1099,7 @@ export default function Tasks() {
                         ? 'bg-blue-100 dark:bg-blue-900 border-2 border-blue-300 dark:border-blue-700'
                         : 'bg-gray-50 dark:bg-gray-800'
                     }`}
+                    data-status-column={statusItem.key}
                     onDragOver={(e) => handleDragOver(e, statusItem.key)}
                     onDragLeave={handleDragLeave}
                     onDrop={(e) => handleDrop(e, statusItem.key)}
@@ -1029,11 +1108,15 @@ export default function Tasks() {
                       <Card
                         key={task.id}
                         className={`${isOverdue(task.dueDate) && task.status !== "completed" ? "border-red-200 dark:border-red-800" : ""}
-                                   ${draggedTask?.id === task.id ? 'opacity-50' : 'cursor-move hover:shadow-md'}
-                                   transition-all`}
+                                   ${draggedTask?.id === task.id ? 'opacity-50' : 'cursor-move hover:shadow-md touch-pan-y'}
+                                   ${isTouchDragging && draggedTask?.id === task.id ? 'scale-105 shadow-lg' : ''}
+                                   transition-all select-none`}
                         data-testid={`card-task-${task.id}`}
                         draggable
                         onDragStart={(e) => handleDragStart(e, task)}
+                        onTouchStart={(e) => handleTouchStart(e, task)}
+                        onTouchMove={handleTouchMove}
+                        onTouchEnd={handleTouchEnd}
                       >
                         <CardHeader className="pb-2">
                           <div className="flex items-start justify-between">
@@ -1126,6 +1209,10 @@ export default function Tasks() {
                               </div>
                             )}
                           </div>
+                          <div className="flex items-center justify-between pt-2 border-t">
+                            <TaskTimeTracker task={task} compact={true} />
+                            <TaskNotifications task={task} compact={true} />
+                          </div>
                         </CardContent>
                       </Card>
                     ))}
@@ -1153,6 +1240,13 @@ export default function Tasks() {
               queryClient.invalidateQueries({ queryKey: ["/api/task-dependencies"] });
               queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
             }}
+          />
+        ) : viewMode === "analytics" ? (
+          /* Task Analytics and Productivity Insights */
+          <TaskAnalytics
+            tasks={filteredTasks}
+            users={users || []}
+            projects={projects || []}
           />
         ) : null}
         </div>
@@ -1251,6 +1345,14 @@ export default function Tasks() {
                   <div>
                     <label className="font-medium">Last Updated</label>
                     <div>{viewingTask.updatedAt ? new Date(viewingTask.updatedAt).toLocaleDateString() : 'Unknown'}</div>
+                  </div>
+                </div>
+
+                {/* Time Tracking and Notifications */}
+                <div className="border-t pt-4 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <TaskTimeTracker task={viewingTask} compact={false} />
+                    <TaskNotifications task={viewingTask} compact={false} />
                   </div>
                 </div>
               </div>

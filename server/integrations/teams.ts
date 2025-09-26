@@ -464,6 +464,223 @@ export class TeamsIntegration {
       };
     }
   }
+
+  /**
+   * Send support ticket notification to Teams
+   */
+  async sendTicketNotification(
+    ticket: any,
+    type: 'created' | 'updated' | 'escalated' | 'resolved' | 'sla_breach',
+    metadata?: { escalationLevel?: number; reason?: string; assignedUser?: any }
+  ): Promise<void> {
+    if (!this.config.enabled || !this.config.webhookUrl) {
+      console.log('Teams ticket notifications disabled or webhook URL not configured');
+      return;
+    }
+
+    const card = this.createTicketAdaptiveCard(ticket, type, metadata);
+
+    try {
+      const response = await fetch(this.config.webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(card),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      console.log(`Teams ticket notification sent: ${type} for ticket #${ticket.ticketNumber}`);
+    } catch (error) {
+      console.error('Failed to send Teams ticket notification:', error);
+      throw error;
+    }
+  }
+
+  private createTicketAdaptiveCard(
+    ticket: any,
+    type: 'created' | 'updated' | 'escalated' | 'resolved' | 'sla_breach',
+    metadata?: any
+  ) {
+    const ticketUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/support?ticket=${ticket.id}`;
+    const priorityColor = this.getPriorityColor(ticket.priority, type);
+    const typeEmoji = this.getTicketTypeEmoji(type);
+
+    const baseCard = {
+      type: 'message',
+      attachments: [
+        {
+          contentType: 'application/vnd.microsoft.card.adaptive',
+          content: {
+            type: 'AdaptiveCard',
+            body: [
+              {
+                type: 'Container',
+                style: 'emphasis',
+                items: [
+                  {
+                    type: 'ColumnSet',
+                    columns: [
+                      {
+                        type: 'Column',
+                        width: 'auto',
+                        items: [
+                          {
+                            type: 'TextBlock',
+                            text: typeEmoji,
+                            size: 'Large'
+                          }
+                        ]
+                      },
+                      {
+                        type: 'Column',
+                        width: 'stretch',
+                        items: [
+                          {
+                            type: 'TextBlock',
+                            text: this.getTicketTitle(type, ticket, metadata),
+                            weight: 'Bolder',
+                            size: 'Medium',
+                            color: priorityColor
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                type: 'FactSet',
+                facts: this.getTicketFacts(ticket, type, metadata)
+              }
+            ],
+            actions: [
+              {
+                type: 'Action.OpenUrl',
+                title: type === 'sla_breach' ? 'Resolve Now' : 'View Ticket',
+                url: ticketUrl
+              }
+            ],
+            $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+            version: '1.3'
+          }
+        }
+      ]
+    };
+
+    // Add description for new tickets
+    if (type === 'created' && ticket.description) {
+      baseCard.attachments[0].content.body.push({
+        type: 'TextBlock',
+        text: ticket.description.substring(0, 200) + (ticket.description.length > 200 ? '...' : ''),
+        wrap: true,
+        isSubtle: true
+      });
+    }
+
+    return baseCard;
+  }
+
+  private getTicketTitle(type: string, ticket: any, metadata?: any): string {
+    switch (type) {
+      case 'created':
+        return `New Support Ticket: #${ticket.ticketNumber}`;
+      case 'escalated':
+        return `ESCALATED Level ${metadata?.escalationLevel}: #${ticket.ticketNumber}`;
+      case 'sla_breach':
+        return `SLA BREACH ALERT: #${ticket.ticketNumber}`;
+      case 'resolved':
+        return `Ticket Resolved: #${ticket.ticketNumber}`;
+      case 'updated':
+        return `Ticket Updated: #${ticket.ticketNumber}`;
+      default:
+        return `Support Ticket: #${ticket.ticketNumber}`;
+    }
+  }
+
+  private getTicketFacts(ticket: any, type: string, metadata?: any) {
+    const facts = [
+      { title: 'Title', value: ticket.title },
+      { title: 'Priority', value: ticket.priority || 'Medium' },
+      { title: 'Category', value: ticket.category || 'General' },
+      { title: 'Status', value: ticket.status || 'Open' }
+    ];
+
+    if (ticket.clientName) {
+      facts.push({ title: 'Client', value: ticket.clientName });
+    }
+
+    if (type === 'escalated' && metadata) {
+      if (metadata.assignedUser) {
+        facts.push({
+          title: 'Assigned To',
+          value: `${metadata.assignedUser.firstName} ${metadata.assignedUser.lastName}`
+        });
+      }
+      if (metadata.reason) {
+        facts.push({ title: 'Escalation Reason', value: metadata.reason });
+      }
+    }
+
+    if (type === 'sla_breach') {
+      const hoursElapsed = Math.floor((Date.now() - new Date(ticket.createdAt).getTime()) / (1000 * 60 * 60));
+      facts.push({ title: 'Time Elapsed', value: `${hoursElapsed} hours` });
+    }
+
+    if (type === 'resolved' && ticket.resolvedAt) {
+      const resolutionTime = this.calculateResolutionTime(ticket);
+      facts.push({ title: 'Resolution Time', value: resolutionTime });
+    }
+
+    facts.push({ title: 'Created', value: new Date(ticket.createdAt).toLocaleString() });
+
+    return facts;
+  }
+
+  private getPriorityColor(priority?: string, type?: string): string {
+    if (type === 'escalated' || type === 'sla_breach') return 'Attention';
+    switch (priority?.toLowerCase()) {
+      case 'urgent': return 'Attention';
+      case 'high': return 'Warning';
+      case 'medium': return 'Accent';
+      case 'low': return 'Good';
+      default: return 'Default';
+    }
+  }
+
+  private getTicketTypeEmoji(type: string): string {
+    switch (type) {
+      case 'created': return '🎫';
+      case 'escalated': return '🚨';
+      case 'sla_breach': return '⚠️';
+      case 'resolved': return '✅';
+      case 'updated': return '📝';
+      default: return '📋';
+    }
+  }
+
+  private calculateResolutionTime(ticket: any): string {
+    if (!ticket.resolvedAt || !ticket.createdAt) return 'Unknown';
+
+    const created = new Date(ticket.createdAt);
+    const resolved = new Date(ticket.resolvedAt);
+    const diffMs = resolved.getTime() - created.getTime();
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+    if (hours > 24) {
+      const days = Math.floor(hours / 24);
+      const remainingHours = hours % 24;
+      return `${days}d ${remainingHours}h`;
+    } else if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    } else {
+      return `${minutes}m`;
+    }
+  }
 }
 
 // Export default configuration

@@ -10,6 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertTaskSchema } from "@shared/schema";
@@ -23,6 +24,7 @@ import {
   Target,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   ArrowRight,
   X
 } from "lucide-react";
@@ -47,32 +49,135 @@ interface QuickTaskActionsProps {
   compact?: boolean;
 }
 
-// Pre-defined quick task templates
+// Pre-defined quick task templates organized by category
+const TASK_TEMPLATES = {
+  development: [
+    {
+      title: "Code review and feedback",
+      priority: "high",
+      estimatedHours: "1.5",
+      description: "Review code changes and provide constructive feedback",
+      icon: <CheckCircle2 className="w-4 h-4" />
+    },
+    {
+      title: "Setup development environment",
+      priority: "medium",
+      estimatedHours: "4",
+      description: "Initialize project setup and development tools",
+      icon: <Target className="w-4 h-4" />
+    },
+    {
+      title: "Write unit tests",
+      priority: "medium",
+      estimatedHours: "3",
+      description: "Create comprehensive unit tests for new features",
+      icon: <CheckCircle2 className="w-4 h-4" />
+    },
+    {
+      title: "Deploy to staging",
+      priority: "high",
+      estimatedHours: "1",
+      description: "Deploy latest changes to staging environment",
+      icon: <ArrowRight className="w-4 h-4" />
+    }
+  ],
+  client: [
+    {
+      title: "Client feedback session",
+      priority: "high",
+      estimatedHours: "1",
+      description: "Schedule and conduct client feedback meeting",
+      icon: <Users className="w-4 h-4" />
+    },
+    {
+      title: "Prepare client presentation",
+      priority: "medium",
+      estimatedHours: "2",
+      description: "Create presentation materials for client meeting",
+      icon: <Target className="w-4 h-4" />
+    },
+    {
+      title: "Client requirements gathering",
+      priority: "high",
+      estimatedHours: "2",
+      description: "Collect and document detailed client requirements",
+      icon: <Users className="w-4 h-4" />
+    },
+    {
+      title: "Send project update",
+      priority: "low",
+      estimatedHours: "0.5",
+      description: "Prepare and send weekly project update to client",
+      icon: <Users className="w-4 h-4" />
+    }
+  ],
+  planning: [
+    {
+      title: "Sprint planning session",
+      priority: "high",
+      estimatedHours: "2",
+      description: "Plan tasks and goals for upcoming sprint",
+      icon: <Calendar className="w-4 h-4" />
+    },
+    {
+      title: "Risk assessment review",
+      priority: "medium",
+      estimatedHours: "1.5",
+      description: "Identify and document potential project risks",
+      icon: <AlertTriangle className="w-4 h-4" />
+    },
+    {
+      title: "Update project timeline",
+      priority: "medium",
+      estimatedHours: "1",
+      description: "Review and adjust project milestones and deadlines",
+      icon: <Calendar className="w-4 h-4" />
+    },
+    {
+      title: "Team capacity planning",
+      priority: "low",
+      estimatedHours: "1",
+      description: "Assess team availability and workload distribution",
+      icon: <Users className="w-4 h-4" />
+    }
+  ],
+  documentation: [
+    {
+      title: "Update project documentation",
+      priority: "low",
+      estimatedHours: "2",
+      description: "Review and update project documentation and README",
+      icon: <Target className="w-4 h-4" />
+    },
+    {
+      title: "Create API documentation",
+      priority: "medium",
+      estimatedHours: "3",
+      description: "Document API endpoints and usage examples",
+      icon: <Target className="w-4 h-4" />
+    },
+    {
+      title: "Write user manual",
+      priority: "medium",
+      estimatedHours: "4",
+      description: "Create comprehensive user guide and tutorials",
+      icon: <Target className="w-4 h-4" />
+    },
+    {
+      title: "Update changelog",
+      priority: "low",
+      estimatedHours: "0.5",
+      description: "Document recent changes and version updates",
+      icon: <Target className="w-4 h-4" />
+    }
+  ]
+};
+
+// Legacy template support
 const QUICK_TASK_TEMPLATES = [
-  {
-    title: "Review project requirements",
-    priority: "high",
-    estimatedHours: "2",
-    icon: <CheckCircle2 className="w-4 h-4" />
-  },
-  {
-    title: "Client feedback session",
-    priority: "medium",
-    estimatedHours: "1",
-    icon: <Users className="w-4 h-4" />
-  },
-  {
-    title: "Update project documentation",
-    priority: "low",
-    estimatedHours: "3",
-    icon: <Target className="w-4 h-4" />
-  },
-  {
-    title: "Schedule team standup",
-    priority: "medium",
-    estimatedHours: "0.5",
-    icon: <Calendar className="w-4 h-4" />
-  }
+  ...TASK_TEMPLATES.development.slice(0, 2),
+  ...TASK_TEMPLATES.client.slice(0, 1),
+  ...TASK_TEMPLATES.planning.slice(0, 1)
 ];
 
 export function QuickTaskActions({ project, users, onTaskCreated, compact = false }: QuickTaskActionsProps) {
@@ -80,6 +185,8 @@ export function QuickTaskActions({ project, users, onTaskCreated, compact = fals
   const [isQuickMode, setIsQuickMode] = useState(true);
   const [quickTitle, setQuickTitle] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<keyof typeof TASK_TEMPLATES>("development");
+  const [showAllTemplates, setShowAllTemplates] = useState(false);
 
   const form = useForm<QuickTaskData>({
     resolver: zodResolver(quickTaskSchema),
@@ -182,11 +289,11 @@ export function QuickTaskActions({ project, users, onTaskCreated, compact = fals
     },
   });
 
-  // Template task creation
-  const createFromTemplate = (template: typeof QUICK_TASK_TEMPLATES[0]) => {
+  // Template task creation with enhanced metadata
+  const createFromTemplate = (template: any) => {
     const taskData: InsertTask = {
       title: template.title,
-      description: null,
+      description: template.description || null,
       projectId: project.id,
       assignedTo: null,
       createdBy: null,
@@ -199,7 +306,15 @@ export function QuickTaskActions({ project, users, onTaskCreated, compact = fals
       tags: null,
     };
 
-    createQuickTaskMutation.mutate(template.title);
+    // Use the full task creation mutation to include description
+    createTaskMutation.mutate({
+      title: template.title,
+      description: template.description || "",
+      assignedTo: "",
+      priority: template.priority,
+      estimatedHours: template.estimatedHours,
+      dueDate: "",
+    });
   };
 
   const handleQuickSubmit = (e: React.FormEvent) => {
@@ -405,22 +520,47 @@ export function QuickTaskActions({ project, users, onTaskCreated, compact = fals
 
             {/* Quick Templates */}
             <div className="border-t pt-3">
-              <p className="text-xs text-muted-foreground mb-2">Quick templates:</p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs text-muted-foreground">Quick templates:</p>
+                <Select value={selectedCategory} onValueChange={(value) => setSelectedCategory(value as keyof typeof TASK_TEMPLATES)}>
+                  <SelectTrigger className="w-24 h-6 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="development">Dev</SelectItem>
+                    <SelectItem value="client">Client</SelectItem>
+                    <SelectItem value="planning">Plan</SelectItem>
+                    <SelectItem value="documentation">Docs</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-1">
-                {QUICK_TASK_TEMPLATES.slice(0, 3).map((template, index) => (
+                {TASK_TEMPLATES[selectedCategory].slice(0, 3).map((template, index) => (
                   <button
                     key={index}
                     onClick={() => createFromTemplate(template)}
-                    disabled={createQuickTaskMutation.isPending}
+                    disabled={createTaskMutation.isPending}
                     className="w-full text-left p-2 text-xs rounded border border-gray-200 hover:bg-gray-50 transition-colors flex items-center gap-2"
+                    title={template.description}
                   >
                     {template.icon}
                     <span className="flex-1 truncate">{template.title}</span>
-                    <Badge className={getPriorityColor(template.priority)} variant="outline">
-                      {template.priority}
-                    </Badge>
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs text-muted-foreground">{template.estimatedHours}h</span>
+                      <Badge className={getPriorityColor(template.priority)} variant="outline">
+                        {template.priority}
+                      </Badge>
+                    </div>
                   </button>
                 ))}
+                {TASK_TEMPLATES[selectedCategory].length > 3 && (
+                  <button
+                    onClick={() => setShowAllTemplates(true)}
+                    className="w-full text-center p-1 text-xs text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                  >
+                    +{TASK_TEMPLATES[selectedCategory].length - 3} more templates
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -475,27 +615,50 @@ export function QuickTaskActions({ project, users, onTaskCreated, compact = fals
             </Button>
           </form>
 
-          <div className="grid grid-cols-1 gap-2">
-            {QUICK_TASK_TEMPLATES.map((template, index) => (
-              <button
-                key={index}
-                onClick={() => createFromTemplate(template)}
-                disabled={createQuickTaskMutation.isPending}
-                className="p-3 text-left rounded border border-gray-200 hover:bg-gray-50 transition-colors flex items-center gap-3"
-              >
-                <div className="flex items-center gap-2 flex-1">
-                  {template.icon}
-                  <span className="font-medium text-sm">{template.title}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge className={getPriorityColor(template.priority)} variant="outline">
-                    {template.priority}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground">{template.estimatedHours}h</span>
-                  <ArrowRight className="w-3 h-3 text-muted-foreground" />
-                </div>
-              </button>
-            ))}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm">Template Category</Label>
+              <Select value={selectedCategory} onValueChange={(value) => setSelectedCategory(value as keyof typeof TASK_TEMPLATES)}>
+                <SelectTrigger className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="development">Development</SelectItem>
+                  <SelectItem value="client">Client Work</SelectItem>
+                  <SelectItem value="planning">Planning</SelectItem>
+                  <SelectItem value="documentation">Documentation</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2">
+              {TASK_TEMPLATES[selectedCategory].map((template, index) => (
+                <button
+                  key={index}
+                  onClick={() => createFromTemplate(template)}
+                  disabled={createTaskMutation.isPending}
+                  className="p-3 text-left rounded border border-gray-200 hover:bg-gray-50 transition-colors"
+                  title={template.description}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 flex-1">
+                      {template.icon}
+                      <div className="flex-1">
+                        <span className="font-medium text-sm block">{template.title}</span>
+                        <span className="text-xs text-muted-foreground">{template.description}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge className={getPriorityColor(template.priority)} variant="outline">
+                        {template.priority}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">{template.estimatedHours}h</span>
+                      <ArrowRight className="w-3 h-3 text-muted-foreground" />
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       ) : (
