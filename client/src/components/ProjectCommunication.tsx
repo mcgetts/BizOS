@@ -216,7 +216,7 @@ export function ProjectCommunication({ projectId, projectName }: ProjectCommunic
 
                       {comment.attachments && Array.isArray(comment.attachments) && comment.attachments.length > 0 && (
                         <div className="flex flex-wrap gap-2">
-                          {comment.attachments.map((attachment: any, index: number) => (
+                          {(comment.attachments as any[]).map((attachment: any, index: number) => (
                             <div key={index} className="flex items-center gap-1 text-xs bg-background rounded px-2 py-1">
                               <FileText className="w-3 h-3" />
                               {attachment.name}
@@ -253,7 +253,7 @@ export function ProjectCommunication({ projectId, projectName }: ProjectCommunic
                       <p className="text-sm">{getActivityDescription(activity)}</p>
                       <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
                         <Clock className="w-3 h-3" />
-                        {formatDistanceToNow(new Date(activity.createdAt), { addSuffix: true })}
+                        {activity.createdAt ? formatDistanceToNow(new Date(activity.createdAt), { addSuffix: true }) : 'Unknown time'}
                       </div>
                       {activity.details && typeof activity.details === 'object' && (
                         <div className="mt-2 text-xs text-muted-foreground bg-muted/50 rounded p-2">

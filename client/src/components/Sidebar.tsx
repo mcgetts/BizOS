@@ -43,7 +43,7 @@ const navigationGroups = [
       },
       {
         title: "Sales",
-        href: "/clients",
+        href: "/sales",
         icon: Users,
       },
     ]

@@ -5,7 +5,7 @@
 
 metadata:
   name: "Business Platform Integration Suite"
-  version: "4.0.0"
+  version: "5.0.0"
   description: "Comprehensive third-party integration suite with Slack, Teams, GitHub and real-time capabilities"
   integration_count: 3
   integration_manager: "centralized"

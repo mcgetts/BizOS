@@ -237,8 +237,8 @@ export function GanttChart({ tasks, projects, users, dependencies }: GanttChartP
 
     // Generate connection lines
     dependencies.forEach(dep => {
-      const fromTask = taskPositions.get(dep.dependsOnTaskId);
-      const toTask = taskPositions.get(dep.taskId);
+      const fromTask = taskPositions.get(dep.dependsOnTaskId!);
+      const toTask = taskPositions.get(dep.taskId!);
 
       if (fromTask && toTask && dep.dependsOnTaskId && dep.taskId) {
         connections.push({

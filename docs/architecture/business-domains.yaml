@@ -5,7 +5,7 @@
 
 metadata:
   name: "Business Platform Domain Architecture"
-  version: "4.0.0"
+  version: "5.0.0"
   description: "Domain-driven design implementation with 5 core business domains and clear bounded contexts"
   architecture_pattern: "domain_driven_design"
   domain_count: 5

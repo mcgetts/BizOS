@@ -26,6 +26,8 @@ import { useTableSort, SortConfig } from "@/hooks/useTableSort";
 import { SortableHeader } from "@/components/SortableHeader";
 import { ProjectTemplateSelector } from "@/components/ProjectTemplateSelector";
 import { ProjectCommunication } from "@/components/ProjectCommunication";
+import { ProjectProgressIndicator } from "@/components/ProjectProgressIndicator";
+import { QuickTaskActions } from "@/components/QuickTaskActions";
 import { z } from "zod";
 import {
   Plus,
@@ -563,6 +565,12 @@ export default function Projects() {
     enabled: isAuthenticated,
   });
 
+  // Fetch users for QuickTaskActions component
+  const { data: users } = useQuery<User[]>({
+    queryKey: ["/api/users"],
+    enabled: isAuthenticated,
+  });
+
   // Delete mutation
   const deleteMutation = useOptimisticMutation({
     mutationFn: async (id: string) => {
@@ -983,7 +991,25 @@ export default function Projects() {
                               </span>
                             </div>
 
-                            <Progress value={project.progress || 0} className="h-1" />
+                            <ProjectProgressIndicator
+                              projectId={project.id || ''}
+                              projectName={project.name}
+                              currentProgress={project.progress || 0}
+                              currentStatus={project.status || 'planning'}
+                              showDetailedView={false}
+                            />
+
+                            <div className="flex items-center justify-center py-1">
+                              <QuickTaskActions
+                                project={project}
+                                users={users || []}
+                                compact={true}
+                                onTaskCreated={() => {
+                                  queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+                                  queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+                                }}
+                              />
+                            </div>
 
                             {projectTasks.length > 0 && (
                               <div className="flex items-center justify-between text-xs">
@@ -1319,6 +1345,20 @@ export default function Projects() {
 
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">Tasks ({getProjectTasks(viewingProject.id || '').length})</label>
+
+                  {/* Quick Task Actions */}
+                  <div className="mt-3 mb-4">
+                    <QuickTaskActions
+                      project={viewingProject}
+                      users={users || []}
+                      compact={false}
+                      onTaskCreated={() => {
+                        queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+                        queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+                      }}
+                    />
+                  </div>
+
                   <div className="mt-2 space-y-2">
                     {getProjectTasks(viewingProject.id || '').length === 0 ? (
                       <p className="text-sm text-muted-foreground italic">No tasks assigned to this project.</p>

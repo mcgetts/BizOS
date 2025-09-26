@@ -5,7 +5,7 @@
 
 metadata:
   name: "Business Platform Security Architecture"
-  version: "4.0.0"
+  version: "5.0.0"
   description: "Enterprise-grade security implementation with multi-method authentication, session management, and GDPR compliance features."
   security_level: "enterprise_grade"
   compliance: ["GDPR", "SOC2_ready"]

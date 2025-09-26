@@ -5,8 +5,8 @@
 
 metadata:
   name: "Business Platform Frontend Architecture"
-  version: "4.0.0"
-  description: "React-based frontend architecture with 50+ components covering authentication, project management, analytics, and mobile-optimized interfaces."
+  version: "5.0.0"
+  description: "React-based frontend architecture with 55+ components covering authentication, project management, analytics, mobile-optimized interfaces, and enhanced project-task integration workflows."
   framework: "React"
   react_version: "18.3.1"
   typescript: true

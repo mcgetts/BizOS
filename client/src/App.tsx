@@ -41,10 +41,11 @@ function Router() {
         <>
           <Route path="/" component={Dashboard} />
           <Route path="/dashboard" component={Dashboard} />
-          <Route path="/clients" component={Clients} />
+          <Route path="/sales" component={Clients} />
           <Route path="/projects" component={Projects} />
           <Route path="/tasks" component={Tasks} />
           {/* Legacy routes - redirect to new consolidated pages */}
+          <Route path="/clients">{() => { window.location.replace('/sales'); return null; }}</Route>
           <Route path="/team" component={Team} />
           <Route path="/resources" component={Resources} />
           <Route path="/finance" component={Finance} />

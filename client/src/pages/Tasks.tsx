@@ -25,6 +25,8 @@ import { SortableTableHead } from "@/components/SortableHeader";
 import { z } from "zod";
 import { GanttChart } from "@/components/GanttChart";
 import { getStatusBadge, getPriorityBadge, statusConfig } from "@/lib/statusUtils";
+import { QuickProjectActions } from "@/components/QuickProjectActions";
+import { DependencyVisualization } from "@/components/DependencyVisualization";
 import { 
   Plus,
   Search,
@@ -48,7 +50,8 @@ import {
   LayoutGrid,
   ArrowRight,
   GitBranch,
-  BarChart3
+  BarChart3,
+  Network
 } from "lucide-react";
 
 // Form validation schema for task creation/editing
@@ -355,7 +358,7 @@ export default function Tasks() {
   const [projectFilter, setProjectFilter] = useState("all");
   const [assigneeFilter, setAssigneeFilter] = useState("all");
   const [companyFilter, setCompanyFilter] = useState("all");
-  const [viewMode, setViewMode] = useState<"table" | "kanban" | "gantt">("table");
+  const [viewMode, setViewMode] = useState<"table" | "kanban" | "gantt" | "dependencies">("table");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [viewingTask, setViewingTask] = useState<Task | null>(null);
@@ -775,6 +778,15 @@ export default function Tasks() {
               <BarChart3 className="h-4 w-4" />
               Gantt
             </Button>
+            <Button
+              variant={viewMode === "dependencies" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setViewMode("dependencies")}
+              className="gap-2"
+            >
+              <Network className="h-4 w-4" />
+              Dependencies
+            </Button>
           </div>
 
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
@@ -889,7 +901,17 @@ export default function Tasks() {
                         {task.priority}
                       </Badge>
                     </TableCell>
-                    <TableCell data-testid={`text-task-project-${task.id}`}>{getProjectName(task.projectId)}</TableCell>
+                    <TableCell data-testid={`text-task-project-${task.id}`}>
+                      <QuickProjectActions
+                        task={task}
+                        compact={true}
+                        onNavigateToProject={(projectId) => {
+                          // Navigate to projects page and highlight the project
+                          window.location.hash = `project-${projectId}`;
+                          window.location.pathname = '/projects';
+                        }}
+                      />
+                    </TableCell>
                     <TableCell data-testid={`text-task-assignee-${task.id}`}>{getAssigneeName(task.assignedTo)}</TableCell>
                     <TableCell>
                       {task.dueDate && (
@@ -1082,9 +1104,15 @@ export default function Tasks() {
                             )}
                           </div>
                           <div className="text-xs space-y-1">
-                            <div className="flex items-center text-gray-600 dark:text-gray-400">
-                              <FolderOpen className="h-3 w-3 mr-1" />
-                              <span className="truncate" data-testid={`text-task-project-${task.id}`}>{getProjectName(task.projectId)}</span>
+                            <div className="flex items-center" data-testid={`text-task-project-${task.id}`}>
+                              <QuickProjectActions
+                                task={task}
+                                compact={true}
+                                onNavigateToProject={(projectId) => {
+                                  window.location.hash = `project-${projectId}`;
+                                  window.location.pathname = '/projects';
+                                }}
+                              />
                             </div>
                             <div className="flex items-center text-gray-600 dark:text-gray-400">
                               <UserIcon className="h-3 w-3 mr-1" />
@@ -1112,6 +1140,18 @@ export default function Tasks() {
             projects={projects || []}
             users={users || []}
             dependencies={taskDependencies || []}
+          />
+        ) : viewMode === "dependencies" ? (
+          /* Enhanced Dependency Visualization */
+          <DependencyVisualization
+            tasks={filteredTasks}
+            dependencies={taskDependencies || []}
+            projects={projects || []}
+            projectFilter={projectFilter !== "all" ? projectFilter : undefined}
+            onDependencyChange={() => {
+              queryClient.invalidateQueries({ queryKey: ["/api/task-dependencies"] });
+              queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+            }}
           />
         ) : null}
 

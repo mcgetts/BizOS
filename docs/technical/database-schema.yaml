@@ -5,7 +5,7 @@
 
 metadata:
   name: "Business Platform Database Schema"
-  version: "4.0.0"
+  version: "5.0.0"
   description: "Complete PostgreSQL database schema definition with 25+ tables covering authentication, project management, CRM, financial tracking, and resource management."
   database_type: "PostgreSQL"
   orm: "Drizzle ORM"

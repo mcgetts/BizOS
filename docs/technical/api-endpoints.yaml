@@ -1,16 +1,16 @@
 # API Endpoints and Service Boundaries
 # YAML DSL for REST API Definition
 # Version: 1.0
-# Last Updated: 2025-09-25
+# Last Updated: 2025-09-26
 
 metadata:
   name: "Business Platform API Definition"
-  version: "4.0.0"
-  description: "Comprehensive REST API definition covering all business platform endpoints including authentication, CRM, project management, and analytics services."
+  version: "5.0.0"
+  description: "Comprehensive REST API definition covering all business platform endpoints including authentication, CRM, project management, analytics services, enhanced user management, and advanced project-task integration capabilities."
   api_style: "RESTful"
   base_url: "https://business-platform.repl.co/api"
   authentication: "session_based"
-  total_endpoints: 35
+  total_endpoints: "40+"
   documentation: "OpenAPI 3.0 compatible"
 
 api_configuration:
@@ -587,7 +587,7 @@ task_management_endpoints:
   task_dependencies_create:
     path: "/api/task-dependencies"
     method: "POST"
-    description: "Create task dependency"
+    description: "Create task dependency with circular detection"
     authentication_required: true
     request_schema:
       required_fields:
@@ -598,6 +598,38 @@ task_management_endpoints:
         - "lag"
     response:
       success: "201 - Dependency created"
+      error: "409 - Circular dependency detected"
+
+  task_dependencies_delete:
+    path: "/api/task-dependencies/:id"
+    method: "DELETE"
+    description: "Remove task dependency"
+    authentication_required: true
+    response:
+      success: "204 - Dependency removed"
+      error: "404 - Dependency not found"
+
+  projects_progress:
+    path: "/api/projects/:id/progress"
+    method: "GET"
+    description: "Get intelligent project progress analysis"
+    authentication_required: true
+    response:
+      success: "200 - Progress analysis with completion estimates"
+      data_includes:
+        - "calculated_progress"
+        - "completion_estimate"
+        - "risk_assessment"
+        - "status_suggestions"
+        - "milestone_tracking"
+
+  projects_progress_update:
+    path: "/api/projects/:id/progress/update"
+    method: "POST"
+    description: "Trigger smart project progress recalculation"
+    authentication_required: true
+    response:
+      success: "200 - Progress updated with new calculations"
 
 # Time Tracking and Financial Endpoints
 time_financial_endpoints:

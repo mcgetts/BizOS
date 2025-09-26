@@ -5,7 +5,7 @@
 
 metadata:
   name: "Business Platform Environment Configuration"
-  version: "4.0.0"
+  version: "5.0.0"
   description: "Environment-specific configuration template for all deployment scenarios"
   template_type: "environment"
   supported_platforms: ["replit", "docker", "nodejs", "cloud"]

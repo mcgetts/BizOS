@@ -5,7 +5,7 @@
 
 metadata:
   name: "Business Platform Deployment Template"
-  version: "4.0.0"
+  version: "5.0.0"
   description: "Complete deployment configuration for the business management platform"
   template_type: "deployment"
   target_environments: ["development", "staging", "production"]

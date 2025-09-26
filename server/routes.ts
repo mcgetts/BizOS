@@ -92,6 +92,7 @@ import {
 import { wsManager } from "./websocketManager";
 import { PasswordUtils, AuthRateLimiter } from "./utils/authUtils";
 import { emailService } from "./emailService";
+import { updateProjectProgress, calculateProjectProgress, estimateProjectCompletion } from "./utils/projectProgressCalculations";
 import passport from "passport";
 
 // Helper function to log activity history
@@ -2364,6 +2365,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      // Auto-update project progress if task belongs to a project
+      if (task.projectId) {
+        try {
+          const updatedProject = await updateProjectProgress(task.projectId);
+
+          // Broadcast project update if progress or status changed significantly
+          await wsManager.broadcastDataChange('update', 'project', updatedProject, currentUser.id);
+
+          // Log project activity for status changes
+          if (validatedData.status && validatedData.status !== originalTask.status) {
+            try {
+              await db.insert(projectActivity).values({
+                projectId: task.projectId,
+                userId: currentUser.id,
+                action: 'task_status_changed',
+                description: `Task "${task.title}" status changed from ${originalTask.status || 'none'} to ${validatedData.status}`,
+                details: {
+                  taskId,
+                  taskTitle: task.title,
+                  oldStatus: originalTask.status,
+                  newStatus: validatedData.status,
+                  projectProgress: updatedProject.progress
+                }
+              });
+            } catch (error) {
+              console.error('Error logging project activity:', error);
+            }
+          }
+        } catch (error) {
+          console.error('Error updating project progress:', error);
+          // Don't fail the task update if project progress update fails
+        }
+      }
+
       res.json(task);
     } catch (error) {
       console.error("Error updating task:", error);
@@ -2386,6 +2421,137 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting task:", error);
       res.status(500).json({ message: "Failed to delete task" });
+    }
+  });
+
+  // Task Dependencies routes
+  app.get('/api/task-dependencies', isAuthenticated, async (req, res) => {
+    try {
+      const dependencies = await db.select().from(taskDependencies);
+      res.json(dependencies);
+    } catch (error) {
+      console.error("Error fetching task dependencies:", error);
+      res.status(500).json({ message: "Failed to fetch task dependencies" });
+    }
+  });
+
+  app.post('/api/task-dependencies', isAuthenticated, async (req: any, res) => {
+    try {
+      const validatedData = insertTaskDependencySchema.parse(req.body);
+
+      // Check for circular dependencies
+      const checkForCircular = async (taskId: string, dependsOnId: string, visited = new Set()): Promise<boolean> => {
+        if (visited.has(dependsOnId)) return true;
+        if (dependsOnId === taskId) return true;
+
+        visited.add(dependsOnId);
+
+        const childDependencies = await db
+          .select()
+          .from(taskDependencies)
+          .where(eq(taskDependencies.taskId, dependsOnId));
+
+        for (const childDep of childDependencies) {
+          if (await checkForCircular(taskId, childDep.dependsOnTaskId, new Set(visited))) {
+            return true;
+          }
+        }
+
+        return false;
+      };
+
+      const hasCircular = await checkForCircular(validatedData.taskId, validatedData.dependsOnTaskId);
+      if (hasCircular) {
+        return res.status(400).json({
+          message: "Cannot create dependency: would create circular dependency"
+        });
+      }
+
+      const [dependency] = await db
+        .insert(taskDependencies)
+        .values(validatedData)
+        .returning();
+
+      // Broadcast the new dependency
+      await wsManager.broadcastDataChange('create', 'task-dependency', dependency, req.user?.id);
+
+      // Log activity for both tasks
+      try {
+        const task = await storage.getTask(validatedData.taskId);
+        const dependsOnTask = await storage.getTask(validatedData.dependsOnTaskId);
+
+        if (task && dependsOnTask) {
+          if (task.projectId) {
+            await db.insert(projectActivity).values({
+              projectId: task.projectId,
+              userId: req.user.id,
+              action: 'dependency_created',
+              description: `Task "${task.title}" now depends on "${dependsOnTask.title}"`,
+              details: {
+                taskId: task.id,
+                dependsOnTaskId: dependsOnTask.id,
+                dependencyId: dependency.id
+              }
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error logging dependency activity:', error);
+      }
+
+      res.status(201).json(dependency);
+    } catch (error) {
+      console.error("Error creating task dependency:", error);
+      res.status(400).json({ message: "Failed to create task dependency" });
+    }
+  });
+
+  app.delete('/api/task-dependencies/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      // Get dependency data before deletion
+      const [dependency] = await db
+        .select()
+        .from(taskDependencies)
+        .where(eq(taskDependencies.id, req.params.id))
+        .limit(1);
+
+      if (!dependency) {
+        return res.status(404).json({ message: "Task dependency not found" });
+      }
+
+      await db
+        .delete(taskDependencies)
+        .where(eq(taskDependencies.id, req.params.id));
+
+      // Broadcast the deletion
+      await wsManager.broadcastDataChange('delete', 'task-dependency', { id: req.params.id, ...dependency }, req.user?.id);
+
+      // Log activity
+      try {
+        const task = await storage.getTask(dependency.taskId);
+        const dependsOnTask = await storage.getTask(dependency.dependsOnTaskId);
+
+        if (task && dependsOnTask && task.projectId) {
+          await db.insert(projectActivity).values({
+            projectId: task.projectId,
+            userId: req.user.id,
+            action: 'dependency_removed',
+            description: `Removed dependency: "${task.title}" no longer depends on "${dependsOnTask.title}"`,
+            details: {
+              taskId: task.id,
+              dependsOnTaskId: dependsOnTask.id,
+              dependencyId: dependency.id
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Error logging dependency removal activity:', error);
+      }
+
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting task dependency:", error);
+      res.status(500).json({ message: "Failed to delete task dependency" });
     }
   });
 
@@ -2663,6 +2829,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching project activity:", error);
       res.status(500).json({ message: "Failed to fetch project activity" });
+    }
+  });
+
+  // Project Progress Analytics
+  app.get('/api/projects/:id/progress', isAuthenticated, async (req, res) => {
+    try {
+      const progressResult = await calculateProjectProgress(req.params.id);
+      res.json(progressResult);
+    } catch (error) {
+      console.error("Error calculating project progress:", error);
+      res.status(500).json({ message: "Failed to calculate project progress" });
+    }
+  });
+
+  app.get('/api/projects/:id/completion-estimate', isAuthenticated, async (req, res) => {
+    try {
+      const estimate = await estimateProjectCompletion(req.params.id);
+      res.json(estimate);
+    } catch (error) {
+      console.error("Error estimating project completion:", error);
+      res.status(500).json({ message: "Failed to estimate project completion" });
+    }
+  });
+
+  app.post('/api/projects/:id/recalculate-progress', isAuthenticated, async (req: any, res) => {
+    try {
+      const updatedProject = await updateProjectProgress(req.params.id);
+
+      // Broadcast the update
+      await wsManager.broadcastDataChange('update', 'project', updatedProject, req.user?.id);
+
+      // Log activity
+      try {
+        await db.insert(projectActivity).values({
+          projectId: req.params.id,
+          userId: req.user.id,
+          action: 'progress_recalculated',
+          description: `Project progress manually recalculated to ${updatedProject.progress}%`,
+          details: {
+            newProgress: updatedProject.progress,
+            triggerUser: req.user.id
+          }
+        });
+      } catch (error) {
+        console.error('Error logging progress recalculation:', error);
+      }
+
+      res.json({
+        project: updatedProject,
+        message: 'Project progress recalculated successfully'
+      });
+    } catch (error) {
+      console.error("Error recalculating project progress:", error);
+      res.status(500).json({ message: "Failed to recalculate project progress" });
     }
   });
 
