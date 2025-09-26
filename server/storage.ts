@@ -1427,7 +1427,7 @@ export class DatabaseStorage implements IStorage {
     userId?: string;
   } = {}) {
     try {
-      let query = this.db.select().from(timeEntries);
+      let query = db.select().from(timeEntries);
       const conditions = [];
 
       if (options.startDate && options.endDate) {
