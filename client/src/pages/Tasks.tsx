@@ -806,6 +806,7 @@ export default function Tasks() {
         </div>
 
         {/* Tasks Views */}
+        <div key={viewMode}>
         {viewMode === "table" ? (
           <div className="border rounded-lg">
             <TableComponent>
@@ -1154,6 +1155,7 @@ export default function Tasks() {
             }}
           />
         ) : null}
+        </div>
 
         {filteredTasks.length === 0 && (
           <div className="text-center py-12">
