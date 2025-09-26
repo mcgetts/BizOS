@@ -1,0 +1,39 @@
+# Business Platform Code Owners
+# These owners will be requested for review when someone opens a pull request.
+
+# Global fallback owners
+* @business-platform-team
+
+# Core system architecture
+/shared/ @business-platform-team
+/server/ @business-platform-team
+/client/src/lib/ @business-platform-team
+
+# Database and migrations
+/shared/schema.ts @business-platform-team
+/scripts/ @business-platform-team
+
+# Authentication and security
+/server/utils/authUtils.ts @business-platform-team
+/server/replitAuth.ts @business-platform-team
+/client/src/components/auth/ @business-platform-team
+
+# Third-party integrations
+/server/integrations/ @business-platform-team
+
+# Business logic components
+/client/src/components/GanttChart.tsx @business-platform-team
+/client/src/components/Analytics.tsx @business-platform-team
+/client/src/components/BudgetManagement.tsx @business-platform-team
+
+# Documentation
+/docs/ @business-platform-team
+*.md @business-platform-team
+
+# CI/CD and GitHub workflows
+/.github/ @business-platform-team
+
+# Configuration files
+package.json @business-platform-team
+tsconfig.json @business-platform-team
+*.config.* @business-platform-team

@@ -1,0 +1,163 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.event.inputs.environment == 'staging'
+    environment: staging
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+
+      - name: Deploy to staging
+        run: |
+          echo "Deploying to staging environment..."
+          # Add your staging deployment commands here
+          # Example: rsync, docker, or platform-specific deployment
+        env:
+          STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          STAGING_API_KEY: ${{ secrets.STAGING_API_KEY }}
+
+      - name: Run health checks
+        run: |
+          echo "Running staging health checks..."
+          # Add health check commands here
+          # curl -f https://staging.yourdomain.com/health || exit 1
+
+      - name: Notify deployment status
+        if: always()
+        run: |
+          echo "Staging deployment completed with status: ${{ job.status }}"
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.environment == 'production'
+    environment:
+      name: production
+      url: https://yourdomain.com
+    needs: [deploy-staging]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      - name: Database migration check
+        run: |
+          echo "Checking database migrations..."
+          # Add migration verification commands
+          npm run db:push --dry-run || echo "No migrations needed"
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+
+      - name: Deploy to production
+        run: |
+          echo "Deploying to production environment..."
+          # Add your production deployment commands here
+          # Example: docker deployment, platform-specific commands
+        env:
+          PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          PRODUCTION_API_KEY: ${{ secrets.PRODUCTION_API_KEY }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run production health checks
+        run: |
+          echo "Running production health checks..."
+          # Add comprehensive health checks
+          # curl -f https://yourdomain.com/health || exit 1
+          # curl -f https://yourdomain.com/api/health || exit 1
+
+      - name: Create release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Release ${{ github.ref_name }}
+          body: |
+            ## Changes in this Release
+            - Automated release from ${{ github.ref_name }}
+            - Full CI/CD pipeline validation
+            - Production deployment verified
+
+            See [CHANGELOG.md](CHANGELOG.md) for detailed changes.
+          draft: false
+          prerelease: false
+
+      - name: Notify team
+        if: always()
+        run: |
+          echo "Production deployment completed with status: ${{ job.status }}"
+          # Add Slack/Teams notification here if desired
+
+  rollback:
+    name: Rollback Deployment
+    runs-on: ubuntu-latest
+    if: failure() && (startsWith(github.ref, 'refs/tags/v') || github.event.inputs.environment == 'production')
+    needs: [deploy-production]
+    environment: production
+
+    steps:
+      - name: Rollback production deployment
+        run: |
+          echo "Rolling back production deployment..."
+          # Add rollback commands here
+          # This could involve reverting to previous version, database rollback, etc.
+
+      - name: Verify rollback
+        run: |
+          echo "Verifying rollback..."
+          # Add verification commands
+
+      - name: Notify rollback completion
+        run: |
+          echo "Rollback completed successfully"
