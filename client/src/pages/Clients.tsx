@@ -758,7 +758,7 @@ export default function Clients() {
   const { sortedData: sortedClients, sortState: clientSortState, handleSort: handleClientSort } = useTableSort(filteredClients, clientSortConfigs);
 
   return (
-    <Layout title="Customer Relationship Management" breadcrumbs={["CRM"]}>
+    <Layout title="Sales Management" breadcrumbs={["Sales"]}>
       <div className="space-y-6">
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
