@@ -2,6 +2,7 @@ import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
+import { Toaster as SonnerToaster } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { NotificationProvider } from "@/contexts/NotificationContext";
@@ -74,6 +75,7 @@ function App() {
         <TooltipProvider>
           <NotificationProvider>
             <Toaster />
+            <SonnerToaster position="top-right" richColors />
             <Router />
           </NotificationProvider>
         </TooltipProvider>

@@ -283,7 +283,7 @@ function groupTicketsByDate(tickets: SupportTicket[], timeRange: { start: Date; 
   const dateGroups: Record<string, { count: number; categories: Record<string, number> }> = {};
 
   tickets.forEach(ticket => {
-    const date = new Date(ticket.createdAt).toISOString().split('T')[0];
+    const date = new Date(ticket.createdAt || new Date()).toISOString().split('T')[0];
     if (!dateGroups[date]) {
       dateGroups[date] = { count: 0, categories: {} };
     }
@@ -311,7 +311,7 @@ function calculateTimeTrend(
   tickets.forEach(ticket => {
     const timeValue = ticket[timeField];
     if (timeValue) {
-      const date = new Date(ticket.createdAt).toISOString().split('T')[0];
+      const date = new Date(ticket.createdAt || new Date()).toISOString().split('T')[0];
       if (!dateGroups[date]) {
         dateGroups[date] = [];
       }
@@ -330,7 +330,7 @@ function calculateSatisfactionTrend(tickets: SupportTicket[], timeRange: { start
 
   tickets.forEach(ticket => {
     if (ticket.satisfactionRating) {
-      const date = new Date(ticket.createdAt).toISOString().split('T')[0];
+      const date = new Date(ticket.createdAt || new Date()).toISOString().split('T')[0];
       if (!dateGroups[date]) {
         dateGroups[date] = [];
       }
@@ -375,7 +375,7 @@ function calculatePriorityDistribution(tickets: SupportTicket[]) {
     percentage: total > 0 ? (count / total) * 100 : 0
   })).sort((a, b) => {
     const order = { urgent: 4, high: 3, medium: 2, low: 1 };
-    return (order[priority as keyof typeof order] || 0) - (order[priority as keyof typeof order] || 0);
+    return (order[b.priority as keyof typeof order] || 0) - (order[a.priority as keyof typeof order] || 0);
   });
 }
 

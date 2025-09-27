@@ -51,7 +51,9 @@
       "Bash(git restore:*)",
       "Bash(git push:*)",
       "Bash(git remote add:*)",
-      "Bash(printf:*)"
+      "Bash(printf:*)",
+      "Bash(echo:*)",
+      "Bash(timeout 30s npm run dev)"
     ],
     "deny": [],
     "ask": []

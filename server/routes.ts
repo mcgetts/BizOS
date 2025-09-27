@@ -205,6 +205,15 @@ async function getProjectTemplateForOpportunity(opportunity: any): Promise<any> 
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Health check endpoint - no authentication required
+  app.get('/api/health', (req, res) => {
+    res.status(200).json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime()
+    });
+  });
+
   // Test reset endpoint - must be BEFORE auth setup to bypass authentication
   app.get('/api/test/reset', async (req, res) => {
     if (process.env.NODE_ENV !== 'development') {

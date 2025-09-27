@@ -218,6 +218,16 @@ export interface IStorage {
     projects: { current: number; target: number; growth: number };
     tickets: { current: number; target: number; growth: number };
   }>;
+  getExecutiveDashboardKPIs(): Promise<{
+    monthlyRecurringRevenue: { current: number; target: number; growth: number };
+    profitMargin: { current: number; target: number; growth: number };
+    pipelineValue: { current: number; target: number; growth: number };
+    customerAcquisitionCost: { current: number; target: number; growth: number };
+    projectHealthScore: { current: number; target: number; growth: number };
+    teamUtilization: { current: number; target: number; growth: number };
+    customerSatisfaction: { current: number; target: number; growth: number };
+    businessRiskIndicator: { current: number; target: number; growth: number };
+  }>;
 
   getRevenueTrends(months: number): Promise<Array<{
     month: string;
