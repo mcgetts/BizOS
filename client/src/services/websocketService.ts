@@ -289,7 +289,7 @@ class WebSocketService {
     this.notificationListeners.delete(listener);
   }
 
-  private notifyNotificationListeners(notification: NotificationData) {
+  private notifyNotificationListeners(notification: Notification) {
     this.notificationListeners.forEach(listener => listener(notification));
   }
 
