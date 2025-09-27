@@ -1,4 +1,5 @@
 import { queryClient } from '@/lib/queryClient';
+import type { Notification } from '@/contexts/NotificationContext';
 
 interface WebSocketMessage {
   type: 'auth' | 'notification' | 'data_change' | 'auth_success' | 'pong' | 'error';
@@ -22,19 +23,8 @@ interface DataChangeMessage {
   timestamp: string;
 }
 
-interface NotificationData {
-  id: string;
-  type: string;
-  title: string;
-  message: string;
-  data?: any;
-  timestamp: Date;
-  read: boolean;
-  userId: string;
-}
-
 type ConnectionStateListener = (isConnected: boolean) => void;
-type NotificationListener = (notification: NotificationData) => void;
+type NotificationListener = (notification: Notification) => void;
 
 class WebSocketService {
   private ws: WebSocket | null = null;
@@ -144,9 +134,9 @@ class WebSocketService {
 
       case 'notification':
         if (message.id && message.title && message.message) {
-          const notification: NotificationData = {
+          const notification: Notification = {
             id: message.id,
-            type: message.notificationType || 'general',
+            type: message.notificationType as any || 'task_created',
             title: message.title,
             message: message.message,
             data: message.data,
@@ -190,47 +180,69 @@ class WebSocketService {
       'invoice': ['/api/invoices'],
       'expense': ['/api/expenses'],
       'ticket': ['/api/support/tickets'],
-      'payment': ['/api/payments'],
+      'knowledge': ['/api/knowledge'],
+      'opportunity': ['/api/opportunities'],
+      'project_template': ['/api/project-templates'],
       'notification': ['/api/notifications']
     };
 
-    // Invalidate relevant queries based on the entity type
-    const queryKeys = entityToQueryKey[entity] || [];
-    queryKeys.forEach(queryKey => {
-      queryClient.invalidateQueries({ queryKey: [queryKey] });
-    });
+    // Get the query keys to invalidate
+    const queryKeys = entityToQueryKey[entity];
 
-    // Handle specific entity updates with more granular cache invalidation
+    if (queryKeys) {
+      queryKeys.forEach(queryKey => {
+        // Invalidate the main entity list
+        queryClient.invalidateQueries({ queryKey: [queryKey] });
+
+        // For specific operations, also invalidate related queries
+        if (operation === 'update' || operation === 'delete') {
+          // Invalidate specific item queries if they exist
+          if (data?.id) {
+            queryClient.invalidateQueries({ queryKey: [queryKey, data.id] });
+          }
+        }
+
+        // Invalidate related entity queries
+        this.invalidateRelatedQueries(entity, data, operation);
+      });
+    } else {
+      console.warn(`Unknown entity type for real-time sync: ${entity}`);
+    }
+  };
+
+  private invalidateRelatedQueries = (entity: string, data: any, operation: string) => {
+    // Invalidate related queries based on entity relationships
     switch (entity) {
-      case 'project':
-        if (data?.id) {
-          queryClient.invalidateQueries({ queryKey: ['/api/projects', data.id] });
-          queryClient.invalidateQueries({ queryKey: ['/api/tasks'] }); // Projects affect tasks
+      case 'task':
+        if (data?.projectId) {
+          queryClient.invalidateQueries({ queryKey: ['/api/projects', data.projectId, 'tasks'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/projects'] }); // For project task counts
         }
         break;
 
-      case 'task':
+      case 'project':
+        // Invalidate task queries that might be filtered by project
+        queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
         if (data?.id) {
-          queryClient.invalidateQueries({ queryKey: ['/api/tasks', data.id] });
-        }
-        if (data?.projectId) {
-          queryClient.invalidateQueries({ queryKey: ['/api/projects', data.projectId] });
+          queryClient.invalidateQueries({ queryKey: ['/api/projects', data.id, 'comments'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/projects', data.id, 'activity'] });
         }
         break;
 
       case 'client':
-        if (data?.id) {
-          queryClient.invalidateQueries({ queryKey: ['/api/clients', data.id] });
-        }
-        // Invalidate companies and projects as they might be related
-        queryClient.invalidateQueries({ queryKey: ['/api/companies'] });
+        // Invalidate projects that might reference this client
         queryClient.invalidateQueries({ queryKey: ['/api/projects'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/opportunities'] });
         break;
 
       case 'company':
-        if (data?.id) {
-          queryClient.invalidateQueries({ queryKey: ['/api/companies', data.id] });
-        }
+        // Invalidate clients and projects that might reference this company
+        queryClient.invalidateQueries({ queryKey: ['/api/clients'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/projects'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/opportunities'] });
+        break;
+
+      case 'opportunity':
         // Invalidate companies and clients
         queryClient.invalidateQueries({ queryKey: ['/api/companies'] });
         queryClient.invalidateQueries({ queryKey: ['/api/clients'] });
