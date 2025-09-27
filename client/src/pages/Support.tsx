@@ -303,6 +303,13 @@ export default function Support() {
     return matchesSearch && matchesCategory && matchesStatus;
   }) || [];
 
+  const openTickets = tickets?.filter((t: SupportTicket) => t.status === 'open').length || 0;
+  const inProgressTickets = tickets?.filter((t: SupportTicket) => t.status === 'in_progress').length || 0;
+  const resolvedTickets = tickets?.filter((t: SupportTicket) => t.status === 'resolved').length || 0;
+  const closedTickets = tickets?.filter((t: SupportTicket) => t.status === 'closed').length || 0;
+  const avgRating = (tickets && tickets.length > 0) ? 
+    tickets.reduce((sum: number, ticket: SupportTicket) => 
+      sum + (ticket.satisfactionRating || 0), 0) / (tickets.filter((t: SupportTicket) => t.satisfactionRating).length || 1) : 0;
 
   const onCreateSubmit = (data: FormData) => {
     createTicketMutation.mutate(data);
@@ -333,6 +340,62 @@ export default function Support() {
           </TabsList>
 
           <TabsContent value="tickets" className="space-y-6">
+            {/* Support Overview Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <Card className="glassmorphism">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Open Tickets</p>
+                      <p className="text-2xl font-bold" data-testid="text-open-tickets">
+                        {tickets?.filter(t => t.status === 'open').length || 0}
+                      </p>
+                    </div>
+                    <BookOpen className="w-8 h-8 text-destructive" />
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="glassmorphism">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">In Progress</p>
+                      <p className="text-2xl font-bold" data-testid="text-in-progress-tickets">
+                        {tickets?.filter(t => t.status === 'in_progress').length || 0}
+                      </p>
+                    </div>
+                    <Clock className="w-8 h-8 text-warning" />
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="glassmorphism">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Resolved</p>
+                      <p className="text-2xl font-bold text-success" data-testid="text-resolved-tickets">
+                        {tickets?.filter(t => t.status === 'resolved').length || 0}
+                      </p>
+                    </div>
+                    <CheckCircle className="w-8 h-8 text-success" />
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="glassmorphism">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Satisfaction</p>
+                      <p className="text-2xl font-bold" data-testid="text-satisfaction-score">
+                        {avgRating > 0 ? avgRating.toFixed(1) : 'N/A'}
+                      </p>
+                    </div>
+                    <Star className="w-8 h-8 text-accent-foreground" />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
             {/* Search and Filters */}
             <div className="flex items-center space-x-4">
               <div className="relative">
