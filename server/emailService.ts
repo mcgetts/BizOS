@@ -62,6 +62,18 @@ class EmailService {
       this.transporter = nodemailer.createTransport(emailConfig);
       this.isConfigured = true;
       console.log('Email service initialized successfully');
+      
+      // Test SMTP connection on startup to identify authentication issues
+      this.testConnection().then(result => {
+        if (result.success) {
+          console.log('✅ SMTP connection test passed - email sending is ready');
+        } else {
+          console.error('❌ SMTP connection test failed:', result.error);
+          console.error('Email verification during user registration will fall back to console logging');
+        }
+      }).catch(error => {
+        console.error('❌ SMTP connection test error:', error);
+      });
     } catch (error) {
       console.error('Failed to initialize email service:', error);
       this.isConfigured = false;
@@ -70,6 +82,22 @@ class EmailService {
 
   public isEmailConfigured(): boolean {
     return this.isConfigured;
+  }
+
+  public async testConnection(): Promise<{ success: boolean; error?: string }> {
+    if (!this.isConfigured) {
+      return { success: false, error: 'Email service not configured' };
+    }
+
+    try {
+      // Test SMTP connection by verifying the transporter
+      await this.transporter.verify();
+      console.log('SMTP connection test successful');
+      return { success: true };
+    } catch (error) {
+      console.error('SMTP connection test failed:', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
   }
 
   public async sendEmail(notification: EmailNotification): Promise<boolean> {

@@ -4405,6 +4405,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // SMTP connection test endpoint (admin only)
+  app.post('/api/admin/smtp/test', requireRole('admin'), async (req, res) => {
+    try {
+      const result = await emailService.testConnection();
+      if (result.success) {
+        res.json({ success: true, message: 'SMTP connection test successful' });
+      } else {
+        res.status(500).json({ 
+          success: false, 
+          message: 'SMTP connection test failed', 
+          error: result.error 
+        });
+      }
+    } catch (error) {
+      console.error('SMTP connection test error:', error);
+      res.status(500).json({ 
+        success: false, 
+        message: 'SMTP connection test failed', 
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
   // API 404 handler - catch any unmatched /api routes before SPA fallback
   app.use('/api/*', (req, res) => {
     res.status(404).json({ message: 'API endpoint not found' });
