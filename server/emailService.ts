@@ -27,23 +27,23 @@ class EmailService {
     const port = parseInt(process.env.SMTP_PORT || '587');
     const isSecurePort = port === 465;
     const emailConfig = {
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
+      host: process.env.SMTP_HOST || 'in-v3.mailjet.com',
       port: port,
       secure: isSecurePort, // Only true for port 465
       requireTLS: !isSecurePort, // Force TLS for non-secure ports
       auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
+        user: process.env.SMTP_USER, // Mailjet API Key
+        pass: process.env.SMTP_PASS, // Mailjet Secret Key
       },
-      // Gmail-optimized TLS configuration
+      // Mailjet-optimized TLS configuration
       tls: {
-        // Gmail requires proper TLS verification
+        // Standard TLS verification for Mailjet
         rejectUnauthorized: true,
         // Let Node.js handle TLS version negotiation automatically
         minVersion: 'TLSv1.2',
         maxVersion: 'TLSv1.3'
       },
-      // Connection options optimized for Gmail
+      // Connection options optimized for Mailjet
       connectionTimeout: 60000, // 60 seconds
       greetingTimeout: 30000, // 30 seconds  
       socketTimeout: 60000, // 60 seconds
