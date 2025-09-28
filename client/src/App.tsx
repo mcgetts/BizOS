@@ -46,13 +46,11 @@ function Router() {
           <Route path="/tasks" component={Tasks} />
           {/* Legacy routes - redirect to new consolidated pages */}
           <Route path="/clients">{() => { window.location.replace('/sales'); return null; }}</Route>
-          <Route path="/team" component={Team} />
           <Route path="/resources" component={Resources} />
-          <Route path="/finance" component={Finance} />
           <Route path="/budget" component={BudgetManagement} />
           {/* New consolidated hub pages */}
-          <Route path="/team-hub" component={TeamHub} />
-          <Route path="/finance-hub" component={FinanceHub} />
+          <Route path="/team" component={TeamHub} />
+          <Route path="/finance" component={FinanceHub} />
           <Route path="/time" component={TimeTracking} />
           <Route path="/knowledge" component={Knowledge} />
           <Route path="/marketing" component={Marketing} />

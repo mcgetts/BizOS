@@ -73,12 +73,12 @@ const navigationGroups = [
     items: [
       {
         title: "Finance",
-        href: "/finance-hub",
+        href: "/finance",
         icon: PoundSterling,
       },
       {
         title: "Team",
-        href: "/team-hub",
+        href: "/team",
         icon: UserCog,
       },
       {
