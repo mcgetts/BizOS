@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { db } from '../db.js';
 import { users, roles, userRoleAssignments, permissionExceptions } from '@shared/schema';
-import { eq, and, or } from 'drizzle-orm';
+import { eq, and, or, sql } from 'drizzle-orm';
 import {
   hasPermission,
   getUserPermissions,
@@ -544,4 +544,3 @@ export const PermissionChecks = {
   }
 };
 
-export { RBACMiddleware };

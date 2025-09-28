@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -83,6 +84,13 @@ type InsertUser = z.infer<typeof insertUserSchema>;
 export default function Team() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading, user } = useAuth();
+  const {
+    canManageUsers,
+    canCreateUsers,
+    canEditUsers,
+    canDeleteUsers,
+    canViewUsers
+  } = usePermissions();
   const [searchTerm, setSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -114,9 +122,15 @@ export default function Team() {
     enabled: isAuthenticated,
   });
 
-  const { data: teamMembers, isLoading: isLoadingTeam } = useQuery<User[]>({
+  const { data: teamMembers, isLoading: isLoadingTeam, error: teamMembersError } = useQuery<User[]>({
     queryKey: ["/api/users"],
-    enabled: isAuthenticated,
+    enabled: true, // Always try to load, even if auth is failing
+    retry: 3,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+    staleTime: 0, // Always fetch fresh data for team page
+    onError: (error) => {
+      console.error('Failed to load team members:', error);
+    },
   });
 
   // Workload and capacity data
@@ -281,6 +295,18 @@ export default function Team() {
   }
 
   const actualTeamMembers = teamMembers || [];
+
+  // Debug logging - remove this after fixing
+  console.log('Team Debug:', {
+    isLoadingTeam,
+    teamMembersCount: teamMembers?.length,
+    actualTeamMembersCount: actualTeamMembers.length,
+    user,
+    canViewUsers: canViewUsers(),
+    isAuthenticated,
+    teamMembersError: teamMembersError?.message,
+    hasError: !!teamMembersError
+  });
 
   const getStatusColor = (isActive: boolean) => {
     return isActive ? "default" : "secondary";
@@ -672,6 +698,7 @@ export default function Team() {
                   Table
                 </Button>
               </div>
+              {canCreateUsers() && (
               <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
                   <DialogTrigger asChild>
                     <Button data-testid="button-add-member">
@@ -796,6 +823,7 @@ export default function Team() {
               </Form>
             </DialogContent>
                 </Dialog>
+              )}
               </div>
           </CardHeader>
           <CardContent>
@@ -909,10 +937,13 @@ export default function Team() {
                           <Eye className="w-4 h-4 mr-2" />
                           View
                         </DropdownMenuItem>
+                        {canEditUsers() && (
                         <DropdownMenuItem onClick={() => setEditingMember(member)}>
                           <Edit className="w-4 h-4 mr-2" />
                           Edit
                         </DropdownMenuItem>
+                        )}
+                        {canDeleteUsers() && (
                         <DropdownMenuItem
                           onClick={() => {
                             const deleteMember = async () => {
@@ -935,7 +966,7 @@ export default function Team() {
                                     errorMessage = parsedError.message || errorMessage;
                                   } catch {
                                     errorMessage = response.status === 401 ? 'Unauthorized - please log in again' :
-                                               response.status === 403 ? 'Permission denied - admin role required' :
+                                               response.status === 403 ? 'Permission denied - insufficient permissions' :
                                                errorMessage;
                                   }
                                   toast({
@@ -963,6 +994,7 @@ export default function Team() {
                           <Trash2 className="w-4 h-4 mr-2" />
                           Delete
                         </DropdownMenuItem>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
@@ -1045,7 +1077,12 @@ export default function Team() {
                               </AvatarFallback>
                             </Avatar>
                             <div>
-                              <div className="font-medium">{getUserDisplayName(member)}</div>
+                              <div
+                                className="font-medium cursor-pointer hover:text-blue-600 hover:underline"
+                                onClick={() => openDetailsDialog(member)}
+                              >
+                                {getUserDisplayName(member)}
+                              </div>
                               {activeTasks.length > 0 && (
                                 <div className="text-xs text-muted-foreground">
                                   {activeTasks.length} active tasks
@@ -1077,10 +1114,13 @@ export default function Team() {
                                 <Eye className="w-4 h-4 mr-2" />
                                 View
                               </DropdownMenuItem>
+                              {canEditUsers() && (
                               <DropdownMenuItem onClick={() => setEditingMember(member)}>
                                 <Edit className="w-4 h-4 mr-2" />
                                 Edit
                               </DropdownMenuItem>
+                              )}
+                              {canDeleteUsers() && (
                               <DropdownMenuItem
                                 onClick={() => {
                                   const deleteMember = async () => {
@@ -1103,7 +1143,7 @@ export default function Team() {
                                           errorMessage = parsedError.message || errorMessage;
                                         } catch {
                                           errorMessage = response.status === 401 ? 'Unauthorized - please log in again' :
-                                                     response.status === 403 ? 'Permission denied - admin role required' :
+                                                     response.status === 403 ? 'Permission denied - insufficient permissions' :
                                                      errorMessage;
                                         }
                                         toast({
@@ -1131,6 +1171,7 @@ export default function Team() {
                                 <Trash2 className="w-4 h-4 mr-2" />
                                 Delete
                               </DropdownMenuItem>
+                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>
@@ -1150,6 +1191,14 @@ export default function Team() {
               <p className="text-muted-foreground">
                 {searchTerm ? "No team members found matching your search" : "No team members found"}
               </p>
+              <p className="text-xs text-muted-foreground mt-2">
+                Debug: Total users loaded: {actualTeamMembers.length}, Filtered: {filteredMembers.length}, Loading: {isLoadingTeam ? 'yes' : 'no'}, Error: {teamMembersError?.message || 'none'}
+              </p>
+              {teamMembersError && (
+                <p className="text-xs text-red-500 mt-2">
+                  Error loading team members: {teamMembersError.message}
+                </p>
+              )}
             </CardContent>
           </Card>
             )}
@@ -1259,6 +1308,7 @@ export default function Team() {
                 Close
               </Button>
               <div className="flex space-x-2">
+                {canDeleteUsers() && (
                 <Button
                   variant="destructive"
                   onClick={() => {
@@ -1284,7 +1334,7 @@ export default function Team() {
                               errorMessage = parsedError.message || errorMessage;
                             } catch {
                               errorMessage = response.status === 401 ? 'Unauthorized - please log in again' :
-                                         response.status === 403 ? 'Permission denied - admin role required' :
+                                         response.status === 403 ? 'Permission denied - insufficient permissions' :
                                          errorMessage;
                             }
                             toast({
@@ -1311,6 +1361,8 @@ export default function Team() {
                 >
                   Delete
                 </Button>
+                )}
+                {canEditUsers() && (
                 <Button
                   onClick={() => {
                     if (selectedMember) {
@@ -1321,6 +1373,7 @@ export default function Team() {
                 >
                   Edit
                 </Button>
+                )}
               </div>
             </DialogFooter>
           </DialogContent>
@@ -1528,7 +1581,7 @@ export default function Team() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {user?.role === 'admin' || user?.role === 'manager' ? (
+                  {canManageUsers() ? (
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
                         <p className="text-sm text-muted-foreground">

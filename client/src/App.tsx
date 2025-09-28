@@ -8,6 +8,7 @@ import { NotificationProvider } from "@/contexts/NotificationContext";
 import { useAuth } from "@/hooks/useAuth";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/Landing";
+import EmailVerification from "@/pages/EmailVerification";
 import Dashboard from "@/pages/Dashboard";
 import Clients from "@/pages/Clients";
 import Analytics from "@/pages/Analytics";
@@ -36,7 +37,10 @@ function Router() {
   return (
     <Switch>
       {!isAuthenticated ? (
-        <Route path="/" component={Landing} />
+        <>
+          <Route path="/" component={Landing} />
+          <Route path="/verify-email" component={EmailVerification} />
+        </>
       ) : (
         <>
           <Route path="/" component={Dashboard} />

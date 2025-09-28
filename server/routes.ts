@@ -7,6 +7,7 @@ import { storage } from "./storage";
 import { db } from "./db";
 import { eq, desc, and, sql, asc } from "drizzle-orm";
 import { setupAuth, isAuthenticated, requireRole } from "./replitAuth";
+import { RBACMiddleware, PermissionChecks } from "./security/rbacMiddleware";
 import { mfaRoutes } from "./routes/mfaRoutes.js";
 import { authMfaRoutes } from "./routes/authMfaRoutes.js";
 import { sessionRoutes } from "./routes/sessionRoutes.js";

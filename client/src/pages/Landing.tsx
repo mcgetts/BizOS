@@ -1,12 +1,33 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AuthContainer } from "@/components/auth/AuthContainer";
-import { Building2, Users, FolderOpen, PoundSterling, BookOpen, Megaphone, Monitor } from "lucide-react";
+import { Building2, Users, FolderOpen, PoundSterling, BookOpen, Megaphone, Monitor, CheckCircle } from "lucide-react";
 
 export default function Landing() {
   const [showAuth, setShowAuth] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [verificationSuccess, setVerificationSuccess] = useState(false);
+
+  // Check for verification success parameter
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('verified') === 'true') {
+      setVerificationSuccess(true);
+      setShowAuth(true);
+      setAuthMode('login');
+
+      // Remove the parameter from URL for clean state
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, '', newUrl);
+
+      // Hide the success message after 5 seconds
+      setTimeout(() => {
+        setVerificationSuccess(false);
+      }, 5000);
+    }
+  }, []);
 
   const handleDevLogin = async () => {
     // Use dev login only in development mode
@@ -45,6 +66,15 @@ export default function Landing() {
               Sign in to your business management platform
             </p>
           </div>
+
+          {verificationSuccess && (
+            <Alert className="mb-6 border-green-200 bg-green-50">
+              <CheckCircle className="h-4 w-4 text-green-600" />
+              <AlertDescription className="text-green-800">
+                Email verified successfully! You can now log in to your account.
+              </AlertDescription>
+            </Alert>
+          )}
 
           <AuthContainer
             onSuccess={() => window.location.reload()}
