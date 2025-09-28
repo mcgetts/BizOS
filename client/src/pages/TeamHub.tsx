@@ -195,10 +195,7 @@ export default function TeamHub() {
   // Mutations for CRUD operations
   const updateUserMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<InsertUser> }) => {
-      return apiRequest(`/api/users/${id}`, {
-        method: "PUT",
-        body: JSON.stringify(data),
-      });
+      return apiRequest("PUT", `/api/users/${id}`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
@@ -220,9 +217,7 @@ export default function TeamHub() {
 
   const deleteUserMutation = useMutation({
     mutationFn: async (id: string) => {
-      return apiRequest(`/api/users/${id}`, {
-        method: "DELETE",
-      });
+      return apiRequest("DELETE", `/api/users/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
@@ -245,10 +240,7 @@ export default function TeamHub() {
   // Add user mutation
   const addUserMutation = useMutation({
     mutationFn: async (data: InsertUser) => {
-      return apiRequest('/api/users', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      });
+      return apiRequest('POST', '/api/users', data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/users'] });
@@ -563,7 +555,16 @@ export default function TeamHub() {
                           </AvatarFallback>
                         </Avatar>
                         <div className="flex-1">
-                          <h4 className="font-medium" data-testid={`text-member-name-${member.id}`}>{getUserDisplayName(member)}</h4>
+                          <h4 
+                            className="font-medium cursor-pointer hover:text-blue-600 transition-colors" 
+                            data-testid={`text-member-name-${member.id}`}
+                            onClick={() => {
+                              setSelectedMember(member);
+                              setIsDetailsDialogOpen(true);
+                            }}
+                          >
+                            {getUserDisplayName(member)}
+                          </h4>
                           <p className="text-sm text-muted-foreground" data-testid={`text-member-role-${member.id}`}>{member.role}</p>
                         </div>
                         <Badge variant={member.isActive ? "default" : "secondary"}>
@@ -673,7 +674,16 @@ export default function TeamHub() {
                                 </AvatarFallback>
                               </Avatar>
                               <div>
-                                <p className="font-medium" data-testid={`text-table-name-${member.id}`}>{getUserDisplayName(member)}</p>
+                                <p 
+                                  className="font-medium cursor-pointer hover:text-blue-600 transition-colors" 
+                                  data-testid={`text-table-name-${member.id}`}
+                                  onClick={() => {
+                                    setSelectedMember(member);
+                                    setIsDetailsDialogOpen(true);
+                                  }}
+                                >
+                                  {getUserDisplayName(member)}
+                                </p>
                                 <p className="text-sm text-muted-foreground" data-testid={`text-table-email-${member.id}`}>{member.email}</p>
                               </div>
                             </div>
@@ -1165,6 +1175,36 @@ export default function TeamHub() {
                       </p>
                     </div>
                   </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex items-center gap-2 pt-4 border-t">
+                  <Button
+                    onClick={() => {
+                      setEditingMember(selectedMember);
+                      setIsDetailsDialogOpen(false);
+                      setIsEditDialogOpen(true);
+                    }}
+                    variant="outline"
+                    data-testid={`button-edit-details-${selectedMember.id}`}
+                  >
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit Member
+                  </Button>
+                  {user?.role === 'admin' && (
+                    <Button
+                      onClick={() => {
+                        setMemberToDelete(selectedMember);
+                        setIsDetailsDialogOpen(false);
+                        setIsDeleteDialogOpen(true);
+                      }}
+                      variant="destructive"
+                      data-testid={`button-delete-details-${selectedMember.id}`}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete Member
+                    </Button>
+                  )}
                 </div>
               </div>
             )}
