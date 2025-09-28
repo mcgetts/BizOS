@@ -16,22 +16,14 @@ import {
   supportTickets,
   supportTicketComments,
   slaConfigurations,
-  ticketEscalations,
   timeEntries,
   clientInteractions,
   systemVariables,
   userCapacity,
   userAvailability,
   userSkills,
-  opportunityNextSteps,
-  opportunityCommunications,
-  opportunityStakeholders,
   opportunityActivityHistory,
   projectActivity,
-  supportTickets,
-  supportTicketComments,
-  slaConfigurations,
-  ticketEscalations,
   type User,
   type UpsertUser,
   type InsertUser,
@@ -294,7 +286,7 @@ export class DatabaseStorage implements IStorage {
     // Check for business-related foreign key references that need reassignment
     const [clientRefs, projectRefs, taskAssignedRefs, taskCreatedRefs, opportunityRefs, 
            stepAssignedRefs, stepCompletedRefs, stepCreatedRefs, supportAssignedRefs, 
-           supportCreatedRefs, ticketFromRefs, ticketToRefs] = await Promise.all([
+           supportCreatedRefs] = await Promise.all([
       db.select({ count: count() }).from(clients).where(eq(clients.assignedTo, id)),
       db.select({ count: count() }).from(projects).where(eq(projects.managerId, id)),
       db.select({ count: count() }).from(tasks).where(eq(tasks.assignedTo, id)),
@@ -304,15 +296,13 @@ export class DatabaseStorage implements IStorage {
       db.select({ count: count() }).from(opportunityNextSteps).where(eq(opportunityNextSteps.completedBy, id)),
       db.select({ count: count() }).from(opportunityNextSteps).where(eq(opportunityNextSteps.createdBy, id)),
       db.select({ count: count() }).from(supportTickets).where(eq(supportTickets.assignedTo, id)),
-      db.select({ count: count() }).from(supportTickets).where(eq(supportTickets.createdBy, id)),
-      db.select({ count: count() }).from(ticketEscalations).where(eq(ticketEscalations.fromUserId, id)),
-      db.select({ count: count() }).from(ticketEscalations).where(eq(ticketEscalations.toUserId, id))
+      db.select({ count: count() }).from(supportTickets).where(eq(supportTickets.createdBy, id))
     ]);
 
     const totalRefs = clientRefs[0].count + projectRefs[0].count + taskAssignedRefs[0].count + 
                      taskCreatedRefs[0].count + opportunityRefs[0].count + stepAssignedRefs[0].count + 
                      stepCompletedRefs[0].count + stepCreatedRefs[0].count + supportAssignedRefs[0].count + 
-                     supportCreatedRefs[0].count + ticketFromRefs[0].count + ticketToRefs[0].count;
+                     supportCreatedRefs[0].count;
 
     if (totalRefs > 0) {
       throw new Error(`Cannot delete user: ${totalRefs} records are still assigned to this user. Please reassign them first.`);
