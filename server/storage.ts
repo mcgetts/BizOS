@@ -14,7 +14,6 @@ import {
   knowledgeArticles,
   marketingCampaigns,
   supportTickets,
-  supportTicketComments,
   timeEntries,
   clientInteractions,
   systemVariables,
@@ -313,12 +312,11 @@ export class DatabaseStorage implements IStorage {
       db.delete(userCapacity).where(eq(userCapacity.userId, id)),
       db.delete(userAvailability).where(eq(userAvailability.userId, id)),
       db.delete(userSkills).where(eq(userSkills.userId, id)),
-      // Activity and communication logs (safe to delete)
+      // Activity and communication logs (safe to delete) 
       db.delete(opportunityCommunications).where(eq(opportunityCommunications.recordedBy, id)),
       db.delete(opportunityStakeholders).where(eq(opportunityStakeholders.createdBy, id)),
       db.delete(opportunityActivityHistory).where(eq(opportunityActivityHistory.performedBy, id)),
-      db.delete(projectActivity).where(eq(projectActivity.userId, id)),
-      db.delete(supportTicketComments).where(eq(supportTicketComments.userId, id))
+      db.delete(projectActivity).where(eq(projectActivity.userId, id))
     ]);
 
     // Finally delete the user
