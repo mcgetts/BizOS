@@ -103,16 +103,16 @@ interface EnhancedUser extends User {
   skills?: string[];
 }
 
-// Form schema for adding team members
+// Form schema for adding team members - strengthen validation
 const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
 }).extend({
-  skills: z.string().optional().transform(str => str ? str.split(',').map(s => s.trim()) : []),
-  email: z.string().optional(),
-  firstName: z.string().optional(),
-  lastName: z.string().optional(),
+  email: z.string().email('Please enter a valid email address'),
+  role: z.string().min(1, 'Role is required'),
+  firstName: z.string().min(1, 'First name is required'),
+  lastName: z.string().min(1, 'Last name is required'),
   department: z.string().optional(),
   position: z.string().optional(),
   phone: z.string().optional(),
@@ -120,6 +120,20 @@ const insertUserSchema = createInsertSchema(users).omit({
 });
 
 type InsertUser = z.infer<typeof insertUserSchema>;
+
+// Edit form schema - require at least one field to update
+const editUserSchema = insertUserSchema.extend({
+  id: z.string(),
+}).partial().required({ id: true }).refine(
+  (data) => {
+    // Require at least one field besides id to be provided
+    const { id, ...rest } = data;
+    return Object.values(rest).some(value => value !== undefined && value !== '' && value !== null);
+  },
+  { message: 'At least one field must be updated' }
+);
+
+type EditUser = z.infer<typeof editUserSchema>;
 
 export default function TeamHub() {
   const { toast } = useToast();
@@ -135,6 +149,9 @@ export default function TeamHub() {
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<User | null>(null);
   const [selectedTimeRange, setSelectedTimeRange] = useState("week");
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [memberToDelete, setMemberToDelete] = useState<User | null>(null);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -175,6 +192,82 @@ export default function TeamHub() {
     enabled: isAuthenticated,
   });
 
+  // Mutations for CRUD operations
+  const updateUserMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<InsertUser> }) => {
+      return apiRequest(`/api/users/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      toast({
+        title: "Success",
+        description: "Team member updated successfully",
+      });
+      setIsEditDialogOpen(false);
+      setEditingMember(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update team member",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest(`/api/users/${id}`, {
+        method: "DELETE",
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      toast({
+        title: "Success",
+        description: "Team member deleted successfully",
+      });
+      setIsDeleteDialogOpen(false);
+      setMemberToDelete(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete team member",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Add user mutation
+  const addUserMutation = useMutation({
+    mutationFn: async (data: InsertUser) => {
+      return apiRequest('/api/users', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/users'] });
+      toast({
+        title: 'Success',
+        description: 'Team member added successfully',
+      });
+      setIsAddDialogOpen(false);
+      addForm.reset();
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to add team member',
+        variant: 'destructive',
+      });
+    },
+  });
+
   // Enhanced team members with workload data
   const enhancedTeamMembers: EnhancedUser[] = (teamMembers || []).map(member => {
     const workload = workloads?.find(w => w.userId === member.id);
@@ -193,6 +286,71 @@ export default function TeamHub() {
       return `${user.firstName} ${user.lastName}`;
     }
     return user.email || user.id || 'Unknown User';
+  };
+
+  // Edit form setup
+  const editForm = useForm<EditUser>({
+    resolver: zodResolver(editUserSchema),
+    defaultValues: {
+      firstName: '',
+      lastName: '',
+      email: '',
+      role: '',
+      department: '',
+      position: '',
+      phone: '',
+      address: '',
+      isActive: true,
+    },
+  });
+
+  // Add form setup
+  const addForm = useForm<InsertUser>({
+    resolver: zodResolver(insertUserSchema),
+    defaultValues: {
+      firstName: '',
+      lastName: '',
+      email: '',
+      role: 'employee', // Set default role to meet validation
+      department: '',
+      position: '',
+      phone: '',
+      address: '',
+      isActive: true,
+    },
+  });
+
+  // Update form when editing member changes
+  useEffect(() => {
+    if (editingMember) {
+      editForm.reset({
+        id: editingMember.id,
+        firstName: editingMember.firstName || '',
+        lastName: editingMember.lastName || '',
+        email: editingMember.email || '',
+        role: editingMember.role || '',
+        department: editingMember.department || '',
+        position: editingMember.position || '',
+        phone: editingMember.phone || '',
+        address: editingMember.address || '',
+        isActive: editingMember.isActive ?? true,
+      });
+    }
+  }, [editingMember, editForm]);
+
+  const onEditSubmit = async (data: EditUser) => {
+    if (!editingMember) return;
+    const { id, ...updateData } = data;
+    await updateUserMutation.mutateAsync({ id: editingMember.id, data: updateData });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!memberToDelete) return;
+    await deleteUserMutation.mutateAsync(memberToDelete.id);
+  };
+
+  const onAddSubmit = async (data: InsertUser) => {
+    await addUserMutation.mutateAsync(data);
   };
 
   // Generate chart data
@@ -346,6 +504,7 @@ export default function TeamHub() {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-64"
+                  data-testid="input-search-members"
                 />
                 <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
                   <SelectTrigger className="w-40">
@@ -368,6 +527,7 @@ export default function TeamHub() {
                   variant={viewMode === "grid" ? "default" : "outline"}
                   size="sm"
                   onClick={() => setViewMode("grid")}
+                  data-testid="button-view-grid"
                 >
                   <LayoutGrid className="h-4 w-4" />
                 </Button>
@@ -375,10 +535,11 @@ export default function TeamHub() {
                   variant={viewMode === "table" ? "default" : "outline"}
                   size="sm"
                   onClick={() => setViewMode("table")}
+                  data-testid="button-view-table"
                 >
                   <Table className="h-4 w-4" />
                 </Button>
-                <Button onClick={() => setIsAddDialogOpen(true)}>
+                <Button onClick={() => setIsAddDialogOpen(true)} data-testid="button-add-member">
                   <Plus className="h-4 w-4 mr-2" />
                   Add Member
                 </Button>
@@ -402,8 +563,8 @@ export default function TeamHub() {
                           </AvatarFallback>
                         </Avatar>
                         <div className="flex-1">
-                          <h4 className="font-medium">{getUserDisplayName(member)}</h4>
-                          <p className="text-sm text-muted-foreground">{member.role}</p>
+                          <h4 className="font-medium" data-testid={`text-member-name-${member.id}`}>{getUserDisplayName(member)}</h4>
+                          <p className="text-sm text-muted-foreground" data-testid={`text-member-role-${member.id}`}>{member.role}</p>
                         </div>
                         <Badge variant={member.isActive ? "default" : "secondary"}>
                           {member.isActive ? "Active" : "Inactive"}
@@ -443,7 +604,7 @@ export default function TeamHub() {
                         </div>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
+                            <Button variant="ghost" size="sm" data-testid={`menu-trigger-grid-${member.id}`}>
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
@@ -451,14 +612,30 @@ export default function TeamHub() {
                             <DropdownMenuItem onClick={() => {
                               setSelectedMember(member);
                               setIsDetailsDialogOpen(true);
-                            }}>
+                            }} data-testid={`menu-view-grid-${member.id}`}>
                               <Eye className="h-4 w-4 mr-2" />
                               View Details
                             </DropdownMenuItem>
-                            <DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => {
+                              setEditingMember(member);
+                              setIsEditDialogOpen(true);
+                            }} data-testid={`menu-edit-grid-${member.id}`}>
                               <Edit className="h-4 w-4 mr-2" />
                               Edit
                             </DropdownMenuItem>
+                            {user?.role === 'admin' && (
+                              <DropdownMenuItem 
+                                onClick={() => {
+                                  setMemberToDelete(member);
+                                  setIsDeleteDialogOpen(true);
+                                }}
+                                className="text-red-600"
+                                data-testid={`menu-delete-grid-${member.id}`}
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
@@ -496,13 +673,13 @@ export default function TeamHub() {
                                 </AvatarFallback>
                               </Avatar>
                               <div>
-                                <p className="font-medium">{getUserDisplayName(member)}</p>
-                                <p className="text-sm text-muted-foreground">{member.email}</p>
+                                <p className="font-medium" data-testid={`text-table-name-${member.id}`}>{getUserDisplayName(member)}</p>
+                                <p className="text-sm text-muted-foreground" data-testid={`text-table-email-${member.id}`}>{member.email}</p>
                               </div>
                             </div>
                           </TableCell>
-                          <TableCell>{member.role || 'No role'}</TableCell>
-                          <TableCell>{member.department || 'No department'}</TableCell>
+                          <TableCell data-testid={`text-table-role-${member.id}`}>{member.role || 'No role'}</TableCell>
+                          <TableCell data-testid={`text-table-department-${member.id}`}>{member.department || 'No department'}</TableCell>
                           <TableCell>
                             <div className="flex items-center space-x-2">
                               <span className="text-sm">{member.workload?.utilizationPercentage.toFixed(1) || '0'}%</span>
@@ -514,26 +691,45 @@ export default function TeamHub() {
                           </TableCell>
                           <TableCell>{member.workload?.activeProjectsCount || 0}</TableCell>
                           <TableCell>
-                            <Badge variant={member.isActive ? "default" : "secondary"}>
+                            <Badge variant={member.isActive ? "default" : "secondary"} data-testid={`badge-status-${member.id}`}>
                               {member.isActive ? "Active" : "Inactive"}
                             </Badge>
                           </TableCell>
                           <TableCell>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="sm">
+                                <Button variant="ghost" size="sm" data-testid={`menu-trigger-table-${member.id}`}>
                                   <MoreHorizontal className="h-4 w-4" />
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent>
-                                <DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => {
+                                  setSelectedMember(member);
+                                  setIsDetailsDialogOpen(true);
+                                }} data-testid={`menu-view-table-${member.id}`}>
                                   <Eye className="h-4 w-4 mr-2" />
                                   View Details
                                 </DropdownMenuItem>
-                                <DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => {
+                                  setEditingMember(member);
+                                  setIsEditDialogOpen(true);
+                                }} data-testid={`menu-edit-table-${member.id}`}>
                                   <Edit className="h-4 w-4 mr-2" />
                                   Edit
                                 </DropdownMenuItem>
+                                {user?.role === 'admin' && (
+                                  <DropdownMenuItem 
+                                    onClick={() => {
+                                      setMemberToDelete(member);
+                                      setIsDeleteDialogOpen(true);
+                                    }}
+                                    className="text-red-600"
+                                    data-testid={`menu-delete-table-${member.id}`}
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                )}
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </TableCell>
@@ -766,11 +962,159 @@ export default function TeamHub() {
 
         {/* Dialogs */}
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogContent>
+          <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Add Team Member</DialogTitle>
             </DialogHeader>
-            <p>Team member form will be implemented here</p>
+            <Form {...addForm}>
+              <form onSubmit={addForm.handleSubmit(onAddSubmit)} className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField
+                    control={addForm.control}
+                    name="firstName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>First Name</FormLabel>
+                        <FormControl>
+                          <Input {...field} data-testid="input-add-firstName" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={addForm.control}
+                    name="lastName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Last Name</FormLabel>
+                        <FormControl>
+                          <Input {...field} data-testid="input-add-lastName" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={addForm.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email *</FormLabel>
+                      <FormControl>
+                        <Input {...field} type="email" data-testid="input-add-email" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField
+                    control={addForm.control}
+                    name="role"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Role</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ''}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-add-role">
+                              <SelectValue placeholder="Select role" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="admin">Admin</SelectItem>
+                            <SelectItem value="manager">Manager</SelectItem>
+                            <SelectItem value="employee">Employee</SelectItem>
+                            <SelectItem value="client">Client</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={addForm.control}
+                    name="department"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Department</FormLabel>
+                        <FormControl>
+                          <Input {...field} data-testid="input-add-department" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField
+                    control={addForm.control}
+                    name="position"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Position</FormLabel>
+                        <FormControl>
+                          <Input {...field} data-testid="input-add-position" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={addForm.control}
+                    name="phone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Phone</FormLabel>
+                        <FormControl>
+                          <Input {...field} data-testid="input-add-phone" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={addForm.control}
+                  name="address"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Address</FormLabel>
+                      <FormControl>
+                        <Textarea {...field} data-testid="input-add-address" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setIsAddDialogOpen(false);
+                      addForm.reset();
+                    }}
+                    data-testid="button-add-cancel"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={addUserMutation.isPending}
+                    data-testid="button-add-member"
+                  >
+                    {addUserMutation.isPending ? 'Adding...' : 'Add Member'}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
           </DialogContent>
         </Dialog>
 
@@ -824,6 +1168,207 @@ export default function TeamHub() {
                 </div>
               </div>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Member Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>
+                Edit {editingMember ? getUserDisplayName(editingMember) : 'Team Member'}
+              </DialogTitle>
+            </DialogHeader>
+            <Form {...editForm}>
+              <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField
+                    control={editForm.control}
+                    name="firstName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>First Name</FormLabel>
+                        <FormControl>
+                          <Input {...field} data-testid="input-firstName" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={editForm.control}
+                    name="lastName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Last Name</FormLabel>
+                        <FormControl>
+                          <Input {...field} data-testid="input-lastName" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={editForm.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input {...field} type="email" data-testid="input-email" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField
+                    control={editForm.control}
+                    name="role"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Role</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ''}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-role">
+                              <SelectValue placeholder="Select role" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="admin">Admin</SelectItem>
+                            <SelectItem value="manager">Manager</SelectItem>
+                            <SelectItem value="employee">Employee</SelectItem>
+                            <SelectItem value="client">Client</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={editForm.control}
+                    name="department"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Department</FormLabel>
+                        <FormControl>
+                          <Input {...field} data-testid="input-department" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField
+                    control={editForm.control}
+                    name="position"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Position</FormLabel>
+                        <FormControl>
+                          <Input {...field} data-testid="input-position" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={editForm.control}
+                    name="phone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Phone</FormLabel>
+                        <FormControl>
+                          <Input {...field} data-testid="input-phone" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={editForm.control}
+                  name="address"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Address</FormLabel>
+                      <FormControl>
+                        <Textarea {...field} data-testid="input-address" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setIsEditDialogOpen(false);
+                      setEditingMember(null);
+                    }}
+                    data-testid="button-cancel"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={updateUserMutation.isPending}
+                    data-testid="button-save"
+                  >
+                    {updateUserMutation.isPending ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete Team Member</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Are you sure you want to delete {memberToDelete ? getUserDisplayName(memberToDelete) : 'this team member'}?
+                This action cannot be undone.
+              </p>
+              <div className="flex items-center space-x-2 p-3 bg-destructive/10 rounded-md">
+                <AlertTriangle className="h-4 w-4 text-destructive" />
+                <p className="text-sm text-destructive">
+                  This will permanently remove the member from the system.
+                </p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsDeleteDialogOpen(false);
+                  setMemberToDelete(null);
+                }}
+                data-testid="button-cancel-delete"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleDeleteConfirm}
+                disabled={deleteUserMutation.isPending}
+                data-testid="button-confirm-delete"
+              >
+                {deleteUserMutation.isPending ? 'Deleting...' : 'Delete Member'}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
