@@ -27,7 +27,7 @@ class EmailService {
     const port = parseInt(process.env.SMTP_PORT || '587');
     const isSecurePort = port === 465;
     const emailConfig = {
-      host: process.env.SMTP_HOST,
+      host: process.env.SMTP_HOST || 'smtp.gmail.com',
       port: port,
       secure: isSecurePort, // Only true for port 465
       requireTLS: !isSecurePort, // Force TLS for non-secure ports
@@ -35,15 +35,15 @@ class EmailService {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
       },
-      // Additional TLS options to handle SSL/TLS issues
+      // Gmail-optimized TLS configuration
       tls: {
-        // Allow self-signed certificates
-        rejectUnauthorized: false,
+        // Gmail requires proper TLS verification
+        rejectUnauthorized: true,
         // Let Node.js handle TLS version negotiation automatically
         minVersion: 'TLSv1.2',
         maxVersion: 'TLSv1.3'
       },
-      // Connection options
+      // Connection options optimized for Gmail
       connectionTimeout: 60000, // 60 seconds
       greetingTimeout: 30000, // 30 seconds  
       socketTimeout: 60000, // 60 seconds
