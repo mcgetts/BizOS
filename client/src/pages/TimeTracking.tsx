@@ -302,7 +302,7 @@ export default function TimeTracking() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Time Tracking</h1>
+            <h1 className="text-3xl font-bold text-foreground">Time</h1>
             <p className="text-muted-foreground">
               Track time, analyze productivity, and manage project budgets
             </p>
@@ -580,7 +580,7 @@ export default function TimeTracking() {
                   <CardTitle className="flex items-center justify-between text-base">
                     <div className="flex items-center space-x-2">
                       <Calculator className="h-4 w-4 text-orange-600" />
-                      <span>Finance Hub Integration</span>
+                      <span>Finance Integration</span>
                     </div>
                     <Button variant="ghost" size="sm" asChild>
                       <a href="/finance" className="text-orange-600 hover:text-orange-700">
@@ -620,7 +620,7 @@ export default function TimeTracking() {
                   <CardTitle className="flex items-center justify-between text-base">
                     <div className="flex items-center space-x-2">
                       <Users className="h-4 w-4 text-indigo-600" />
-                      <span>Team Hub Integration</span>
+                      <span>Team Integration</span>
                     </div>
                     <Button variant="ghost" size="sm" asChild>
                       <a href="/team" className="text-indigo-600 hover:text-indigo-700">

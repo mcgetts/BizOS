@@ -72,17 +72,17 @@ const navigationGroups = [
     title: "MANAGEMENT",
     items: [
       {
-        title: "Finance Hub",
+        title: "Finance",
         href: "/finance-hub",
         icon: PoundSterling,
       },
       {
-        title: "Team Hub",
+        title: "Team",
         href: "/team-hub",
         icon: UserCog,
       },
       {
-        title: "Time Tracking",
+        title: "Time",
         href: "/time",
         icon: Clock,
       },
