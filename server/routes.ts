@@ -7,6 +7,9 @@ import { storage } from "./storage";
 import { db } from "./db";
 import { eq, desc, and, sql, asc } from "drizzle-orm";
 import { setupAuth, isAuthenticated, requireRole } from "./replitAuth";
+import { mfaRoutes } from "./routes/mfaRoutes.js";
+import { authMfaRoutes } from "./routes/authMfaRoutes.js";
+import { sessionRoutes } from "./routes/sessionRoutes.js";
 import {
   insertUserSchema,
   registerUserSchema,
@@ -94,7 +97,14 @@ import { PasswordUtils, AuthRateLimiter } from "./utils/authUtils";
 import { emailService } from "./emailService";
 import { updateProjectProgress, calculateProjectProgress, estimateProjectCompletion } from "./utils/projectProgressCalculations";
 import { IntegrationManager, defaultIntegrationConfig } from "./integrations";
+import { healthCheckService } from "./monitoring/healthCheck.js";
+import { sentryService } from "./monitoring/sentryService.js";
+import { dataExporter } from "./export/dataExporter.js";
+import { createBackupScheduler } from "./backup/backupScheduler.js";
 import passport from "passport";
+
+// Initialize backup scheduler
+const backupScheduler = createBackupScheduler();
 
 // Helper function to log activity history
 async function logActivityHistory(
@@ -244,6 +254,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Auth middleware
   await setupAuth(app);
+
+  // Register MFA routes
+  app.use('/api/mfa', mfaRoutes);
+  app.use('/api/auth', authMfaRoutes);
+  app.use('/api/sessions', sessionRoutes);
 
   // Initialize integration manager for third-party notifications
   const integrationManager = new IntegrationManager(defaultIntegrationConfig);
@@ -4248,6 +4263,145 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error sending daily digest:', error);
       res.status(500).json({ message: 'Failed to send daily digest' });
+    }
+  });
+
+  // Health check and monitoring endpoints
+  app.get('/health', healthCheckService.healthCheck.bind(healthCheckService));
+  app.get('/health/ready', healthCheckService.readinessCheck.bind(healthCheckService));
+  app.get('/health/live', healthCheckService.livenessCheck.bind(healthCheckService));
+  app.get('/metrics', healthCheckService.metricsCheck.bind(healthCheckService));
+
+  // Data export endpoints
+  app.post('/api/exports', isAuthenticated, async (req, res) => {
+    try {
+      const { format, entities, dateRange, compressed } = req.body;
+
+      const options = {
+        format: format || 'json',
+        entities: entities || ['all'],
+        userId: req.user?.id,
+        dateRange: dateRange ? {
+          start: new Date(dateRange.start),
+          end: new Date(dateRange.end)
+        } : undefined,
+        compressed: compressed || false
+      };
+
+      const result = await dataExporter.exportData(options);
+
+      if (result.success) {
+        res.json(result);
+      } else {
+        res.status(500).json({ message: result.error || 'Export failed' });
+      }
+    } catch (error) {
+      sentryService.captureException(error as Error, {
+        feature: 'data_export',
+        userId: req.user?.id
+      });
+      res.status(500).json({ message: 'Export request failed' });
+    }
+  });
+
+  app.get('/api/exports', isAuthenticated, async (req, res) => {
+    try {
+      const exports = await dataExporter.listExports();
+      res.json(exports);
+    } catch (error) {
+      sentryService.captureException(error as Error, {
+        feature: 'list_exports',
+        userId: req.user?.id
+      });
+      res.status(500).json({ message: 'Failed to list exports' });
+    }
+  });
+
+  app.get('/api/exports/download/:fileName', isAuthenticated, async (req, res) => {
+    try {
+      const { fileName } = req.params;
+      const filePath = dataExporter.getExportFilePath(fileName);
+
+      // Verify file exists and is an export file
+      if (!fileName.startsWith('export_')) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
+      try {
+        await fs.promises.access(filePath);
+      } catch {
+        return res.status(404).json({ message: 'Export file not found' });
+      }
+
+      // Set appropriate headers
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      res.setHeader('Content-Type', 'application/octet-stream');
+
+      // Stream file to response
+      const fileStream = fs.createReadStream(filePath);
+      fileStream.pipe(res);
+
+      fileStream.on('error', (error) => {
+        sentryService.captureException(error, {
+          feature: 'export_download',
+          userId: req.user?.id,
+          additionalData: { fileName }
+        });
+        if (!res.headersSent) {
+          res.status(500).json({ message: 'Download failed' });
+        }
+      });
+
+    } catch (error) {
+      sentryService.captureException(error as Error, {
+        feature: 'export_download',
+        userId: req.user?.id
+      });
+      res.status(500).json({ message: 'Download failed' });
+    }
+  });
+
+  // Backup management endpoints (admin only)
+  app.post('/api/admin/backup/trigger', requireRole('admin'), async (req, res) => {
+    try {
+      const success = await backupScheduler.triggerManualBackup();
+      if (success) {
+        res.json({ message: 'Backup triggered successfully' });
+      } else {
+        res.status(500).json({ message: 'Backup failed' });
+      }
+    } catch (error) {
+      sentryService.captureException(error as Error, {
+        feature: 'manual_backup',
+        userId: req.user?.id
+      });
+      res.status(500).json({ message: 'Failed to trigger backup' });
+    }
+  });
+
+  app.get('/api/admin/backup/status', requireRole('admin'), async (req, res) => {
+    try {
+      const status = backupScheduler.getStatus();
+      res.json(status);
+    } catch (error) {
+      sentryService.captureException(error as Error, {
+        feature: 'backup_status',
+        userId: req.user?.id
+      });
+      res.status(500).json({ message: 'Failed to get backup status' });
+    }
+  });
+
+  app.post('/api/admin/backup/test', requireRole('admin'), async (req, res) => {
+    try {
+      const success = await backupScheduler.testBackup();
+      res.json({ success, message: success ? 'Backup test passed' : 'Backup test failed' });
+    } catch (error) {
+      sentryService.captureException(error as Error, {
+        feature: 'backup_test',
+        userId: req.user?.id
+      });
+      res.status(500).json({ message: 'Backup test failed' });
     }
   });
 

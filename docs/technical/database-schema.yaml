@@ -1,16 +1,17 @@
 # Database Schema Definition
 # YAML DSL for Complete Data Model
 # Version: 1.0
-# Last Updated: 2025-09-25
+# Last Updated: 2025-09-28
 
 metadata:
   name: "Business Platform Database Schema"
-  version: "5.0.0"
-  description: "Complete PostgreSQL database schema definition with 25+ tables covering authentication, project management, CRM, financial tracking, and resource management."
+  version: "7.0.0"
+  description: "Complete PostgreSQL database schema definition with 33+ tables covering authentication, project management, CRM, financial tracking, resource management, and enterprise-grade security with RBAC, MFA, and comprehensive audit logging."
   database_type: "PostgreSQL"
   orm: "Drizzle ORM"
-  total_tables: 25
+  total_tables: 33
   migration_strategy: "incremental"
+  last_updated: "2025-09-28"
 
 database_configuration:
   provider: "@neondatabase/serverless"
@@ -91,8 +92,15 @@ core_tables:
         type: "varchar"
         default: "employee"
         enum: ["admin", "manager", "employee", "client"]
+        description: "Legacy role field - see enhancedRole for RBAC"
+      enhancedRole:
+        type: "varchar"
+        enum: ["super_admin", "admin", "manager", "employee", "contractor", "viewer", "client"]
+        description: "Enhanced RBAC role with department context"
       department:
         type: "varchar"
+        enum: ["executive", "sales", "finance", "operations", "support", "marketing", "hr", "it", "admin"]
+        description: "Department for RBAC context"
       position:
         type: "varchar"
       phone:
@@ -102,6 +110,24 @@ core_tables:
       skills:
         type: "text[]"
         description: "Array of user skills"
+      # MFA and Security fields
+      mfaEnabled:
+        type: "boolean"
+        default: false
+        description: "Multi-factor authentication enabled"
+      mfaSecret:
+        type: "varchar"
+        description: "TOTP secret (encrypted)"
+      mfaBackupCodes:
+        type: "text[]"
+        description: "Encrypted backup codes"
+      sessionLimit:
+        type: "integer"
+        default: 5
+        description: "Maximum concurrent sessions"
+      lastSecurityCheck:
+        type: "timestamp"
+        description: "Last security audit timestamp"
       isActive:
         type: "boolean"
         default: true
@@ -1268,6 +1294,542 @@ notification_tables:
       - name: "idx_notifications_read"
         columns: ["read"]
 
+# Phase 7 Security Tables
+phase7_security_tables:
+  roles:
+    description: "Enhanced role definitions with department context for RBAC"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      name:
+        type: "varchar"
+        nullable: false
+        enum: ["super_admin", "admin", "manager", "employee", "contractor", "viewer", "client"]
+      description:
+        type: "text"
+      department:
+        type: "varchar"
+        enum: ["executive", "sales", "finance", "operations", "support", "marketing", "hr", "it", "admin"]
+        description: "Department context for role"
+      permissions:
+        type: "jsonb"
+        description: "Array of permission strings"
+      securityClearance:
+        type: "varchar"
+        default: "standard"
+        enum: ["basic", "standard", "elevated", "highest"]
+      isActive:
+        type: "boolean"
+        default: true
+      createdBy:
+        type: "varchar"
+        foreign_key: "users.id"
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+      updatedAt:
+        type: "timestamp"
+        default: "now()"
+    indexes:
+      - name: "idx_roles_department"
+        columns: ["department"]
+      - name: "idx_roles_active"
+        columns: ["isActive"]
+
+  userRoleAssignments:
+    description: "User role assignments with department context and expiration"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      userId:
+        type: "varchar"
+        foreign_key: "users.id"
+        on_delete: "cascade"
+      roleId:
+        type: "varchar"
+        foreign_key: "roles.id"
+        on_delete: "cascade"
+      department:
+        type: "varchar"
+        enum: ["executive", "sales", "finance", "operations", "support", "marketing", "hr", "it", "admin"]
+      assignedBy:
+        type: "varchar"
+        foreign_key: "users.id"
+      assignedAt:
+        type: "timestamp"
+        default: "now()"
+      expiresAt:
+        type: "timestamp"
+        description: "Optional role expiration"
+      isActive:
+        type: "boolean"
+        default: true
+      notes:
+        type: "text"
+        description: "Assignment reason or notes"
+    indexes:
+      - name: "idx_user_roles_user"
+        columns: ["userId"]
+      - name: "idx_user_roles_active"
+        columns: ["isActive"]
+      - name: "idx_user_roles_expiry"
+        columns: ["expiresAt"]
+
+  userSessions:
+    description: "Advanced session tracking with device fingerprinting and concurrent limits"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        description: "Session ID from express-session"
+      userId:
+        type: "varchar"
+        foreign_key: "users.id"
+        on_delete: "cascade"
+      deviceFingerprint:
+        type: "varchar"
+        description: "SHA-256 hash of device characteristics"
+      ipAddress:
+        type: "varchar"
+        description: "Client IP address"
+      userAgent:
+        type: "text"
+        description: "Browser user agent string"
+      location:
+        type: "jsonb"
+        description: "Geographic location data (if available)"
+      loginMethod:
+        type: "varchar"
+        default: "standard"
+        enum: ["standard", "mfa_totp", "mfa_sms", "oauth", "emergency"]
+      mfaUsed:
+        type: "boolean"
+        default: false
+        description: "Whether MFA was used for this session"
+      lastActivity:
+        type: "timestamp"
+        default: "now()"
+        description: "Last request timestamp"
+      idleTimeout:
+        type: "integer"
+        default: 1800
+        description: "Idle timeout in seconds (30 minutes)"
+      expiresAt:
+        type: "timestamp"
+        description: "Absolute session expiration"
+      terminated:
+        type: "boolean"
+        default: false
+      terminatedBy:
+        type: "varchar"
+        foreign_key: "users.id"
+        description: "User who terminated session (if manually ended)"
+      terminationReason:
+        type: "varchar"
+        enum: ["logout", "timeout", "security", "admin", "limit_exceeded"]
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+    indexes:
+      - name: "idx_sessions_user"
+        columns: ["userId"]
+      - name: "idx_sessions_active"
+        columns: ["terminated"]
+      - name: "idx_sessions_expiry"
+        columns: ["expiresAt"]
+      - name: "idx_sessions_device"
+        columns: ["deviceFingerprint"]
+
+  auditLogs:
+    description: "Comprehensive audit logging with risk scoring and compliance features"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      userId:
+        type: "varchar"
+        foreign_key: "users.id"
+        description: "User who performed the action"
+      sessionId:
+        type: "varchar"
+        foreign_key: "userSessions.id"
+        description: "Session context for the action"
+      action:
+        type: "varchar"
+        nullable: false
+        description: "Action performed (e.g., create_user, update_project)"
+      resource:
+        type: "varchar"
+        nullable: false
+        description: "Resource type (e.g., users, projects, financial_data)"
+      resourceId:
+        type: "varchar"
+        description: "Specific resource identifier"
+      oldValues:
+        type: "jsonb"
+        description: "Previous values before change"
+      newValues:
+        type: "jsonb"
+        description: "New values after change"
+      changesSummary:
+        type: "text"
+        description: "Human-readable summary of changes"
+      ipAddress:
+        type: "varchar"
+      userAgent:
+        type: "text"
+      riskScore:
+        type: "integer"
+        default: 0
+        description: "Calculated risk score (0-100)"
+      riskFactors:
+        type: "jsonb"
+        description: "Risk calculation factors"
+      severity:
+        type: "varchar"
+        default: "info"
+        enum: ["info", "low", "medium", "high", "critical"]
+      category:
+        type: "varchar"
+        enum: ["authentication", "authorization", "data_access", "data_modification", "system_configuration", "user_management"]
+      complianceFlags:
+        type: "text[]"
+        description: "Compliance requirements (GDPR, SOX, etc.)"
+      metadata:
+        type: "jsonb"
+        description: "Additional context data"
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+    indexes:
+      - name: "idx_audit_user"
+        columns: ["userId"]
+      - name: "idx_audit_action"
+        columns: ["action"]
+      - name: "idx_audit_resource"
+        columns: ["resource", "resourceId"]
+      - name: "idx_audit_risk"
+        columns: ["riskScore"]
+      - name: "idx_audit_date"
+        columns: ["createdAt"]
+      - name: "idx_audit_severity"
+        columns: ["severity"]
+
+  securityEvents:
+    description: "Security event tracking and incident management"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      userId:
+        type: "varchar"
+        foreign_key: "users.id"
+        description: "Affected user (may be null for system events)"
+      eventType:
+        type: "varchar"
+        nullable: false
+        enum: ["failed_login", "successful_login", "mfa_setup", "mfa_failure", "session_hijacking", "privilege_escalation", "suspicious_activity", "data_breach", "policy_violation"]
+      severity:
+        type: "varchar"
+        default: "low"
+        enum: ["low", "medium", "high", "critical"]
+      riskScore:
+        type: "integer"
+        default: 0
+        description: "Calculated risk score (0-100)"
+      eventData:
+        type: "jsonb"
+        description: "Event-specific data and context"
+      ipAddress:
+        type: "varchar"
+      userAgent:
+        type: "text"
+      location:
+        type: "jsonb"
+        description: "Geographic location if available"
+      automated:
+        type: "boolean"
+        default: true
+        description: "Whether event was detected automatically"
+      resolved:
+        type: "boolean"
+        default: false
+      resolvedBy:
+        type: "varchar"
+        foreign_key: "users.id"
+      resolvedAt:
+        type: "timestamp"
+      resolution:
+        type: "text"
+        description: "Resolution notes"
+      escalated:
+        type: "boolean"
+        default: false
+      escalatedTo:
+        type: "varchar"
+        enum: ["security_team", "management", "external_consultant"]
+      followUpRequired:
+        type: "boolean"
+        default: false
+      followUpDate:
+        type: "timestamp"
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+      updatedAt:
+        type: "timestamp"
+        default: "now()"
+    indexes:
+      - name: "idx_security_events_user"
+        columns: ["userId"]
+      - name: "idx_security_events_type"
+        columns: ["eventType"]
+      - name: "idx_security_events_severity"
+        columns: ["severity"]
+      - name: "idx_security_events_resolved"
+        columns: ["resolved"]
+      - name: "idx_security_events_date"
+        columns: ["createdAt"]
+
+  dataAccessLogs:
+    description: "Sensitive data access tracking for compliance and security monitoring"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      userId:
+        type: "varchar"
+        foreign_key: "users.id"
+      dataType:
+        type: "varchar"
+        nullable: false
+        enum: ["financial_data", "personal_information", "client_data", "security_settings", "system_configuration", "audit_logs"]
+      dataId:
+        type: "varchar"
+        description: "Specific record identifier"
+      accessType:
+        type: "varchar"
+        nullable: false
+        enum: ["read", "write", "delete", "export", "bulk_access"]
+      accessMethod:
+        type: "varchar"
+        enum: ["ui", "api", "direct_database", "report", "export"]
+      reason:
+        type: "text"
+        description: "Business justification for access"
+      approved:
+        type: "boolean"
+        default: false
+      approvedBy:
+        type: "varchar"
+        foreign_key: "users.id"
+      approvalWorkflow:
+        type: "jsonb"
+        description: "Approval process tracking"
+      dataClassification:
+        type: "varchar"
+        default: "internal"
+        enum: ["public", "internal", "confidential", "restricted"]
+      complianceContext:
+        type: "text[]"
+        description: "Regulatory requirements (GDPR, HIPAA, etc.)"
+      ipAddress:
+        type: "varchar"
+      userAgent:
+        type: "text"
+      sessionId:
+        type: "varchar"
+        foreign_key: "userSessions.id"
+      duration:
+        type: "integer"
+        description: "Access duration in seconds"
+      recordCount:
+        type: "integer"
+        description: "Number of records accessed"
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+    indexes:
+      - name: "idx_data_access_user"
+        columns: ["userId"]
+      - name: "idx_data_access_type"
+        columns: ["dataType"]
+      - name: "idx_data_access_method"
+        columns: ["accessType"]
+      - name: "idx_data_access_date"
+        columns: ["createdAt"]
+      - name: "idx_data_access_approved"
+        columns: ["approved"]
+
+  permissionExceptions:
+    description: "Temporary elevated access tracking with approval workflows"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      userId:
+        type: "varchar"
+        foreign_key: "users.id"
+        description: "User requesting elevated access"
+      requestedPermissions:
+        type: "jsonb"
+        description: "Specific permissions requested"
+      currentPermissions:
+        type: "jsonb"
+        description: "User's current permissions for comparison"
+      reason:
+        type: "text"
+        nullable: false
+        description: "Business justification for elevated access"
+      urgency:
+        type: "varchar"
+        default: "normal"
+        enum: ["low", "normal", "high", "emergency"]
+      requestedBy:
+        type: "varchar"
+        foreign_key: "users.id"
+        description: "User who submitted the request"
+      requestedAt:
+        type: "timestamp"
+        default: "now()"
+      approvalWorkflow:
+        type: "jsonb"
+        description: "Multi-level approval process tracking"
+      approvedBy:
+        type: "varchar"
+        foreign_key: "users.id"
+        description: "Final approver"
+      approvedAt:
+        type: "timestamp"
+      deniedBy:
+        type: "varchar"
+        foreign_key: "users.id"
+      deniedAt:
+        type: "timestamp"
+      denialReason:
+        type: "text"
+      status:
+        type: "varchar"
+        default: "pending"
+        enum: ["pending", "approved", "denied", "expired", "revoked"]
+      grantedAt:
+        type: "timestamp"
+        description: "When permissions were actually granted"
+      expiresAt:
+        type: "timestamp"
+        description: "When elevated access expires"
+      autoRevoke:
+        type: "boolean"
+        default: true
+        description: "Automatically revoke at expiration"
+      used:
+        type: "boolean"
+        default: false
+      usageTracking:
+        type: "jsonb"
+        description: "Track how elevated permissions were used"
+      revokedBy:
+        type: "varchar"
+        foreign_key: "users.id"
+      revokedAt:
+        type: "timestamp"
+      revocationReason:
+        type: "text"
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+      updatedAt:
+        type: "timestamp"
+        default: "now()"
+    indexes:
+      - name: "idx_permission_exceptions_user"
+        columns: ["userId"]
+      - name: "idx_permission_exceptions_status"
+        columns: ["status"]
+      - name: "idx_permission_exceptions_expiry"
+        columns: ["expiresAt"]
+      - name: "idx_permission_exceptions_urgency"
+        columns: ["urgency"]
+
+  mfaTokens:
+    description: "Multi-factor authentication token management and backup codes"
+    columns:
+      id:
+        type: "varchar"
+        primary_key: true
+        default: "gen_random_uuid()"
+      userId:
+        type: "varchar"
+        foreign_key: "users.id"
+        on_delete: "cascade"
+      tokenType:
+        type: "varchar"
+        nullable: false
+        enum: ["totp_secret", "backup_code", "sms_token", "recovery_code"]
+      tokenValue:
+        type: "varchar"
+        nullable: false
+        description: "Encrypted/hashed token value"
+      tokenMetadata:
+        type: "jsonb"
+        description: "Additional token data (QR code, phone number, etc.)"
+      used:
+        type: "boolean"
+        default: false
+      usedAt:
+        type: "timestamp"
+      usedFrom:
+        type: "varchar"
+        description: "IP address where token was used"
+      attempts:
+        type: "integer"
+        default: 0
+        description: "Number of verification attempts"
+      maxAttempts:
+        type: "integer"
+        default: 3
+      blocked:
+        type: "boolean"
+        default: false
+      blockedAt:
+        type: "timestamp"
+      expiresAt:
+        type: "timestamp"
+        description: "Token expiration (for temporary tokens)"
+      isActive:
+        type: "boolean"
+        default: true
+      generatedBy:
+        type: "varchar"
+        foreign_key: "users.id"
+        description: "Admin who generated the token"
+      lastVerified:
+        type: "timestamp"
+        description: "Last successful verification"
+      createdAt:
+        type: "timestamp"
+        default: "now()"
+      updatedAt:
+        type: "timestamp"
+        default: "now()"
+    indexes:
+      - name: "idx_mfa_tokens_user"
+        columns: ["userId"]
+      - name: "idx_mfa_tokens_type"
+        columns: ["tokenType"]
+      - name: "idx_mfa_tokens_active"
+        columns: ["isActive"]
+      - name: "idx_mfa_tokens_expiry"
+        columns: ["expiresAt"]
+
 # Additional CRM Tables
 additional_crm_tables:
   opportunityNextSteps:
@@ -1422,14 +1984,53 @@ database_relationships:
       child: "opportunityNextSteps"
       description: "Opportunity has many next steps"
 
+    # Phase 7 Security Relationships
+    - parent: "users"
+      child: "userSessions"
+      description: "User can have multiple concurrent sessions"
+
+    - parent: "users"
+      child: "auditLogs"
+      description: "User actions generate audit log entries"
+
+    - parent: "users"
+      child: "securityEvents"
+      description: "Security events are associated with users"
+
+    - parent: "users"
+      child: "dataAccessLogs"
+      description: "User data access is logged"
+
+    - parent: "users"
+      child: "permissionExceptions"
+      description: "Users can request temporary elevated permissions"
+
+    - parent: "users"
+      child: "mfaTokens"
+      description: "Users have MFA tokens and backup codes"
+
+    - parent: "roles"
+      child: "userRoleAssignments"
+      description: "Roles can be assigned to multiple users"
+
+    - parent: "userSessions"
+      child: "auditLogs"
+      description: "Audit logs reference the session context"
+
   many_to_many:
     - table1: "tasks"
       table2: "tasks"
       junction: "taskDependencies"
       description: "Tasks can depend on multiple other tasks"
 
+    - table1: "users"
+      table2: "roles"
+      junction: "userRoleAssignments"
+      description: "Users can have multiple roles across different departments"
+
 performance_optimizations:
   indexes:
+    # Existing core indexes
     - table: "users"
       columns: ["email", "authProvider"]
       type: "composite"
@@ -1446,12 +2047,59 @@ performance_optimizations:
       columns: ["userId", "date"]
       type: "composite"
 
+    # Phase 7 Security Performance Indexes
+    - table: "auditLogs"
+      columns: ["userId", "createdAt"]
+      type: "composite"
+      description: "Fast user audit history queries"
+
+    - table: "auditLogs"
+      columns: ["resource", "resourceId", "createdAt"]
+      type: "composite"
+      description: "Resource-specific audit trails"
+
+    - table: "userSessions"
+      columns: ["userId", "terminated"]
+      type: "composite"
+      description: "Active sessions per user"
+
+    - table: "securityEvents"
+      columns: ["eventType", "severity", "createdAt"]
+      type: "composite"
+      description: "Security monitoring dashboards"
+
+    - table: "dataAccessLogs"
+      columns: ["dataType", "accessType", "createdAt"]
+      type: "composite"
+      description: "Compliance reporting queries"
+
+    - table: "permissionExceptions"
+      columns: ["status", "expiresAt"]
+      type: "composite"
+      description: "Active permission exceptions monitoring"
+
+    - table: "mfaTokens"
+      columns: ["userId", "tokenType", "isActive"]
+      type: "composite"
+      description: "MFA token validation queries"
+
   partitioning:
-    strategy: "none"
+    strategy: "date_based_for_audit_tables"
+    audit_logs_partitioning:
+      method: "monthly partitions"
+      retention: "7 years for compliance"
+      compression: "enabled for older partitions"
+    security_events_partitioning:
+      method: "quarterly partitions"
+      retention: "5 years"
+    data_access_logs_partitioning:
+      method: "monthly partitions"
+      retention: "7 years for regulatory compliance"
     future_consideration: "date-based partitioning for large time_entries table"
 
 data_validation:
   constraints:
+    # Existing validations
     - table: "users"
       field: "email"
       rule: "unique, not null for local auth"
@@ -1464,14 +2112,100 @@ data_validation:
       field: "priority"
       rule: "enum validation"
 
+    # Phase 7 Security Validations
+    - table: "users"
+      field: "sessionLimit"
+      rule: "positive integer, max 20 sessions"
+
+    - table: "userSessions"
+      field: "expiresAt"
+      rule: "must be after createdAt, max 24 hours"
+
+    - table: "auditLogs"
+      field: "riskScore"
+      rule: "integer between 0 and 100"
+
+    - table: "securityEvents"
+      field: "riskScore"
+      rule: "integer between 0 and 100"
+
+    - table: "permissionExceptions"
+      field: "expiresAt"
+      rule: "must be after grantedAt, max 30 days"
+
+    - table: "mfaTokens"
+      field: "attempts"
+      rule: "cannot exceed maxAttempts"
+
+    - table: "roles"
+      field: "permissions"
+      rule: "valid permission strings from defined set"
+
+    - table: "userRoleAssignments"
+      field: "expiresAt"
+      rule: "must be after assignedAt if specified"
+
 migration_strategy:
-  approach: "incremental"
+  approach: "incremental_with_security_validation"
   tool: "drizzle-kit"
   versioning: "semantic_versioning"
-  rollback_strategy: "backup_before_migration"
+  rollback_strategy: "backup_before_migration_with_audit_preservation"
+  phase7_migration_notes:
+    security_tables:
+      - "Create security tables before modifying users table"
+      - "Migrate existing user roles to new RBAC system"
+      - "Initialize default MFA settings for existing users"
+      - "Populate initial audit logs for migration tracking"
+    data_migration:
+      - "Preserve existing session data during userSessions migration"
+      - "Create default roles for existing user.role values"
+      - "Initialize permission matrices for each department"
+    validation:
+      - "Verify RBAC permissions after migration"
+      - "Test MFA functionality for sample users"
+      - "Validate audit logging for all security events"
+    rollback_considerations:
+      - "Security audit logs must be preserved during rollback"
+      - "User MFA settings require manual reset if rolling back"
+      - "Session data may need cleanup after rollback"
+
+security_considerations:
+  data_encryption:
+    at_rest:
+      - "mfaTokens.tokenValue encrypted with AES-256"
+      - "auditLogs.oldValues/newValues encrypted for sensitive data"
+      - "permissionExceptions.reason encrypted if contains sensitive info"
+    in_transit:
+      - "All database connections use TLS 1.2+"
+      - "Session data encrypted in transit"
+
+  access_controls:
+    database_level:
+      - "Audit tables have restricted direct access"
+      - "MFA token tables accessible only by security service"
+      - "Row-level security for department-based data isolation"
+    application_level:
+      - "RBAC middleware enforces permission checks"
+      - "Audit logging for all sensitive data access"
+      - "Session validation on every request"
+
+  compliance_features:
+    audit_trails:
+      - "Immutable audit logs with cryptographic integrity"
+      - "Complete chain of custody for data changes"
+      - "Automated compliance reporting capabilities"
+    data_retention:
+      - "GDPR right to erasure with audit trail preservation"
+      - "Configurable retention policies by data type"
+      - "Secure data purging with verification"
 
 backup_recovery:
-  frequency: "daily"
-  retention: "30_days"
-  location: "cloud_storage"
-  recovery_testing: "monthly"
+  frequency: "daily_with_continuous_audit_backup"
+  retention: "30_days_operational_7_years_audit"
+  location: "encrypted_cloud_storage_with_compliance"
+  recovery_testing: "monthly_with_security_validation"
+  audit_log_backup:
+    frequency: "continuous_replication"
+    retention: "7_years_for_compliance"
+    encryption: "end_to_end_with_key_rotation"
+    integrity_verification: "cryptographic_checksums"

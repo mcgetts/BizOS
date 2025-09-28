@@ -3,10 +3,20 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { seedDatabase } from "./seed";
 import { wsManager } from "./websocketManager";
+import { sentryService } from "./monitoring/sentryService.js";
+import { createBackupScheduler } from "./backup/backupScheduler.js";
+import { createUptimeMonitor } from "./monitoring/uptimeMonitor.js";
 import fs from "fs";
 import path from "path";
 
+// Initialize Sentry as early as possible
+sentryService.init();
+
 const app = express();
+
+// Setup Sentry middleware before other middleware
+sentryService.setupExpress(app);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
@@ -108,28 +118,69 @@ app.use((req, res, next) => {
   // Setup WebSocket server for real-time notifications
   wsManager.setup(server);
 
+  // Initialize backup scheduler
+  const backupScheduler = createBackupScheduler();
+  backupScheduler.start();
+  log('✅ Backup scheduler started');
+
+  // Initialize uptime monitoring
+  const uptimeMonitor = createUptimeMonitor();
+  uptimeMonitor.start();
+  log('✅ Uptime monitoring started');
+
   // Start escalation service for automatic ticket escalation (temporarily disabled for demo)
   // const { escalationService } = await import('./escalationService');
   // escalationService.start(30); // Check every 30 minutes
   log('✅ Escalation service ready (disabled for demo)');
 
-  // Graceful shutdown for escalation service
+  // Graceful shutdown for services
+  const gracefulShutdown = async () => {
+    log('🛑 Graceful shutdown initiated...');
+
+    try {
+      // Stop monitoring services
+      backupScheduler.stop();
+      log('📋 Backup scheduler stopped');
+
+      uptimeMonitor.stop();
+      log('📋 Uptime monitor stopped');
+
+      // Flush Sentry events
+      await sentryService.flush();
+      log('📋 Sentry events flushed');
+
+      // escalationService.stop();
+      log('📋 Escalation service stopped');
+
+    } catch (error) {
+      log(`❌ Error during shutdown: ${error}`);
+    }
+  };
+
   process.on('SIGTERM', () => {
-    // escalationService.stop();
-    log('📋 Escalation service stopped');
+    gracefulShutdown().finally(() => process.exit(0));
   });
 
   process.on('SIGINT', () => {
-    // escalationService.stop();
-    log('📋 Escalation service stopped');
+    gracefulShutdown().finally(() => process.exit(0));
   });
+
+  // Setup Sentry error handler before other error handlers
+  sentryService.setupErrorHandler(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
+    // Capture error in Sentry if not already captured
+    if (status >= 500) {
+      sentryService.captureException(err, {
+        feature: 'server_error',
+        additionalData: { status, message }
+      });
+    }
+
     res.status(status).json({ message });
-    throw err;
   });
 
   // importantly only setup vite in development and after

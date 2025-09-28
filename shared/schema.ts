@@ -29,6 +29,17 @@ import {
   type CompanySize,
   type UserRole
 } from './constants';
+import {
+  DEPARTMENTS,
+  ENHANCED_USER_ROLES,
+  PERMISSION_RESOURCES,
+  PERMISSION_ACTIONS,
+  type Department,
+  type EnhancedUserRole,
+  type PermissionResource,
+  type PermissionAction,
+  type Permission
+} from './permissions';
 
 // Session storage table (mandatory for Replit Auth)
 export const sessions = pgTable(
@@ -59,12 +70,24 @@ export const users = pgTable("users", {
   lastLoginAt: timestamp("last_login_at"),
   // User profile
   role: varchar("role").default("employee").$type<UserRole>(),
-  department: varchar("department"),
+  enhancedRole: varchar("enhanced_role").default("employee").$type<EnhancedUserRole>(),
+  department: varchar("department").$type<Department>(),
   position: varchar("position"),
   phone: varchar("phone"),
   address: text("address"),
   skills: text("skills").array(),
   isActive: boolean("is_active").default(true),
+  // Enhanced security fields
+  mfaEnabled: boolean("mfa_enabled").default(false),
+  mfaSecret: varchar("mfa_secret"), // TOTP secret
+  mfaBackupCodes: text("mfa_backup_codes").array(), // Recovery codes
+  sessionLimit: integer("session_limit").default(5), // Concurrent session limit
+  lastPasswordChange: timestamp("last_password_change"),
+  passwordExpiresAt: timestamp("password_expires_at"),
+  loginAttempts: integer("login_attempts").default(0),
+  lockedUntil: timestamp("locked_until"),
+  twoFactorTempToken: varchar("two_factor_temp_token"), // Temporary token for 2FA setup
+  twoFactorTempExpires: timestamp("two_factor_temp_expires"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -686,6 +709,197 @@ export const notifications = pgTable("notifications", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// ====================================
+// PHASE 2: ENHANCED SECURITY & RBAC TABLES
+// ====================================
+
+// Role definitions and permissions
+export const roles = pgTable("roles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name").notNull().unique(),
+  displayName: varchar("display_name").notNull(),
+  description: text("description"),
+  department: varchar("department").$type<Department>(),
+  isSystemRole: boolean("is_system_role").default(false), // Built-in vs custom roles
+  isActive: boolean("is_active").default(true),
+  permissions: text("permissions").array(), // Array of permission strings
+  inheritFrom: varchar("inherit_from").references(() => roles.id), // Role inheritance
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// User role assignments (many-to-many with additional context)
+export const userRoleAssignments = pgTable("user_role_assignments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  roleId: varchar("role_id").references(() => roles.id, { onDelete: "cascade" }).notNull(),
+  assignedBy: varchar("assigned_by").references(() => users.id).notNull(),
+  assignedAt: timestamp("assigned_at").defaultNow(),
+  expiresAt: timestamp("expires_at"), // Optional expiration
+  isActive: boolean("is_active").default(true),
+  reason: text("reason"), // Why this role was assigned
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// User sessions for enhanced session management
+export const userSessions = pgTable("user_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  sessionId: varchar("session_id").notNull().unique(), // Links to sessions table
+  deviceInfo: jsonb("device_info"), // Browser, OS, etc.
+  ipAddress: varchar("ip_address"),
+  userAgent: text("user_agent"),
+  location: jsonb("location"), // Geolocation data
+  isActive: boolean("is_active").default(true),
+  lastActivity: timestamp("last_activity").defaultNow(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Comprehensive audit log
+export const auditLogs = pgTable("audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id), // Can be null for system actions
+  sessionId: varchar("session_id"), // Link to user session
+  action: varchar("action").notNull(), // create, read, update, delete, login, logout, etc.
+  resource: varchar("resource").notNull().$type<PermissionResource>(),
+  resourceId: varchar("resource_id"), // ID of the affected resource
+  department: varchar("department").$type<Department>(),
+
+  // Change tracking
+  oldValues: jsonb("old_values"), // Previous state
+  newValues: jsonb("new_values"), // New state
+  changes: jsonb("changes"), // Specific fields changed
+
+  // Context information
+  ipAddress: varchar("ip_address"),
+  userAgent: text("user_agent"),
+  deviceInfo: jsonb("device_info"),
+  location: jsonb("location"),
+
+  // Classification
+  severity: varchar("severity").default("info"), // info, warning, critical
+  category: varchar("category"), // security, data_change, system, user_action
+  isSensitive: boolean("is_sensitive").default(false),
+  requiresReview: boolean("requires_review").default(false),
+
+  // Additional metadata
+  metadata: jsonb("metadata"), // Flexible additional data
+  tags: text("tags").array(), // Searchable tags
+  description: text("description"), // Human-readable description
+
+  timestamp: timestamp("timestamp").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Security events for monitoring
+export const securityEvents = pgTable("security_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id),
+  eventType: varchar("event_type").notNull(), // login_failed, login_success, mfa_enabled, password_changed, etc.
+  severity: varchar("severity").notNull().default("info"), // low, medium, high, critical
+  source: varchar("source"), // web, api, mobile, system
+
+  // Event details
+  ipAddress: varchar("ip_address"),
+  userAgent: text("user_agent"),
+  deviceFingerprint: varchar("device_fingerprint"),
+  location: jsonb("location"),
+
+  // Risk assessment
+  riskScore: integer("risk_score").default(0), // 0-100
+  isBlocked: boolean("is_blocked").default(false),
+  blockReason: text("block_reason"),
+
+  // Investigation
+  isInvestigated: boolean("is_investigated").default(false),
+  investigatedBy: varchar("investigated_by").references(() => users.id),
+  investigatedAt: timestamp("investigated_at"),
+  resolution: text("resolution"),
+
+  // Metadata
+  eventData: jsonb("event_data"), // Additional event-specific data
+  correlationId: varchar("correlation_id"), // Link related events
+
+  timestamp: timestamp("timestamp").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Data access logs for sensitive resources
+export const dataAccessLogs = pgTable("data_access_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  resource: varchar("resource").notNull().$type<PermissionResource>(),
+  resourceId: varchar("resource_id").notNull(),
+  action: varchar("action").notNull().$type<PermissionAction>(),
+
+  // Access context
+  accessMethod: varchar("access_method"), // ui, api, export, etc.
+  purpose: text("purpose"), // Business justification
+  approvedBy: varchar("approved_by").references(() => users.id),
+
+  // Data details
+  fieldsAccessed: text("fields_accessed").array(), // Specific fields viewed/modified
+  recordCount: integer("record_count").default(1),
+  exportFormat: varchar("export_format"), // If data was exported
+
+  // Classification
+  dataClassification: varchar("data_classification").default("internal"), // public, internal, confidential, restricted
+  isPersonalData: boolean("is_personal_data").default(false),
+  isFinancialData: boolean("is_financial_data").default(false),
+
+  timestamp: timestamp("timestamp").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Permission exceptions and temporary access
+export const permissionExceptions = pgTable("permission_exceptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  resource: varchar("resource").notNull().$type<PermissionResource>(),
+  action: varchar("action").notNull().$type<PermissionAction>(),
+
+  // Exception details
+  reason: text("reason").notNull(),
+  approvedBy: varchar("approved_by").references(() => users.id).notNull(),
+  requestedBy: varchar("requested_by").references(() => users.id).notNull(),
+
+  // Timing
+  startsAt: timestamp("starts_at").defaultNow(),
+  expiresAt: timestamp("expires_at").notNull(),
+  isActive: boolean("is_active").default(true),
+
+  // Usage tracking
+  timesUsed: integer("times_used").default(0),
+  lastUsedAt: timestamp("last_used_at"),
+
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Multi-Factor Authentication tokens
+export const mfaTokens = pgTable("mfa_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+
+  // Token details
+  type: varchar("type").notNull(), // 'totp' or 'sms'
+  secret: text("secret").notNull(), // TOTP secret or SMS code
+  phoneNumber: varchar("phone_number"), // For SMS
+
+  // Timing
+  expiresAt: timestamp("expires_at"), // For SMS codes
+  isActive: boolean("is_active").default(false),
+
+  // TOTP backup codes (JSON array)
+  backupCodes: jsonb("backup_codes").$type<string[]>(),
+
+  // Usage tracking
+  lastUsedAt: timestamp("last_used_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Relations
 export const userRelations = relations(users, ({ many }) => ({
   managedProjects: many(projects, { relationName: "manager" }),
@@ -707,6 +921,14 @@ export const userRelations = relations(users, ({ many }) => ({
   workloadSnapshots: many(workloadSnapshots),
   approvedTimeEntries: many(timeEntryApprovals, { relationName: "approver" }),
   notifications: many(notifications),
+  // Enhanced security relations
+  roleAssignments: many(userRoleAssignments),
+  sessions: many(userSessions),
+  auditLogs: many(auditLogs),
+  securityEvents: many(securityEvents),
+  dataAccessLogs: many(dataAccessLogs),
+  permissionExceptions: many(permissionExceptions),
+  mfaTokens: many(mfaTokens),
 }));
 
 export const clientRelations = relations(clients, ({ one, many }) => ({
@@ -1210,6 +1432,83 @@ export const insertNotificationSchema = createInsertSchema(notifications).omit({
   updatedAt: true,
 });
 
+// ====================================
+// PHASE 2: ENHANCED SECURITY SCHEMAS
+// ====================================
+
+export const insertRoleSchema = createInsertSchema(roles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  permissions: z.array(z.string()).optional(),
+});
+
+export const updateRoleSchema = createInsertSchema(roles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).partial().extend({
+  permissions: z.array(z.string()).optional(),
+});
+
+export const insertUserRoleAssignmentSchema = createInsertSchema(userRoleAssignments).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertUserSessionSchema = createInsertSchema(userSessions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertSecurityEventSchema = createInsertSchema(securityEvents).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertDataAccessLogSchema = createInsertSchema(dataAccessLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertPermissionExceptionSchema = createInsertSchema(permissionExceptions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertMfaTokenSchema = createInsertSchema(mfaTokens).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Enhanced user schema with security fields
+export const insertEnhancedUserSchema = createInsertSchema(users).omit({
+  id: true,
+  passwordHash: true,
+  emailVerificationToken: true,
+  passwordResetToken: true,
+  passwordResetExpires: true,
+  mfaSecret: true,
+  mfaBackupCodes: true,
+  twoFactorTempToken: true,
+  twoFactorTempExpires: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  skills: z.array(z.string()).optional(),
+  password: z.string().min(8, "Password must be at least 8 characters").optional(),
+  mfaBackupCodes: z.array(z.string()).optional(),
+});
+
+export const updateEnhancedUserSchema = insertEnhancedUserSchema.partial();
+
 // New relations
 export const opportunityNextStepRelations = relations(opportunityNextSteps, ({ one }) => ({
   opportunity: one(salesOpportunities, {
@@ -1418,6 +1717,100 @@ export const notificationRelations = relations(notifications, ({ one }) => ({
   }),
 }));
 
+// ====================================
+// PHASE 2: ENHANCED SECURITY RELATIONS
+// ====================================
+
+export const rolesRelations = relations(roles, ({ one, many }) => ({
+  createdBy: one(users, {
+    fields: [roles.createdBy],
+    references: [users.id],
+  }),
+  inheritedFrom: one(roles, {
+    fields: [roles.inheritFrom],
+    references: [roles.id],
+  }),
+  userAssignments: many(userRoleAssignments),
+}));
+
+export const userRoleAssignmentsRelations = relations(userRoleAssignments, ({ one }) => ({
+  user: one(users, {
+    fields: [userRoleAssignments.userId],
+    references: [users.id],
+  }),
+  role: one(roles, {
+    fields: [userRoleAssignments.roleId],
+    references: [roles.id],
+  }),
+  assignedBy: one(users, {
+    fields: [userRoleAssignments.assignedBy],
+    references: [users.id],
+    relationName: "roleAssigner",
+  }),
+}));
+
+export const userSessionsRelations = relations(userSessions, ({ one }) => ({
+  user: one(users, {
+    fields: [userSessions.userId],
+    references: [users.id],
+  }),
+}));
+
+export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
+  user: one(users, {
+    fields: [auditLogs.userId],
+    references: [users.id],
+  }),
+}));
+
+export const securityEventsRelations = relations(securityEvents, ({ one }) => ({
+  user: one(users, {
+    fields: [securityEvents.userId],
+    references: [users.id],
+  }),
+  investigatedBy: one(users, {
+    fields: [securityEvents.investigatedBy],
+    references: [users.id],
+    relationName: "investigator",
+  }),
+}));
+
+export const dataAccessLogsRelations = relations(dataAccessLogs, ({ one }) => ({
+  user: one(users, {
+    fields: [dataAccessLogs.userId],
+    references: [users.id],
+  }),
+  approvedBy: one(users, {
+    fields: [dataAccessLogs.approvedBy],
+    references: [users.id],
+    relationName: "approver",
+  }),
+}));
+
+export const permissionExceptionsRelations = relations(permissionExceptions, ({ one }) => ({
+  user: one(users, {
+    fields: [permissionExceptions.userId],
+    references: [users.id],
+  }),
+  approvedBy: one(users, {
+    fields: [permissionExceptions.approvedBy],
+    references: [users.id],
+    relationName: "approver",
+  }),
+  requestedBy: one(users, {
+    fields: [permissionExceptions.requestedBy],
+    references: [users.id],
+    relationName: "requester",
+  }),
+}));
+
+export const mfaTokensRelations = relations(mfaTokens, ({ one }) => ({
+  user: one(users, {
+    fields: [mfaTokens.userId],
+    references: [users.id],
+  }),
+}));
+
 // Types
 export type UpsertUser = z.infer<typeof upsertUserSchema>;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -1555,6 +1948,55 @@ export type InsertWorkloadSnapshot = z.infer<typeof insertWorkloadSnapshotSchema
 export type WorkloadSnapshot = typeof workloadSnapshots.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type Notification = typeof notifications.$inferSelect;
+
+// ====================================
+// PHASE 2: ENHANCED SECURITY TYPES
+// ====================================
+
+export type InsertRole = z.infer<typeof insertRoleSchema>;
+export type UpdateRole = z.infer<typeof updateRoleSchema>;
+export type Role = typeof roles.$inferSelect;
+export type InsertUserRoleAssignment = z.infer<typeof insertUserRoleAssignmentSchema>;
+export type UserRoleAssignment = typeof userRoleAssignments.$inferSelect;
+export type InsertUserSession = z.infer<typeof insertUserSessionSchema>;
+export type UserSession = typeof userSessions.$inferSelect;
+export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
+export type AuditLog = typeof auditLogs.$inferSelect;
+export type InsertSecurityEvent = z.infer<typeof insertSecurityEventSchema>;
+export type SecurityEvent = typeof securityEvents.$inferSelect;
+export type InsertDataAccessLog = z.infer<typeof insertDataAccessLogSchema>;
+export type DataAccessLog = typeof dataAccessLogs.$inferSelect;
+export type InsertPermissionException = z.infer<typeof insertPermissionExceptionSchema>;
+export type PermissionException = typeof permissionExceptions.$inferSelect;
+export type InsertMfaToken = z.infer<typeof insertMfaTokenSchema>;
+export type MfaToken = typeof mfaTokens.$inferSelect;
+export type InsertEnhancedUser = z.infer<typeof insertEnhancedUserSchema>;
+export type UpdateEnhancedUser = z.infer<typeof updateEnhancedUserSchema>;
+
+// Enhanced user types with security information
+export type UserWithSecurity = User & {
+  roleAssignments: (UserRoleAssignment & {
+    role: Role;
+  })[];
+  sessions: UserSession[];
+  securityEvents: SecurityEvent[];
+  permissionExceptions: PermissionException[];
+};
+
+export type RoleWithPermissions = Role & {
+  userAssignments: (UserRoleAssignment & {
+    user: User;
+  })[];
+};
+
+export type AuditLogWithUser = AuditLog & {
+  user: User | null;
+};
+
+export type SecurityEventWithUser = SecurityEvent & {
+  user: User | null;
+  investigatedBy: User | null;
+};
 
 // Enhanced resource management types with relations
 export type UserWithCapacityAndSkills = User & {

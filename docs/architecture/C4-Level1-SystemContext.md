@@ -1,44 +1,56 @@
 # C4 Architecture Model - Level 1: System Context Diagram
 
-## Enterprise Project Management Platform - System Context
+## Enterprise Project Management Platform - System Context (Phase 7: Enhanced Security)
 
-This diagram shows the high-level system context for the Enterprise Project Management Platform, illustrating how the system fits into the broader business environment and its relationships with users and external systems.
+This diagram shows the high-level system context for the Enterprise Project Management Platform with Phase 7 Enhanced Security & Access Control, illustrating how the system fits into the broader business environment with enterprise-grade security, comprehensive audit logging, and regulatory compliance capabilities.
 
 ```mermaid
 C4Context
-    title Enterprise Project Management Platform - System Context
+    title Enterprise Project Management Platform - System Context (Phase 7: Enhanced Security)
 
-    Person(employee, "Employee", "Internal team members who work on projects and tasks")
-    Person(projectManager, "Project Manager", "Manages projects, assigns tasks, tracks progress")
-    Person(executive, "Executive", "Views analytics, KPIs, and makes strategic decisions")
-    Person(client, "Client", "External clients who receive services and updates")
-    Person(supportAgent, "Support Agent", "Handles customer support tickets and SLA management")
-    Person(admin, "System Admin", "Manages users, system configuration, and integrations")
+    Person(employee, "Employee", "Internal team members with department-based RBAC access")
+    Person(projectManager, "Project Manager", "Manages projects with enhanced permissions and audit trails")
+    Person(executive, "Executive", "Views analytics with highest security clearance")
+    Person(client, "Client", "External clients with restricted portal access")
+    Person(supportAgent, "Support Agent", "Handles tickets with compliance audit logging")
+    Person(admin, "System Admin", "Manages RBAC, MFA, and security monitoring")
+    Person(securityOfficer, "Security Officer", "Monitors security events, manages incidents, reviews audit trails")
+    Person(complianceOfficer, "Compliance Officer", "Reviews audit logs, manages data access, ensures regulatory compliance")
 
-    System(enterprisePlatform, "Enterprise Project Management Platform", "Comprehensive business platform with project management, CRM, analytics, and real-time collaboration")
+    System(enterprisePlatform, "Enterprise Project Management Platform", "Comprehensive business platform with enterprise RBAC, MFA, advanced session management, and comprehensive audit logging")
 
-    System_Ext(slackSystem, "Slack", "Team communication and collaboration platform")
-    System_Ext(teamsSystem, "Microsoft Teams", "Microsoft collaboration and communication platform")
-    System_Ext(githubSystem, "GitHub", "Code repository and project management")
-    System_Ext(emailSystem, "Email Service", "SMTP email delivery for notifications and authentication")
-    System_Ext(replitAuth, "Replit Authentication", "OAuth authentication provider")
-    System_Ext(stripeSystem, "Stripe", "Payment processing for invoicing")
+    System_Ext(slackSystem, "Slack", "Team communication with security event notifications")
+    System_Ext(teamsSystem, "Microsoft Teams", "Microsoft collaboration with secure adaptive cards")
+    System_Ext(githubSystem, "GitHub", "Code repository with security integration")
+    System_Ext(emailSystem, "Email Service", "SMTP for authentication, MFA, and security alerts")
+    System_Ext(replitAuth, "Replit Authentication", "OAuth with MFA integration")
+    System_Ext(stripeSystem, "Stripe", "PCI-compliant payment processing")
+    System_Ext(twilioSystem, "Twilio SMS", "SMS delivery for MFA verification")
+    System_Ext(totpApps, "TOTP Apps", "Google Authenticator, Authy for MFA")
+    System_Ext(sentrySystem, "Sentry Monitoring", "Error tracking and security incident monitoring")
+    System_Ext(complianceSystem, "Compliance Systems", "GDPR, SOX, regulatory reporting")
 
-    Rel(employee, enterprisePlatform, "Uses", "Manages tasks, tracks time, collaborates")
-    Rel(projectManager, enterprisePlatform, "Uses", "Creates projects, assigns tasks, monitors progress")
-    Rel(executive, enterprisePlatform, "Uses", "Views analytics, KPIs, makes decisions")
-    Rel(client, enterprisePlatform, "Uses", "Views project status, communicates with team")
-    Rel(supportAgent, enterprisePlatform, "Uses", "Manages support tickets, SLA monitoring")
-    Rel(admin, enterprisePlatform, "Uses", "System configuration, user management")
+    Rel(employee, enterprisePlatform, "Uses with RBAC", "Department-based access, MFA authentication")
+    Rel(projectManager, enterprisePlatform, "Uses with elevated permissions", "Manages projects with audit trails")
+    Rel(executive, enterprisePlatform, "Uses with highest clearance", "Strategic analytics with security monitoring")
+    Rel(client, enterprisePlatform, "Uses restricted portal", "Limited project access with audit logging")
+    Rel(supportAgent, enterprisePlatform, "Uses with compliance logging", "Ticket management with data access controls")
+    Rel(admin, enterprisePlatform, "Administers security", "RBAC management, MFA setup, security configuration")
+    Rel(securityOfficer, enterprisePlatform, "Monitors security", "Security events, incident response, risk assessment")
+    Rel(complianceOfficer, enterprisePlatform, "Reviews compliance", "Audit trails, data access logs, regulatory reporting")
 
-    Rel(enterprisePlatform, slackSystem, "Sends notifications", "Project updates, task assignments, alerts")
-    Rel(enterprisePlatform, teamsSystem, "Sends notifications", "Adaptive cards, project updates")
-    Rel(enterprisePlatform, githubSystem, "Integrates", "Creates issues, syncs repositories")
-    Rel(enterprisePlatform, emailSystem, "Sends emails", "Authentication, notifications, alerts")
-    Rel(enterprisePlatform, replitAuth, "Authenticates", "OAuth login and user verification")
-    Rel(enterprisePlatform, stripeSystem, "Processes payments", "Invoice payments, billing")
+    Rel(enterprisePlatform, slackSystem, "Sends secure notifications", "Project updates with security context")
+    Rel(enterprisePlatform, teamsSystem, "Sends secure notifications", "Adaptive cards with compliance data")
+    Rel(enterprisePlatform, githubSystem, "Integrates securely", "Issues with security audit trails")
+    Rel(enterprisePlatform, emailSystem, "Sends secure emails", "MFA codes, security alerts, compliance notices")
+    Rel(enterprisePlatform, replitAuth, "Authenticates with MFA", "OAuth with multi-factor verification")
+    Rel(enterprisePlatform, stripeSystem, "Processes secure payments", "PCI-compliant transactions with audit logs")
+    Rel(enterprisePlatform, twilioSystem, "Sends MFA codes", "SMS verification for authentication")
+    Rel(enterprisePlatform, totpApps, "Verifies TOTP", "Time-based authentication codes")
+    Rel(enterprisePlatform, sentrySystem, "Reports security incidents", "Error tracking with security context")
+    Rel(enterprisePlatform, complianceSystem, "Exports compliance data", "Regulatory reports and audit trails")
 
-    UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="2")
+    UpdateLayoutConfig($c4ShapeInRow="4", $c4BoundaryInRow="3")
 ```
 
 ## System Context Overview
@@ -53,6 +65,11 @@ C4Context
 - **AI-Powered Analytics**: Predictive insights, performance analytics, and business intelligence
 - **Support System**: Comprehensive ticket management with SLA monitoring and escalation
 - **Mobile-First Design**: Responsive interface optimized for all devices
+- **🆕 Enterprise RBAC**: Department-based role management with 9 departments and 70+ granular permissions
+- **🆕 Multi-Factor Authentication**: TOTP and SMS-based authentication with backup codes
+- **🆕 Advanced Session Management**: Concurrent session limits with device fingerprinting
+- **🆕 Comprehensive Audit Logging**: Security event tracking with risk scoring and compliance reporting
+- **🆕 Zero-Trust Security**: Defense-in-depth with continuous monitoring and threat detection
 
 ### User Types
 
@@ -87,9 +104,21 @@ C4Context
 
 6. **System Administrators** - Manage platform configuration
    - Configure integrations and system settings
-   - Manage user roles and permissions
+   - Manage RBAC roles and department permissions
    - Monitor system health and performance
-   - Oversee security and compliance
+   - Oversee security configuration and MFA policies
+
+7. **🆕 Security Officers** - Monitor and respond to security incidents
+   - Monitor security events and risk scores
+   - Investigate security incidents and breaches
+   - Manage threat response and escalation
+   - Configure security policies and controls
+
+8. **🆕 Compliance Officers** - Ensure regulatory compliance
+   - Review audit trails and data access logs
+   - Generate compliance reports for regulators
+   - Manage data retention and privacy policies
+   - Oversee regulatory requirement implementation
 
 ### External Systems Integration
 
@@ -129,14 +158,55 @@ C4Context
    - Financial transaction processing
    - PCI-compliant payment handling
 
+7. **🆕 Twilio SMS Service**
+   - SMS delivery for MFA verification
+   - Multi-factor authentication support
+   - Global SMS delivery with fallback
+   - Rate limiting and fraud prevention
+
+8. **🆕 TOTP Authentication Apps**
+   - Google Authenticator integration
+   - Authy and Microsoft Authenticator support
+   - Time-based one-time password generation
+   - QR code setup and backup codes
+
+9. **🆕 Sentry Security Monitoring**
+   - Real-time error tracking with security context
+   - Security incident reporting and alerting
+   - Performance monitoring with threat detection
+   - Automated incident escalation
+
+10. **🆕 Compliance and Regulatory Systems**
+    - GDPR compliance reporting and management
+    - SOX audit trail export and validation
+    - Regulatory requirement tracking
+    - Data retention and privacy controls
+
 ### Key System Characteristics
 
 - **Scalability**: Designed to handle growing teams and increasing project complexity
-- **Security**: Multi-layered authentication with role-based access control
+- **🆕 Zero-Trust Security**: Multi-layered authentication with comprehensive RBAC and MFA
+- **🆕 Enterprise-Grade RBAC**: Department-based permissions with 70+ granular resources
+- **🆕 Advanced Session Security**: Device fingerprinting with concurrent session management
+- **🆕 Comprehensive Audit Trails**: Complete activity logging with risk scoring and compliance
 - **Real-time**: WebSocket integration for live updates and collaboration
 - **Mobile-First**: Responsive design optimized for mobile and desktop use
 - **Integration-Ready**: Extensive API for third-party service integration
 - **AI-Enhanced**: Machine learning for predictive analytics and insights
-- **Enterprise-Grade**: Comprehensive audit trails, SLA management, and compliance features
+- **🆕 Compliance-Ready**: GDPR, SOX, and regulatory compliance with automated reporting
+- **🆕 Threat Detection**: Automated security monitoring with incident response
+- **🆕 Data Protection**: End-to-end encryption with secure data access controls
 
-This system context establishes the foundation for the detailed container and component diagrams that follow.
+### 🆕 Phase 7 Security Enhancements
+
+**Enhanced Security Architecture** includes:
+
+- **Multi-Factor Authentication**: TOTP and SMS-based verification with backup codes
+- **Enterprise RBAC**: 9 departments (executive, sales, finance, operations, support, marketing, hr, it, admin) with role-based permissions
+- **Advanced Session Management**: Concurrent session limits, device fingerprinting, and IP monitoring
+- **Comprehensive Audit Logging**: Security events, data access logs, and compliance reporting
+- **Risk Scoring System**: Automated threat assessment with incident response
+- **Permission Exceptions**: Temporary elevated access with approval workflows
+- **Zero-Trust Architecture**: Continuous verification and monitoring
+
+This system context establishes the foundation for the detailed container and component diagrams that follow, with security as a first-class architectural concern.

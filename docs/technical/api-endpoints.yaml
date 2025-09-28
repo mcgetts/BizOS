@@ -1,17 +1,18 @@
 # API Endpoints and Service Boundaries
 # YAML DSL for REST API Definition
 # Version: 1.0
-# Last Updated: 2025-09-26
+# Last Updated: 2025-09-28
 
 metadata:
   name: "Business Platform API Definition"
-  version: "5.0.0"
-  description: "Comprehensive REST API definition covering all business platform endpoints including authentication, CRM, project management, analytics services, enhanced user management, and advanced project-task integration capabilities."
+  version: "7.0.0"
+  description: "Comprehensive REST API definition covering all business platform endpoints including authentication, CRM, project management, analytics services, enhanced user management, advanced project-task integration, enterprise RBAC, multi-factor authentication, session management, and comprehensive audit logging."
   api_style: "RESTful"
   base_url: "https://business-platform.repl.co/api"
-  authentication: "session_based"
-  total_endpoints: "40+"
+  authentication: "session_based_with_mfa_support"
+  total_endpoints: "60+"
   documentation: "OpenAPI 3.0 compatible"
+  last_updated: "2025-09-28"
 
 api_configuration:
   framework: "Express.js"
@@ -20,15 +21,23 @@ api_configuration:
     - "express.urlencoded({ extended: false })"
     - "session middleware"
     - "authentication middleware"
-    - "rate limiting"
-    - "CORS handling"
+    - "RBAC middleware for permission validation"
+    - "MFA validation middleware"
+    - "session tracking middleware"
+    - "audit logging middleware"
+    - "rate limiting with security event integration"
+    - "CORS handling with department context"
 
   security:
     authentication_required: true
+    mfa_enforcement: "configurable by role and endpoint"
+    rbac_validation: "automatic permission checking"
+    audit_logging: "comprehensive activity tracking"
     rate_limiting:
       enabled: true
       window: "15 minutes"
       max_requests: 100
+      security_integration: "failed attempts trigger security events"
 
   response_format:
     success: "JSON"
@@ -1020,6 +1029,428 @@ notification_endpoints:
     response:
       success: "200 - All notifications marked as read"
 
+# Phase 7 Security Endpoints
+security_endpoints:
+  # Multi-Factor Authentication Endpoints
+  mfa_setup:
+    path: "/api/mfa/setup"
+    method: "POST"
+    description: "Initialize MFA setup for user with TOTP secret generation"
+    authentication_required: true
+    request_schema:
+      optional_fields:
+        - "method" # totp, sms
+    response:
+      success: "200 - MFA setup data with QR code and backup codes"
+      data_includes:
+        - "secret"
+        - "qrCodeUrl"
+        - "backupCodes"
+        - "setupInstructions"
+
+  mfa_verify_setup:
+    path: "/api/mfa/verify-setup"
+    method: "POST"
+    description: "Verify TOTP token to complete MFA setup"
+    authentication_required: true
+    request_schema:
+      required_fields:
+        - "token"
+    response:
+      success: "200 - MFA enabled successfully"
+      error: "400 - Invalid verification code"
+
+  mfa_verify:
+    path: "/api/mfa/verify"
+    method: "POST"
+    description: "Verify MFA token during authentication"
+    authentication_required: true
+    request_schema:
+      required_fields:
+        - "token"
+      optional_fields:
+        - "method" # totp, sms, backup_code
+    response:
+      success: "200 - MFA verification successful"
+      error: "400 - Invalid token or method"
+
+  mfa_disable:
+    path: "/api/mfa/disable"
+    method: "POST"
+    description: "Disable MFA for user account"
+    authentication_required: true
+    request_schema:
+      required_fields:
+        - "currentPassword"
+        - "confirmationToken"
+    response:
+      success: "200 - MFA disabled successfully"
+      error: "400 - Invalid credentials or token"
+
+  mfa_backup_codes:
+    path: "/api/mfa/backup-codes"
+    method: "GET"
+    description: "Get remaining backup codes for user"
+    authentication_required: true
+    response:
+      success: "200 - Backup codes list with usage status"
+
+  mfa_regenerate_backup_codes:
+    path: "/api/mfa/backup-codes/regenerate"
+    method: "POST"
+    description: "Generate new backup codes (invalidates old ones)"
+    authentication_required: true
+    authorization: "own_account_or_admin"
+    response:
+      success: "200 - New backup codes generated"
+      security_note: "Audit logged as security event"
+
+  mfa_sms_request:
+    path: "/api/mfa/sms/request"
+    method: "POST"
+    description: "Request SMS verification code"
+    authentication_required: true
+    rate_limit: "3 requests per hour"
+    response:
+      success: "200 - SMS sent successfully"
+      error: "429 - Rate limit exceeded"
+
+  # Session Management Endpoints
+  sessions_list:
+    path: "/api/sessions"
+    method: "GET"
+    description: "Get active sessions for current user"
+    authentication_required: true
+    response:
+      success: "200 - Array of active session objects"
+      data_includes:
+        - "sessionId"
+        - "deviceFingerprint"
+        - "ipAddress"
+        - "userAgent"
+        - "loginMethod"
+        - "lastActivity"
+        - "expiresAt"
+
+  sessions_terminate:
+    path: "/api/sessions/:sessionId"
+    method: "DELETE"
+    description: "Terminate specific session"
+    authentication_required: true
+    path_parameters:
+      - "sessionId: Session identifier"
+    response:
+      success: "204 - Session terminated"
+      error: "404 - Session not found"
+
+  sessions_terminate_all:
+    path: "/api/sessions/terminate-all"
+    method: "POST"
+    description: "Terminate all sessions except current"
+    authentication_required: true
+    response:
+      success: "200 - All other sessions terminated"
+      data_includes:
+        - "terminatedSessionsCount"
+
+  sessions_statistics:
+    path: "/api/sessions/statistics"
+    method: "GET"
+    description: "Get session statistics for current user"
+    authentication_required: true
+    response:
+      success: "200 - Session statistics"
+      data_includes:
+        - "activeSessions"
+        - "sessionLimit"
+        - "deviceCount"
+        - "lastLoginLocations"
+
+  # Audit Logging Endpoints
+  audit_logs:
+    path: "/api/audit/logs"
+    method: "GET"
+    description: "Get audit logs with filtering"
+    authentication_required: true
+    authorization: ["admin", "manager"]
+    query_parameters:
+      optional:
+        - "userId"
+        - "action"
+        - "resource"
+        - "startDate"
+        - "endDate"
+        - "severity"
+        - "riskScore"
+        - "limit"
+        - "offset"
+    response:
+      success: "200 - Array of audit log entries"
+
+  audit_user_activity:
+    path: "/api/audit/user/:userId"
+    method: "GET"
+    description: "Get audit trail for specific user"
+    authentication_required: true
+    authorization: ["admin", "manager"]
+    path_parameters:
+      - "userId: User identifier"
+    response:
+      success: "200 - User activity audit trail"
+
+  audit_resource_history:
+    path: "/api/audit/resource/:resource/:resourceId"
+    method: "GET"
+    description: "Get change history for specific resource"
+    authentication_required: true
+    authorization: "resource_access_or_admin"
+    path_parameters:
+      - "resource: Resource type"
+      - "resourceId: Resource identifier"
+    response:
+      success: "200 - Resource change history"
+
+  audit_export:
+    path: "/api/audit/export"
+    method: "POST"
+    description: "Export audit logs for compliance reporting"
+    authentication_required: true
+    authorization: ["admin"]
+    request_schema:
+      required_fields:
+        - "format" # csv, json, pdf
+        - "dateRange"
+      optional_fields:
+        - "filters"
+        - "includePersonalData"
+    response:
+      success: "200 - Export file URL"
+      security_note: "Export request logged for compliance"
+
+  # Security Events Endpoints
+  security_events:
+    path: "/api/security/events"
+    method: "GET"
+    description: "Get security events and incidents"
+    authentication_required: true
+    authorization: ["admin", "security_team"]
+    query_parameters:
+      optional:
+        - "eventType"
+        - "severity"
+        - "resolved"
+        - "userId"
+        - "startDate"
+        - "endDate"
+        - "limit"
+        - "offset"
+    response:
+      success: "200 - Array of security event objects"
+
+  security_events_resolve:
+    path: "/api/security/events/:eventId/resolve"
+    method: "POST"
+    description: "Mark security event as resolved"
+    authentication_required: true
+    authorization: ["admin", "security_team"]
+    request_schema:
+      required_fields:
+        - "resolution"
+      optional_fields:
+        - "followUpRequired"
+        - "followUpDate"
+    response:
+      success: "200 - Security event resolved"
+
+  security_dashboard:
+    path: "/api/security/dashboard"
+    method: "GET"
+    description: "Get security dashboard metrics"
+    authentication_required: true
+    authorization: ["admin", "security_team"]
+    response:
+      success: "200 - Security dashboard data"
+      data_includes:
+        - "activeSecurityEvents"
+        - "riskScoreDistribution"
+        - "recentIncidents"
+        - "threatLevels"
+        - "complianceStatus"
+
+  # RBAC Administration Endpoints
+  rbac_roles:
+    path: "/api/rbac/roles"
+    method: "GET"
+    description: "List all available roles"
+    authentication_required: true
+    authorization: ["admin", "manager"]
+    query_parameters:
+      optional:
+        - "department"
+        - "isActive"
+    response:
+      success: "200 - Array of role objects"
+
+  rbac_roles_create:
+    path: "/api/rbac/roles"
+    method: "POST"
+    description: "Create new role"
+    authentication_required: true
+    authorization: ["admin"]
+    request_schema:
+      required_fields:
+        - "name"
+        - "department"
+        - "permissions"
+      optional_fields:
+        - "description"
+        - "securityClearance"
+    response:
+      success: "201 - Role created"
+
+  rbac_permissions_matrix:
+    path: "/api/rbac/permissions/matrix"
+    method: "GET"
+    description: "Get complete permission matrix"
+    authentication_required: true
+    authorization: ["admin"]
+    response:
+      success: "200 - Permission matrix with departments and resources"
+
+  rbac_user_permissions:
+    path: "/api/rbac/users/:userId/permissions"
+    method: "GET"
+    description: "Get effective permissions for user"
+    authentication_required: true
+    authorization: "own_account_or_admin"
+    response:
+      success: "200 - User effective permissions"
+      data_includes:
+        - "rolePermissions"
+        - "departmentPermissions"
+        - "temporaryPermissions"
+        - "effectivePermissions"
+
+  rbac_assign_role:
+    path: "/api/rbac/users/:userId/roles"
+    method: "POST"
+    description: "Assign role to user"
+    authentication_required: true
+    authorization: ["admin", "manager"]
+    request_schema:
+      required_fields:
+        - "roleId"
+        - "department"
+      optional_fields:
+        - "expiresAt"
+        - "notes"
+    response:
+      success: "201 - Role assigned"
+      security_note: "Assignment logged in audit trail"
+
+  rbac_revoke_role:
+    path: "/api/rbac/users/:userId/roles/:assignmentId"
+    method: "DELETE"
+    description: "Revoke role assignment"
+    authentication_required: true
+    authorization: ["admin", "manager"]
+    response:
+      success: "204 - Role revoked"
+      security_note: "Revocation logged in audit trail"
+
+  # Permission Exception Endpoints
+  permission_exceptions_request:
+    path: "/api/permissions/exceptions"
+    method: "POST"
+    description: "Request temporary elevated permissions"
+    authentication_required: true
+    request_schema:
+      required_fields:
+        - "requestedPermissions"
+        - "reason"
+        - "duration"
+      optional_fields:
+        - "urgency"
+        - "businessJustification"
+    response:
+      success: "201 - Permission exception request created"
+      data_includes:
+        - "requestId"
+        - "approvalWorkflow"
+        - "estimatedApprovalTime"
+
+  permission_exceptions_list:
+    path: "/api/permissions/exceptions"
+    method: "GET"
+    description: "List permission exception requests"
+    authentication_required: true
+    authorization: "own_requests_or_admin"
+    query_parameters:
+      optional:
+        - "status"
+        - "userId"
+        - "urgency"
+    response:
+      success: "200 - Array of permission exception requests"
+
+  permission_exceptions_approve:
+    path: "/api/permissions/exceptions/:requestId/approve"
+    method: "POST"
+    description: "Approve permission exception request"
+    authentication_required: true
+    authorization: ["admin", "manager"]
+    request_schema:
+      optional_fields:
+        - "approvalNotes"
+        - "modifiedDuration"
+    response:
+      success: "200 - Permission exception approved"
+
+  permission_exceptions_deny:
+    path: "/api/permissions/exceptions/:requestId/deny"
+    method: "POST"
+    description: "Deny permission exception request"
+    authentication_required: true
+    authorization: ["admin", "manager"]
+    request_schema:
+      required_fields:
+        - "denialReason"
+    response:
+      success: "200 - Permission exception denied"
+
+  # Data Access Logging Endpoints
+  data_access_logs:
+    path: "/api/data-access/logs"
+    method: "GET"
+    description: "Get data access logs for compliance"
+    authentication_required: true
+    authorization: ["admin", "compliance_officer"]
+    query_parameters:
+      optional:
+        - "dataType"
+        - "accessType"
+        - "userId"
+        - "startDate"
+        - "endDate"
+    response:
+      success: "200 - Data access audit trail"
+
+  data_access_request:
+    path: "/api/data-access/request"
+    method: "POST"
+    description: "Request access to sensitive data"
+    authentication_required: true
+    request_schema:
+      required_fields:
+        - "dataType"
+        - "accessType"
+        - "reason"
+      optional_fields:
+        - "dataId"
+        - "duration"
+    response:
+      success: "201 - Data access request created"
+
 # Integration Management Endpoints
 integration_endpoints:
   integrations_status:
@@ -1133,12 +1564,47 @@ error_responses:
     format:
       error: "Internal server error"
 
+# Enhanced Authorization Framework
+enhanced_authorization:
+  rbac_middleware:
+    implementation: "middleware/rbacMiddleware.ts"
+    features:
+      - "Department-based permission validation"
+      - "Temporary permission exception handling"
+      - "Elevated access workflow support"
+      - "Automated audit logging"
+    usage_example:
+      endpoint: "/api/projects"
+      middleware: "rbacMiddleware('projects', 'read')"
+      department_context: "user's department or cross-department access"
+
+  permission_validation:
+    granular_permissions:
+      resources: "70+ resources with feature-level access control"
+      actions: ["create", "read", "update", "delete", "approve", "execute", "manage", "audit"]
+      context: "department-based validation with role hierarchy"
+    exception_handling:
+      temporary_access: "time-limited elevated permissions"
+      approval_workflow: "multi-level approval for sensitive permissions"
+      usage_tracking: "complete audit trail for exception usage"
+
+  mfa_integration:
+    endpoint_protection:
+      sensitive_endpoints: "automatic MFA requirement"
+      administrative_functions: "mandatory MFA validation"
+      financial_operations: "enhanced MFA with additional verification"
+    enforcement_levels:
+      optional: "user can enable MFA"
+      recommended: "system prompts for MFA setup"
+      required: "mandatory MFA for role/department"
+      enhanced: "additional verification steps"
+
 # Service Boundaries
 service_boundaries:
   authentication_service:
-    description: "Handles user authentication, registration, and session management"
-    endpoints: ["/api/auth/*"]
-    dependencies: ["database", "email_service"]
+    description: "Handles user authentication, registration, session management, and MFA"
+    endpoints: ["/api/auth/*", "/api/mfa/*"]
+    dependencies: ["database", "email_service", "sms_service", "totp_service"]
 
   user_management_service:
     description: "User profile and role management"
@@ -1175,10 +1641,15 @@ service_boundaries:
     endpoints: ["/api/integrations/*"]
     dependencies: ["slack_api", "teams_api", "github_api"]
 
+  security_service:
+    description: "Comprehensive security management including RBAC, audit logging, and incident response"
+    endpoints: ["/api/rbac/*", "/api/audit/*", "/api/security/*", "/api/permissions/*", "/api/data-access/*", "/api/sessions/*"]
+    dependencies: ["database", "audit_service", "rbac_engine", "risk_scoring_service"]
+
   notification_service:
-    description: "Real-time notifications and WebSocket management"
+    description: "Real-time notifications and WebSocket management with security event integration"
     endpoints: ["/api/notifications/*", "/ws"]
-    dependencies: ["database", "websocket_manager"]
+    dependencies: ["database", "websocket_manager", "security_service"]
 
   file_service:
     description: "File upload and management"
