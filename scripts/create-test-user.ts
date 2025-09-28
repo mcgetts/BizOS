@@ -9,8 +9,8 @@ async function createTestUser() {
   console.log('👤 Creating test user for verification flow...');
 
   try {
-    const testEmail = 'newuser-test@example.com';
-    const testToken = 'new-user-token-67890';
+    const testEmail = 'verification-test-2@example.com';
+    const testToken = 'verification-token-2025';
     const testPassword = 'TestPassword123!';
 
     // Remove existing user if exists

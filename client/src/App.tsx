@@ -36,11 +36,11 @@ function Router() {
 
   return (
     <Switch>
+      {/* Email verification should always be accessible */}
+      <Route path="/verify-email" component={EmailVerification} />
+
       {!isAuthenticated ? (
-        <>
-          <Route path="/" component={Landing} />
-          <Route path="/verify-email" component={EmailVerification} />
-        </>
+        <Route path="/" component={Landing} />
       ) : (
         <>
           <Route path="/" component={Dashboard} />
