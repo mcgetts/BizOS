@@ -100,7 +100,7 @@ interface EnhancedUser extends User {
   productivity?: number;
   currentProjects?: string[];
   recentActivity?: string[];
-  skills?: string[];
+  skills?: string[] | null;
 }
 
 // Form schema for adding team members - strengthen validation
@@ -269,7 +269,7 @@ export default function TeamHub() {
       productivity: 85 + Math.random() * 15, // Mock data
       currentProjects: projects?.filter(p => p.id === member.id).map(p => p.name) || [],
       recentActivity: [`Updated task on ${new Date().toLocaleDateString()}`],
-      skills: (member as any).skills || []
+      skills: (member as any).skills || null
     };
   });
 

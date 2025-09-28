@@ -20,6 +20,9 @@ import {
   timeEntries,
   clientInteractions,
   systemVariables,
+  userCapacity,
+  userAvailability,
+  userSkills,
   type User,
   type UpsertUser,
   type InsertUser,
@@ -279,7 +282,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteUser(id: string): Promise<void> {
-    // Check for foreign key references
+    // Check for business-related foreign key references that need reassignment
     const [clientRefs, projectRefs, taskRefs, opportunityRefs] = await Promise.all([
       db.select({ count: count() }).from(clients).where(eq(clients.assignedTo, id)),
       db.select({ count: count() }).from(projects).where(eq(projects.managerId, id)),
@@ -293,8 +296,17 @@ export class DatabaseStorage implements IStorage {
       throw new Error(`Cannot delete user: ${totalRefs} records are still assigned to this user. Please reassign them first.`);
     }
 
+    // Delete user profile-related data first (these can be safely deleted)
+    await Promise.all([
+      db.delete(userCapacity).where(eq(userCapacity.userId, id)),
+      db.delete(userAvailability).where(eq(userAvailability.userId, id)),
+      db.delete(userSkills).where(eq(userSkills.userId, id))
+    ]);
+
+    // Finally delete the user
     await db.delete(users).where(eq(users.id, id));
   }
+
 
   // Client operations
   async getClients(): Promise<ClientWithCompany[]> {
