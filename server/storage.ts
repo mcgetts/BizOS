@@ -23,6 +23,15 @@ import {
   userCapacity,
   userAvailability,
   userSkills,
+  opportunityNextSteps,
+  opportunityCommunications,
+  opportunityStakeholders,
+  opportunityActivityHistory,
+  projectActivity,
+  supportTickets,
+  supportTicketComments,
+  slaConfigurations,
+  ticketEscalations,
   type User,
   type UpsertUser,
   type InsertUser,
@@ -283,24 +292,45 @@ export class DatabaseStorage implements IStorage {
 
   async deleteUser(id: string): Promise<void> {
     // Check for business-related foreign key references that need reassignment
-    const [clientRefs, projectRefs, taskRefs, opportunityRefs] = await Promise.all([
+    const [clientRefs, projectRefs, taskAssignedRefs, taskCreatedRefs, opportunityRefs, 
+           stepAssignedRefs, stepCompletedRefs, stepCreatedRefs, supportAssignedRefs, 
+           supportCreatedRefs, ticketFromRefs, ticketToRefs] = await Promise.all([
       db.select({ count: count() }).from(clients).where(eq(clients.assignedTo, id)),
       db.select({ count: count() }).from(projects).where(eq(projects.managerId, id)),
       db.select({ count: count() }).from(tasks).where(eq(tasks.assignedTo, id)),
-      db.select({ count: count() }).from(salesOpportunities).where(eq(salesOpportunities.assignedTo, id))
+      db.select({ count: count() }).from(tasks).where(eq(tasks.createdBy, id)),
+      db.select({ count: count() }).from(salesOpportunities).where(eq(salesOpportunities.assignedTo, id)),
+      db.select({ count: count() }).from(opportunityNextSteps).where(eq(opportunityNextSteps.assignedTo, id)),
+      db.select({ count: count() }).from(opportunityNextSteps).where(eq(opportunityNextSteps.completedBy, id)),
+      db.select({ count: count() }).from(opportunityNextSteps).where(eq(opportunityNextSteps.createdBy, id)),
+      db.select({ count: count() }).from(supportTickets).where(eq(supportTickets.assignedTo, id)),
+      db.select({ count: count() }).from(supportTickets).where(eq(supportTickets.createdBy, id)),
+      db.select({ count: count() }).from(ticketEscalations).where(eq(ticketEscalations.fromUserId, id)),
+      db.select({ count: count() }).from(ticketEscalations).where(eq(ticketEscalations.toUserId, id))
     ]);
 
-    const totalRefs = clientRefs[0].count + projectRefs[0].count + taskRefs[0].count + opportunityRefs[0].count;
+    const totalRefs = clientRefs[0].count + projectRefs[0].count + taskAssignedRefs[0].count + 
+                     taskCreatedRefs[0].count + opportunityRefs[0].count + stepAssignedRefs[0].count + 
+                     stepCompletedRefs[0].count + stepCreatedRefs[0].count + supportAssignedRefs[0].count + 
+                     supportCreatedRefs[0].count + ticketFromRefs[0].count + ticketToRefs[0].count;
 
     if (totalRefs > 0) {
       throw new Error(`Cannot delete user: ${totalRefs} records are still assigned to this user. Please reassign them first.`);
     }
 
-    // Delete user profile-related data first (these can be safely deleted)
+    // Delete user profile and activity data first (these can be safely deleted)
     await Promise.all([
+      // User profile data
       db.delete(userCapacity).where(eq(userCapacity.userId, id)),
       db.delete(userAvailability).where(eq(userAvailability.userId, id)),
-      db.delete(userSkills).where(eq(userSkills.userId, id))
+      db.delete(userSkills).where(eq(userSkills.userId, id)),
+      // Activity and communication logs (safe to delete)
+      db.delete(opportunityCommunications).where(eq(opportunityCommunications.recordedBy, id)),
+      db.delete(opportunityStakeholders).where(eq(opportunityStakeholders.createdBy, id)),
+      db.delete(opportunityActivityHistory).where(eq(opportunityActivityHistory.performedBy, id)),
+      db.delete(projectActivity).where(eq(projectActivity.userId, id)),
+      db.delete(supportTicketComments).where(eq(supportTicketComments.userId, id)),
+      db.delete(slaConfigurations).where(eq(slaConfigurations.createdBy, id))
     ]);
 
     // Finally delete the user
