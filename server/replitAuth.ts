@@ -214,11 +214,14 @@ export async function setupAuth(app: Express) {
         }
 
         // Check email verification
+        console.log('🔐 Login attempt for user:', user.email, 'emailVerified:', user.emailVerified);
         if (!user.emailVerified) {
+          console.log('❌ Email not verified for user:', user.email);
           return done(null, false, {
             message: 'Please verify your email address before logging in.'
           });
         }
+        console.log('✅ Email verified, allowing login for:', user.email);
 
         // Clear rate limiting on successful login
         AuthRateLimiter.clearAttempts(identifier);

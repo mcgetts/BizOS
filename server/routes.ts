@@ -545,7 +545,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { token } = req.body;
 
+      console.log('📧 Email verification attempt with token:', token?.substring(0, 10) + '...');
+
       if (!token) {
+        console.log('❌ No token provided');
         return res.status(400).json({ message: 'Verification token required' });
       }
 
@@ -557,26 +560,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .limit(1);
 
       if (!user) {
+        console.log('❌ No user found with token');
         return res.status(400).json({ message: 'Invalid or expired verification token' });
       }
 
+      console.log('✅ Found user:', user.email, 'emailVerified:', user.emailVerified);
+
       if (user.emailVerified) {
+        console.log('⚠️ Email already verified for user:', user.email);
         return res.status(400).json({ message: 'Email already verified' });
       }
 
       // Update user as verified
-      await db
+      console.log('🔄 Updating user verification status for:', user.email);
+      const result = await db
         .update(users)
         .set({
           emailVerified: true,
           emailVerificationToken: null
         })
-        .where(eq(users.id, user.id));
+        .where(eq(users.id, user.id))
+        .returning();
+
+      console.log('✅ Verification update result:', result.length > 0 ? 'SUCCESS' : 'FAILED');
+      console.log('Updated user emailVerified:', result[0]?.emailVerified);
 
       res.json({ message: 'Email verified successfully! You can now log in.' });
 
     } catch (error) {
-      console.error('Email verification error:', error);
+      console.error('❌ Email verification error:', error);
       res.status(500).json({ message: 'Verification failed' });
     }
   });

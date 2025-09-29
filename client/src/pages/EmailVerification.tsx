@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
-import { useLocation, useRouter } from "wouter";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Mail, CheckCircle, XCircle, Loader2 } from "lucide-react";
 
 export default function EmailVerification() {
-  const [location] = useLocation();
-  const [, navigate] = useRouter();
+  const [location, navigate] = useLocation();
   const [status, setStatus] = useState<'verifying' | 'success' | 'error'>('verifying');
   const [message, setMessage] = useState('');
 
@@ -16,6 +15,14 @@ export default function EmailVerification() {
         // Extract token from URL parameters
         const urlParams = new URLSearchParams(window.location.search);
         const token = urlParams.get('token');
+        const statusParam = urlParams.get('status');
+
+        // If already showing success status (from redirect), don't verify again
+        if (statusParam === 'success') {
+          setStatus('success');
+          setMessage('Your email has been successfully verified! You can now log in to your account.');
+          return;
+        }
 
         if (!token) {
           setStatus('error');
@@ -38,10 +45,8 @@ export default function EmailVerification() {
           setStatus('success');
           setMessage('Your email has been successfully verified! You can now log in to your account.');
 
-          // Redirect to login page after a short delay
-          setTimeout(() => {
-            navigate('/?verified=true');
-          }, 3000);
+          // Update URL to show success status without token (cleaner URL)
+          window.history.replaceState({}, '', '/verify-email?status=success');
         } else {
           setStatus('error');
           setMessage(result.message || 'Email verification failed. The link may have expired or is invalid.');
@@ -55,10 +60,11 @@ export default function EmailVerification() {
     };
 
     verifyEmail();
-  }, [navigate]);
+  }, []);
 
   const handleReturnToLogin = () => {
-    navigate(status === 'success' ? '/?verified=true' : '/');
+    // Always navigate to root, Landing page will show auth form
+    navigate('/');
   };
 
   return (
@@ -86,16 +92,19 @@ export default function EmailVerification() {
 
           {status === 'success' && (
             <div className="text-center space-y-4">
-              <div className="flex items-center justify-center space-x-2 text-sm text-gray-500">
-                <Mail className="w-4 h-4" />
-                <span>Redirecting to login page in 3 seconds...</span>
+              <div className="flex items-center justify-center space-x-2 text-sm text-green-600 bg-green-50 p-3 rounded-md">
+                <CheckCircle className="w-4 h-4" />
+                <span className="font-medium">Email verification complete!</span>
               </div>
               <Button
                 onClick={handleReturnToLogin}
-                className="w-full"
+                className="w-full bg-green-600 hover:bg-green-700"
               >
                 Continue to Login
               </Button>
+              <p className="text-xs text-gray-500">
+                You can now sign in with your email and password
+              </p>
             </div>
           )}
 
