@@ -1,5 +1,5 @@
 import { db } from '../db.js';
-import { eq, gte, lte, sql, desc, asc, inArray, and } from 'drizzle-orm';
+import { eq, gte, lte, sql, desc, asc } from 'drizzle-orm';
 import {
   projects,
   tasks,
@@ -497,7 +497,7 @@ export class BusinessInsightsEngine {
       // Get time entries for the last week
       const recentTimeEntries = await db.select()
         .from(timeEntries)
-        .where(gte(timeEntries.date, sevenDaysAgo));
+        .where(gte(timeEntries.startTime, sevenDaysAgo));
 
       // Get active users
       const allUsers = await db.select().from(users);
@@ -508,7 +508,11 @@ export class BusinessInsightsEngine {
       for (const user of allUsers) {
         const userEntries = recentTimeEntries.filter(entry => entry.userId === user.id);
         const totalHours = userEntries.reduce((sum, entry) => {
-          return sum + (parseFloat(entry.hours?.toString() || '0') || 0);
+          if (entry.startTime && entry.endTime) {
+            const duration = new Date(entry.endTime).getTime() - new Date(entry.startTime).getTime();
+            return sum + (duration / (1000 * 60 * 60)); // Convert to hours
+          }
+          return sum;
         }, 0);
 
         const weeklyHours = 40; // Standard work week
@@ -730,7 +734,7 @@ export class BusinessInsightsEngine {
       // Simple revenue prediction based on pipeline
       const pipeline = await db.select()
         .from(salesOpportunities)
-        .where(inArray(salesOpportunities.status, ['prospect', 'qualified', 'proposal']));
+        .where(sql`${salesOpportunities.status} IN ('prospect', 'qualified', 'proposal')`);
 
       const pipelineValue = pipeline.reduce((sum, opp) =>
         sum + (parseFloat(opp.value || '0') || 0), 0
@@ -933,15 +937,12 @@ export class BusinessInsightsEngine {
       // Calculate revenue metrics
       const pipeline = await db.select()
         .from(salesOpportunities)
-        .where(inArray(salesOpportunities.status, ['prospect', 'qualified', 'proposal']));
+        .where(sql`${salesOpportunities.status} IN ('prospect', 'qualified', 'proposal')`);
 
       const wonOpportunities = await db.select()
         .from(salesOpportunities)
         .where(
-          and(
-            eq(salesOpportunities.status, 'won'),
-            gte(salesOpportunities.updatedAt, thirtyDaysAgo)
-          )
+          sql`${salesOpportunities.status} = 'won' AND ${salesOpportunities.updatedAt} >= ${thirtyDaysAgo}`
         );
 
       const currentRevenue = wonOpportunities.reduce((sum, opp) =>
@@ -956,10 +957,7 @@ export class BusinessInsightsEngine {
       const completedTasks = await db.select()
         .from(tasks)
         .where(
-          and(
-            eq(tasks.status, 'completed'),
-            gte(tasks.updatedAt, thirtyDaysAgo)
-          )
+          sql`${tasks.status} = 'completed' AND ${tasks.updatedAt} >= ${thirtyDaysAgo}`
         );
 
       // Calculate client satisfaction metrics
@@ -974,10 +972,14 @@ export class BusinessInsightsEngine {
       // Calculate resource utilization
       const recentTimeEntries = await db.select()
         .from(timeEntries)
-        .where(gte(timeEntries.date, thirtyDaysAgo));
+        .where(gte(timeEntries.startTime, thirtyDaysAgo));
 
       const totalHours = recentTimeEntries.reduce((sum, entry) => {
-        return sum + (parseFloat(entry.hours?.toString() || '0') || 0);
+        if (entry.startTime && entry.endTime) {
+          const duration = new Date(entry.endTime).getTime() - new Date(entry.startTime).getTime();
+          return sum + (duration / (1000 * 60 * 60));
+        }
+        return sum;
       }, 0);
 
       const allUsers = await db.select().from(users);
