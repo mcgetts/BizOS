@@ -1,5 +1,5 @@
 import { db } from '../db.js';
-import { eq, gte, lte, sql, desc, asc } from 'drizzle-orm';
+import { eq, gte, lte, sql, desc, asc, inArray, and } from 'drizzle-orm';
 import {
   projects,
   tasks,
@@ -937,12 +937,15 @@ export class BusinessInsightsEngine {
       // Calculate revenue metrics
       const pipeline = await db.select()
         .from(salesOpportunities)
-        .where(sql`${salesOpportunities.status} IN ('prospect', 'qualified', 'proposal')`);
+        .where(inArray(salesOpportunities.status, ['prospect', 'qualified', 'proposal']));
 
       const wonOpportunities = await db.select()
         .from(salesOpportunities)
         .where(
-          sql`${salesOpportunities.status} = 'won' AND ${salesOpportunities.updatedAt} >= ${thirtyDaysAgo}`
+          and(
+            eq(salesOpportunities.status, 'won'),
+            gte(salesOpportunities.updatedAt, thirtyDaysAgo)
+          )
         );
 
       const currentRevenue = wonOpportunities.reduce((sum, opp) =>
@@ -957,7 +960,10 @@ export class BusinessInsightsEngine {
       const completedTasks = await db.select()
         .from(tasks)
         .where(
-          sql`${tasks.status} = 'completed' AND ${tasks.updatedAt} >= ${thirtyDaysAgo}`
+          and(
+            eq(tasks.status, 'completed'),
+            gte(tasks.updatedAt, thirtyDaysAgo)
+          )
         );
 
       // Calculate client satisfaction metrics
