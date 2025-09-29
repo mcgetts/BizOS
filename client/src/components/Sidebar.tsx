@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -20,17 +20,9 @@ import {
   Clock,
   Calculator,
   X,
-  Workflow,
-  Download,
-  Zap,
-  Database,
-  Plug,
-  ChevronDown,
-  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 // Executive Dashboard - Top Level
 const execDashboard = {
@@ -124,26 +116,6 @@ const navigationGroups = [
         href: "/admin",
         icon: Settings,
       },
-      {
-        title: "User Data",
-        href: "/user-data",
-        icon: Database,
-      },
-      {
-        title: "Workflows",
-        href: "/automation",
-        icon: Workflow,
-      },
-      {
-        title: "Integrations",
-        href: "/integrations",
-        icon: Plug,
-      },
-      {
-        title: "Data Export",
-        href: "/data-export",
-        icon: Download,
-      },
     ]
   },
 ];
@@ -163,48 +135,6 @@ export function Sidebar({ user, isOpen = false, onOpenChange }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [location] = useLocation();
   const isMobile = useIsMobile();
-
-  // State for collapsible sections
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>(() => {
-    // Try to load from localStorage, default all sections to expanded
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('sidebar-sections-state');
-        if (saved) {
-          return JSON.parse(saved);
-        }
-      } catch (error) {
-        console.warn('Failed to parse saved sidebar state:', error);
-      }
-    }
-
-    // Default all sections to expanded
-    return {
-      'GROWTH': true,
-      'DELIVERY': true,
-      'MANAGEMENT': true,
-      'INTELLIGENCE': true,
-      'CONTROL': true,
-    };
-  });
-
-  // Save expanded sections to localStorage
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem('sidebar-sections-state', JSON.stringify(expandedSections));
-      } catch (error) {
-        console.warn('Failed to save sidebar state:', error);
-      }
-    }
-  }, [expandedSections]);
-
-  const toggleSection = (sectionTitle: string) => {
-    setExpandedSections(prev => ({
-      ...prev,
-      [sectionTitle]: !prev[sectionTitle]
-    }));
-  };
 
   const userDisplayName = user?.firstName && user?.lastName
     ? `${user.firstName} ${user.lastName}`
@@ -279,63 +209,42 @@ export function Sidebar({ user, isOpen = false, onOpenChange }: SidebarProps) {
         </div>
 
         {/* Business Flow Groups */}
-        {navigationGroups.map((group, groupIndex) => {
-          const isExpanded = expandedSections[group.title];
-          const ChevronIcon = isExpanded ? ChevronDown : ChevronRight;
+        {navigationGroups.map((group, groupIndex) => (
+          <div key={group.title} className={cn("space-y-1", groupIndex > 0 && "mt-6")}>
+            {/* Group Header */}
+            {(!collapsed || isMobile) && (
+              <div className="px-3 py-1">
+                <span className="text-xs font-medium text-sidebar-foreground/60 uppercase tracking-wider">
+                  {group.title}
+                </span>
+              </div>
+            )}
 
-          return (
-            <Collapsible
-              key={group.title}
-              open={isExpanded}
-              onOpenChange={() => toggleSection(group.title)}
-              className={cn("space-y-1", groupIndex > 0 && "mt-6")}
-            >
-              {/* Group Header - Always show, but different styles for collapsed/expanded */}
-              {(!collapsed || isMobile) ? (
-                <CollapsibleTrigger className="w-full">
-                  <div className="flex items-center justify-between px-3 py-1 hover:bg-sidebar-accent/30 rounded-md transition-all duration-200 cursor-pointer group">
-                    <span className="text-xs font-medium text-sidebar-foreground/60 uppercase tracking-wider group-hover:text-sidebar-foreground/80 transition-colors">
-                      {group.title}
-                    </span>
-                    <ChevronIcon className="w-3 h-3 text-sidebar-foreground/40 transition-all duration-200 group-hover:text-sidebar-foreground/60" />
-                  </div>
-                </CollapsibleTrigger>
-              ) : (
-                // Collapsed sidebar: show section as separator line
-                <div className="px-3 py-2 border-t border-sidebar-border/20 mt-2 first:mt-0">
-                  <div className="w-full h-px bg-sidebar-foreground/10" />
-                </div>
-              )}
+            {/* Group Items */}
+            {group.items.map((item) => {
+              const isActive = location === item.href;
+              const Icon = item.icon;
 
-              {/* Group Items - Collapsible */}
-              <CollapsibleContent className="space-y-1 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:slide-up-1 data-[state=open]:slide-down-1">
-                {group.items.map((item) => {
-                  const isActive = location === item.href;
-                  const Icon = item.icon;
-
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={cn(
-                        "flex items-center space-x-3 px-3 py-2 rounded-lg transition-all duration-200",
-                        "hover:translate-x-1", // Subtle slide effect on hover
-                        isActive
-                          ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
-                          : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                      )}
-                      data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}
-                      onClick={() => isMobile && onOpenChange?.(false)}
-                    >
-                      <Icon className="w-5 h-5 flex-shrink-0" />
-                      {(!collapsed || isMobile) && <span className="truncate">{item.title}</span>}
-                    </Link>
-                  );
-                })}
-              </CollapsibleContent>
-            </Collapsible>
-          );
-        })}
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors",
+                    isActive
+                      ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                      : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  )}
+                  data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}
+                  onClick={() => isMobile && onOpenChange?.(false)}
+                >
+                  <Icon className="w-5 h-5" />
+                  {(!collapsed || isMobile) && <span>{item.title}</span>}
+                </Link>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
       {/* User Profile */}

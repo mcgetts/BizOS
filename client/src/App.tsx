@@ -26,10 +26,6 @@ import Admin from "@/pages/Admin";
 import Resources from "@/pages/Resources";
 import TimeTracking from "@/pages/TimeTracking";
 import BudgetManagement from "@/pages/BudgetManagement";
-import Workflows from "@/pages/Workflows";
-import UserData from "@/pages/UserData";
-import DataExportPage from "@/pages/DataExportPage";
-import Integrations from "@/pages/Integrations";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -66,10 +62,6 @@ function Router() {
           <Route path="/company" component={Company} />
           <Route path="/analytics" component={Analytics} />
           <Route path="/admin" component={Admin} />
-          <Route path="/automation" component={Workflows} />
-          <Route path="/data-export" component={DataExportPage} />
-          <Route path="/user-data" component={UserData} />
-          <Route path="/integrations" component={Integrations} />
         </>
       )}
       <Route component={NotFound} />

@@ -6,7 +6,6 @@ import { wsManager } from "./websocketManager";
 import { sentryService } from "./monitoring/sentryService.js";
 import { createBackupScheduler } from "./backup/backupScheduler.js";
 import { createUptimeMonitor } from "./monitoring/uptimeMonitor.js";
-import { prometheusMetrics } from "./monitoring/prometheusMetrics.js";
 import fs from "fs";
 import path from "path";
 
@@ -20,9 +19,6 @@ sentryService.setupExpress(app);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
-
-// Setup Prometheus metrics middleware
-app.use(prometheusMetrics.middleware());
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -114,19 +110,9 @@ app.use((req, res, next) => {
     process.exit(0);
   });
 
-  // Add Prometheus metrics endpoint
-  app.get('/metrics', async (req, res) => {
-    try {
-      await prometheusMetrics.getMetrics(req, res);
-    } catch (error) {
-      console.error('Failed to generate metrics:', error);
-      res.status(500).send('Failed to generate metrics');
-    }
-  });
-
   // Run database seeding on startup
   await seedDatabase();
-
+  
   const server = await registerRoutes(app);
 
   // Setup WebSocket server for real-time notifications
@@ -141,16 +127,6 @@ app.use((req, res, next) => {
   const uptimeMonitor = createUptimeMonitor();
   uptimeMonitor.start();
   log('✅ Uptime monitoring started');
-
-  // Start periodic metrics collection
-  setInterval(async () => {
-    try {
-      await prometheusMetrics.updateApplicationMetrics();
-    } catch (error) {
-      console.error('Failed to update application metrics:', error);
-    }
-  }, 30000); // Update every 30 seconds
-  log('✅ Prometheus metrics collection started');
 
   // Start escalation service for automatic ticket escalation (temporarily disabled for demo)
   // const { escalationService } = await import('./escalationService');
