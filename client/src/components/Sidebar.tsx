@@ -20,11 +20,19 @@ import {
   Clock,
   Calculator,
   X,
+  Home,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
-// Executive Dashboard - Top Level
+// Central Hub Home - Top Level
+const homeHub = {
+  title: "Home",
+  href: "/",
+  icon: Home,
+};
+
+// Executive Dashboard - Second Level
 const execDashboard = {
   title: "Exec Dashboard",
   href: "/dashboard",
@@ -182,6 +190,32 @@ export function Sidebar({ user, isOpen = false, onOpenChange }: SidebarProps) {
 
       {/* Navigation Menu */}
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+        {/* Central Hub Home */}
+        <div className="mb-4">
+          {(() => {
+            const isActive = location === homeHub.href;
+            const Icon = homeHub.icon;
+
+            return (
+              <Link
+                key={homeHub.href}
+                href={homeHub.href}
+                className={cn(
+                  "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors",
+                  isActive
+                    ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                )}
+                data-testid={`link-home`}
+                onClick={() => isMobile && onOpenChange?.(false)}
+              >
+                <Icon className="w-5 h-5" />
+                {(!collapsed || isMobile) && <span>{homeHub.title}</span>}
+              </Link>
+            );
+          })()}
+        </div>
+
         {/* Executive Dashboard */}
         <div className="mb-4">
           {(() => {
