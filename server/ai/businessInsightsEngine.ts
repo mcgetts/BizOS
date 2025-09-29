@@ -497,7 +497,7 @@ export class BusinessInsightsEngine {
       // Get time entries for the last week
       const recentTimeEntries = await db.select()
         .from(timeEntries)
-        .where(gte(timeEntries.startTime, sevenDaysAgo));
+        .where(gte(timeEntries.date, sevenDaysAgo));
 
       // Get active users
       const allUsers = await db.select().from(users);
@@ -508,11 +508,7 @@ export class BusinessInsightsEngine {
       for (const user of allUsers) {
         const userEntries = recentTimeEntries.filter(entry => entry.userId === user.id);
         const totalHours = userEntries.reduce((sum, entry) => {
-          if (entry.startTime && entry.endTime) {
-            const duration = new Date(entry.endTime).getTime() - new Date(entry.startTime).getTime();
-            return sum + (duration / (1000 * 60 * 60)); // Convert to hours
-          }
-          return sum;
+          return sum + (parseFloat(entry.hours?.toString() || '0') || 0);
         }, 0);
 
         const weeklyHours = 40; // Standard work week
@@ -978,14 +974,10 @@ export class BusinessInsightsEngine {
       // Calculate resource utilization
       const recentTimeEntries = await db.select()
         .from(timeEntries)
-        .where(gte(timeEntries.startTime, thirtyDaysAgo));
+        .where(gte(timeEntries.date, thirtyDaysAgo));
 
       const totalHours = recentTimeEntries.reduce((sum, entry) => {
-        if (entry.startTime && entry.endTime) {
-          const duration = new Date(entry.endTime).getTime() - new Date(entry.startTime).getTime();
-          return sum + (duration / (1000 * 60 * 60));
-        }
-        return sum;
+        return sum + (parseFloat(entry.hours?.toString() || '0') || 0);
       }, 0);
 
       const allUsers = await db.select().from(users);
