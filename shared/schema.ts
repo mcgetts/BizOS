@@ -115,6 +115,7 @@ export const clients = pgTable("clients", {
   address: text("address"),
   status: varchar("status"),
   totalValue: decimal("total_value", { precision: 10, scale: 2 }),
+  quickbooksId: varchar("quickbooks_id"), // QuickBooks customer ID
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -196,6 +197,7 @@ export const invoices = pgTable("invoices", {
   paidAt: timestamp("paid_at"),
   notes: text("notes"),
   terms: text("terms"),
+  quickbooksId: varchar("quickbooks_id"), // QuickBooks invoice ID
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

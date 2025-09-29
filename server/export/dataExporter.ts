@@ -577,3 +577,8 @@ export class DataExporter {
 }
 
 export const dataExporter = new DataExporter();
+
+// Standalone export function for API routes
+export async function exportData(options: ExportOptions): Promise<ExportResult> {
+  return dataExporter.exportData(options);
+}

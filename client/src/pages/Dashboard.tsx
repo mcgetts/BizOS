@@ -3,6 +3,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Layout } from "@/components/Layout";
 import { DashboardKPIs } from "@/components/DashboardKPIs";
+import { BusinessInsights } from "@/components/BusinessInsights";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -409,6 +410,8 @@ export default function Dashboard() {
         {/* KPI Cards */}
         <DashboardKPIs />
 
+        {/* AI Business Insights */}
+        <BusinessInsights />
 
         {/* Revenue Chart */}
         <Card className="glassmorphism" data-testid="card-revenue-chart">
