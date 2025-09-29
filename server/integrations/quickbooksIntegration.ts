@@ -1,4 +1,5 @@
-import { OAuthClient } from 'intuit-oauth';
+import IntuitOAuth from 'intuit-oauth';
+const OAuthClient = (IntuitOAuth as any).OAuthClient || IntuitOAuth;
 import { db } from '../db.js';
 import { eq } from 'drizzle-orm';
 import { clients, invoices, expenses } from '../../shared/schema.js';
@@ -74,7 +75,7 @@ export class QuickBooksIntegration {
    */
   generateAuthUrl(): string {
     const authUri = this.oauthClient.authorizeUri({
-      scope: [OAuthClient.scopes.Accounting],
+      scope: [(OAuthClient as any).scopes?.Accounting || 'com.intuit.quickbooks.accounting'],
       state: 'quickbooks_auth'
     });
     return authUri;
