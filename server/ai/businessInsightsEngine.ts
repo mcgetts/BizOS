@@ -734,7 +734,7 @@ export class BusinessInsightsEngine {
       // Simple revenue prediction based on pipeline
       const pipeline = await db.select()
         .from(salesOpportunities)
-        .where(sql`${salesOpportunities.status} IN ('prospect', 'qualified', 'proposal')`);
+        .where(inArray(salesOpportunities.status, ['prospect', 'qualified', 'proposal']));
 
       const pipelineValue = pipeline.reduce((sum, opp) =>
         sum + (parseFloat(opp.value || '0') || 0), 0
