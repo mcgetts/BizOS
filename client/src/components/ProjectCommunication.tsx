@@ -188,30 +188,31 @@ export function ProjectCommunication({ projectId, projectName }: ProjectCommunic
                   <p className="text-sm text-muted-foreground">Be the first to share an update!</p>
                 </div>
               ) : (
-                comments.map((comment) => (
-                  <div key={comment.id} className="flex gap-3 p-4 bg-muted/50 rounded-lg">
-                    <Avatar className="w-8 h-8">
-                      <AvatarFallback className="text-xs">
-                        {getUserInitials(comment.userId)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-sm">
-                            {getUserName(comment.userId)}
-                          </span>
-                          {comment.type && comment.type !== "comment" && (
-                            <Badge variant="secondary" className="text-xs">
-                              {comment.type}
-                            </Badge>
-                          )}
+                <div className="space-y-3 max-h-80 overflow-y-auto">
+                  {comments.reverse().map((comment) => (
+                    <div key={comment.id} className="flex gap-3 p-4 bg-muted/50 rounded-lg">
+                      <Avatar className="w-8 h-8">
+                        <AvatarFallback className="text-xs">
+                          {getUserInitials(comment.userId)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm">
+                              {getUserName(comment.userId)}
+                            </span>
+                            {comment.type && comment.type !== "comment" && (
+                              <Badge variant="secondary" className="text-xs">
+                                {comment.type}
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Clock className="w-3 h-3" />
+                            {comment.createdAt ? formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true }) : 'Unknown time'}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Clock className="w-3 h-3" />
-                          {comment.createdAt ? formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true }) : 'Unknown time'}
-                        </div>
-                      </div>
                       <p className="text-sm whitespace-pre-wrap">{comment.content}</p>
 
                       {comment.attachments && Array.isArray(comment.attachments) && comment.attachments.length > 0 && (
@@ -226,7 +227,8 @@ export function ProjectCommunication({ projectId, projectName }: ProjectCommunic
                       )}
                     </div>
                   </div>
-                ))
+                  ))}
+                </div>
               )}
             </div>
           </TabsContent>
@@ -243,8 +245,8 @@ export function ProjectCommunication({ projectId, projectName }: ProjectCommunic
                 <p className="text-sm text-muted-foreground">Project activity will appear here</p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {activities.map((activity) => (
+              <div className="space-y-3 max-h-80 overflow-y-auto">
+                {activities.reverse().map((activity) => (
                   <div key={activity.id} className="flex gap-3 p-3 border-l-2 border-muted-foreground/20">
                     <div className="flex-shrink-0 mt-0.5">
                       {getActivityIcon(activity.action)}

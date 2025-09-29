@@ -1,4 +1,5 @@
 import { useState, useEffect, Fragment } from "react";
+import { DragDropContext, Droppable, Draggable, DropResult } from "react-beautiful-dnd";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Layout } from "@/components/Layout";
@@ -72,7 +73,17 @@ const projectFormSchema = z.object({
 type ProjectFormData = z.infer<typeof projectFormSchema>;
 
 // Project Form Component
-function ProjectForm({ project, onSuccess }: { project?: Project; onSuccess: () => void }) {
+function ProjectForm({
+  project,
+  onSuccess,
+  createMutation,
+  updateMutation
+}: {
+  project?: Project;
+  onSuccess: () => void;
+  createMutation: any;
+  updateMutation: any;
+}) {
   const { toast } = useToast();
 
   const form = useForm<ProjectFormData>({
@@ -94,6 +105,45 @@ function ProjectForm({ project, onSuccess }: { project?: Project; onSuccess: () 
       isClientPortalEnabled: project?.isClientPortalEnabled ?? true,
     },
   });
+
+  // Reset form when project changes
+  useEffect(() => {
+    if (project) {
+      form.reset({
+        name: project.name || "",
+        description: project.description || "",
+        companyId: (project as any)?.companyId || "",
+        clientId: project.clientId || "",
+        managerId: project.managerId || "",
+        status: project.status || "planning",
+        priority: project.priority || "medium",
+        budget: project.budget || "0",
+        actualCost: project.actualCost || "0",
+        progress: project.progress?.toString() || "0",
+        startDate: project.startDate ? new Date(project.startDate).toISOString().split('T')[0] : "",
+        endDate: project.endDate ? new Date(project.endDate).toISOString().split('T')[0] : "",
+        tags: project.tags || [],
+        isClientPortalEnabled: project.isClientPortalEnabled ?? true,
+      });
+    } else {
+      form.reset({
+        name: "",
+        description: "",
+        companyId: "",
+        clientId: "",
+        managerId: "",
+        status: "planning",
+        priority: "medium",
+        budget: "0",
+        actualCost: "0",
+        progress: "0",
+        startDate: "",
+        endDate: "",
+        tags: [],
+        isClientPortalEnabled: true,
+      });
+    }
+  }, [project, form]);
 
   // Fetch clients for dropdown
   const { data: clients } = useQuery<Client[]>({
@@ -117,43 +167,12 @@ function ProjectForm({ project, onSuccess }: { project?: Project; onSuccess: () 
     select: (allTasks) => allTasks?.filter(task => task.projectId === project?.id) || [],
   });
 
-  const createMutation = useOptimisticMutation({
-    mutationFn: async (data: InsertProject) => {
-      const response = await apiRequest("POST", "/api/projects", data);
-      return response.json();
-    },
-    optimisticUpdates: [
-      {
-        queryKey: ["/api/projects"],
-        ...optimisticCreators.addToList<Project>()
-      }
-    ],
-    successMessage: "Project created successfully",
-    errorMessage: "Failed to create project",
-    onSuccess: () => {
-      onSuccess();
-    }
-  });
-
-  const updateMutation = useOptimisticMutation({
-    mutationFn: async (data: Partial<InsertProject>) => {
-      const response = await apiRequest("PUT", `/api/projects/${project?.id}`, data);
-      return response.json();
-    },
-    optimisticUpdates: project ? [
-      {
-        queryKey: ["/api/projects"],
-        ...optimisticCreators.updateInList<Project>(project.id || '')
-      }
-    ] : [],
-    successMessage: "Project updated successfully",
-    errorMessage: "Failed to update project",
-    onSuccess: () => {
-      onSuccess();
-    }
-  });
+  // Mutations are now passed as props from parent component
 
   const onSubmit = (data: ProjectFormData) => {
+    // Debug: Form submission
+    console.log("Form data:", data);
+
     const submitData: InsertProject = {
       name: data.name,
       description: data.description || null,
@@ -172,10 +191,20 @@ function ProjectForm({ project, onSuccess }: { project?: Project; onSuccess: () 
       isClientPortalEnabled: data.isClientPortalEnabled ?? true,
     } as any;
 
-    if (project) {
-      updateMutation.mutate(submitData);
-    } else {
+    console.log("Submit data:", submitData);
+
+    if (project && project.id) {
+      console.log("Updating project:", project.id);
+      updateMutation.mutate({ projectId: project.id, data: submitData });
+    } else if (!project) {
+      console.log("Creating new project");
       createMutation.mutate(submitData);
+    } else {
+      toast({
+        title: "Error",
+        description: "Project ID is missing. Cannot update project.",
+        variant: "destructive"
+      });
     }
   };
 
@@ -565,29 +594,168 @@ export default function Projects() {
     enabled: isAuthenticated,
   });
 
-  // Fetch users for QuickTaskActions component
   const { data: users } = useQuery<User[]>({
     queryKey: ["/api/users"],
     enabled: isAuthenticated,
   });
 
-  // Delete mutation
-  const deleteMutation = useOptimisticMutation({
+  // Delete mutation - simplified server-authoritative approach
+  const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
+      console.log("Deleting project ID:", id);
       const response = await apiRequest("DELETE", `/api/projects/${id}`);
-      return response;
-    },
-    optimisticUpdates: [
-      {
-        queryKey: ["/api/projects"],
-        updater: (old: Project[] | undefined, deletedId: string) => {
-          if (!old) return old;
-          return old.filter(project => project.id !== deletedId);
+      if (!response.ok) {
+        const errorData = await response.text();
+        let errorMessage = `Delete failed: ${response.status} ${response.statusText}`;
+        try {
+          const parsedError = JSON.parse(errorData);
+          errorMessage = parsedError.details || parsedError.message || errorMessage;
+        } catch {
+          errorMessage = errorData || errorMessage;
         }
+        console.error("Delete failed:", errorMessage);
+        throw new Error(errorMessage);
       }
-    ],
-    successMessage: "Project deleted successfully",
-    errorMessage: "Failed to delete project"
+      return { id };
+    },
+    onSuccess: () => {
+      // Invalidate and refetch projects to get updated data from server
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      toast({
+        title: "Success",
+        description: "Project deleted successfully"
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive"
+      });
+    },
+  });
+
+  // Drag and drop status update mutation - simplified server-authoritative approach
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ projectId, newStatus }: { projectId: string, newStatus: string }) => {
+      console.log("Updating project status:", projectId, "to:", newStatus);
+      const response = await apiRequest("PUT", `/api/projects/${projectId}`, { status: newStatus });
+      if (!response.ok) {
+        const errorData = await response.text();
+        let errorMessage = `Status update failed: ${response.status} ${response.statusText}`;
+        try {
+          const parsedError = JSON.parse(errorData);
+          errorMessage = parsedError.details || parsedError.message || errorMessage;
+        } catch {
+          errorMessage = errorData || errorMessage;
+        }
+        console.error("Status update failed:", errorMessage);
+        throw new Error(errorMessage);
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      // Invalidate and refetch projects to get updated data from server
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      toast({
+        title: "Success",
+        description: "Project status updated successfully"
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive"
+      });
+    },
+  });
+
+  // Create project mutation - simplified server-authoritative approach
+  const createMutation = useMutation({
+    mutationFn: async (data: InsertProject) => {
+      // Convert dates to ISO strings
+      const submitData = {
+        ...data,
+        startDate: data.startDate ? data.startDate.toISOString() : null,
+        endDate: data.endDate ? data.endDate.toISOString() : null,
+      };
+      console.log("Creating project with data:", submitData);
+
+      const response = await apiRequest("POST", "/api/projects", submitData);
+      if (!response.ok) {
+        const errorData = await response.text();
+        let errorMessage = `Create failed: ${response.status} ${response.statusText}`;
+        try {
+          const parsedError = JSON.parse(errorData);
+          errorMessage = parsedError.details || parsedError.message || errorMessage;
+        } catch {
+          errorMessage = errorData || errorMessage;
+        }
+        console.error("Create failed:", errorMessage);
+        throw new Error(errorMessage);
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      // Invalidate and refetch projects to get updated data from server
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      toast({
+        title: "Success",
+        description: "Project created successfully"
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive"
+      });
+    },
+  });
+
+  // Update project mutation - simplified server-authoritative approach
+  const updateMutation = useMutation({
+    mutationFn: async ({ projectId, data }: { projectId: string, data: Partial<InsertProject> }) => {
+      // Convert dates to ISO strings if they exist
+      const submitData = {
+        ...data,
+        startDate: data.startDate ? (data.startDate instanceof Date ? data.startDate.toISOString() : data.startDate) : data.startDate,
+        endDate: data.endDate ? (data.endDate instanceof Date ? data.endDate.toISOString() : data.endDate) : data.endDate,
+      };
+      console.log("Updating project with data:", submitData);
+      console.log("Project ID:", projectId);
+
+      const response = await apiRequest("PUT", `/api/projects/${projectId}`, submitData);
+      if (!response.ok) {
+        const errorData = await response.text();
+        let errorMessage = `Update failed: ${response.status} ${response.statusText}`;
+        try {
+          const parsedError = JSON.parse(errorData);
+          errorMessage = parsedError.details || parsedError.message || errorMessage;
+        } catch {
+          errorMessage = errorData || errorMessage;
+        }
+        console.error("Update failed:", errorMessage);
+        throw new Error(errorMessage);
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      // Invalidate and refetch projects to get updated data from server
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      toast({
+        title: "Success",
+        description: "Project updated successfully"
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive"
+      });
+    },
   });
 
   if (isLoading || !isAuthenticated) {
@@ -737,6 +905,27 @@ export default function Projects() {
 
   const projectsByStatus = groupProjectsByStatus();
 
+  // Handle drag and drop
+  const handleDragEnd = (result: DropResult) => {
+    const { destination, source, draggableId } = result;
+
+    // Do nothing if dropped outside a droppable area
+    if (!destination) {
+      return;
+    }
+
+    // Do nothing if dropped in the same position
+    if (destination.droppableId === source.droppableId && destination.index === source.index) {
+      return;
+    }
+
+    // Update project status if dropped in a different column
+    if (destination.droppableId !== source.droppableId) {
+      const newStatus = destination.droppableId;
+      updateStatusMutation.mutate({ projectId: draggableId, newStatus });
+    }
+  };
+
   return (
     <Layout title="Project Management" breadcrumbs={["Projects"]}>
       <div className="space-y-6">
@@ -884,6 +1073,8 @@ export default function Projects() {
                   </DialogHeader>
                   <ProjectForm
                     onSuccess={() => setIsAddDialogOpen(false)}
+                    createMutation={createMutation}
+                    updateMutation={updateMutation}
                   />
                 </DialogContent>
                 </Dialog>
@@ -942,6 +1133,8 @@ export default function Projects() {
                         </DialogHeader>
                         <ProjectForm
                           onSuccess={() => setIsAddDialogOpen(false)}
+                          createMutation={createMutation}
+                          updateMutation={updateMutation}
                         />
                       </DialogContent>
                     </Dialog>
@@ -952,24 +1145,46 @@ export default function Projects() {
           </Card>
         ) : viewMode === "kanban" ? (
           /* Kanban View */
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-            {projectStatusConfig.map((statusItem) => {
-              const statusProjects = projectsByStatus[statusItem.key] || [];
-              return (
-              <Card key={statusItem.key} className="glassmorphism">
-                <div className={`${statusItem.color} p-3 rounded-t-lg border-b`}>
-                  <div className="text-sm font-medium flex items-center justify-between">
-                    <span>{statusItem.label}</span>
-                    <Badge variant="secondary" className="text-xs">
-                      {statusProjects.length}
-                    </Badge>
+          <DragDropContext onDragEnd={handleDragEnd}>
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+              {projectStatusConfig.map((statusItem) => {
+                const statusProjects = projectsByStatus[statusItem.key] || [];
+                return (
+                <Card key={statusItem.key} className="glassmorphism">
+                  <div className={`${statusItem.color} p-3 rounded-t-lg border-b`}>
+                    <div className="text-sm font-medium flex items-center justify-between">
+                      <span>{statusItem.label}</span>
+                      <Badge variant="secondary" className="text-xs">
+                        {statusProjects.length}
+                      </Badge>
+                    </div>
                   </div>
-                </div>
-                <CardContent className="space-y-3 bg-gray-50 dark:bg-gray-800 rounded-b-lg min-h-[140px] p-3">
-                  {statusProjects.map((project) => {
-                    const projectTasks = getProjectTasks(project.id || '');
-                    return (
-                      <Card key={project.id} className="w-full cursor-pointer hover:shadow-md transition-shadow">
+                  <Droppable droppableId={statusItem.key}>
+                    {(provided, snapshot) => (
+                      <CardContent
+                        ref={provided.innerRef}
+                        {...provided.droppableProps}
+                        className={`space-y-3 bg-gray-50 dark:bg-gray-800 rounded-b-lg min-h-[140px] p-3 transition-colors ${
+                          snapshot.isDraggingOver ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+                        }`}
+                      >
+                        {statusProjects.map((project, index) => {
+                          const projectTasks = getProjectTasks(project.id || '');
+                          return (
+                            <Draggable
+                              key={project.id}
+                              draggableId={project.id || ''}
+                              index={index}
+                            >
+                              {(provided, snapshot) => (
+                                <Card
+                                  ref={provided.innerRef}
+                                  {...provided.draggableProps}
+                                  {...provided.dragHandleProps}
+                                  className={`w-full cursor-pointer hover:shadow-md transition-shadow ${
+                                    snapshot.isDragging ? 'shadow-lg rotate-2' : ''
+                                  }`}
+                                >
                         <CardContent className="p-4 w-full">
                           <div className="space-y-3">
                             <div>
@@ -999,17 +1214,6 @@ export default function Projects() {
                               showDetailedView={false}
                             />
 
-                            <div className="flex items-center justify-center py-1">
-                              <QuickTaskActions
-                                project={project}
-                                users={users || []}
-                                compact={true}
-                                onTaskCreated={() => {
-                                  queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
-                                  queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
-                                }}
-                              />
-                            </div>
 
                             {projectTasks.length > 0 && (
                               <div className="flex items-center justify-between text-xs">
@@ -1035,13 +1239,23 @@ export default function Projects() {
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onClick={() => setEditingProject(project)}>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      if (project.id) {
+                                        setEditingProject(project);
+                                      }
+                                    }}
+                                    disabled={!project.id}
+                                  >
                                     <Edit className="w-4 h-4 mr-2" />
                                     Edit
                                   </DropdownMenuItem>
                                   <AlertDialog>
                                     <AlertDialogTrigger asChild>
-                                      <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                                      <DropdownMenuItem
+                                        onSelect={(e) => e.preventDefault()}
+                                        disabled={!project.id}
+                                      >
                                         <Trash2 className="w-4 h-4 mr-2" />
                                         Delete
                                       </DropdownMenuItem>
@@ -1056,7 +1270,11 @@ export default function Projects() {
                                       <AlertDialogFooter>
                                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                                         <AlertDialogAction
-                                          onClick={() => deleteMutation.mutate(project.id)}
+                                          onClick={() => {
+                                            if (project.id) {
+                                              deleteMutation.mutate(project.id);
+                                            }
+                                          }}
                                           className="bg-destructive text-destructive-foreground"
                                         >
                                           Delete
@@ -1068,14 +1286,21 @@ export default function Projects() {
                               </DropdownMenu>
                             </div>
                           </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </CardContent>
-              </Card>
-            )})}
-          </div>
+                                </CardContent>
+                                </Card>
+                              )}
+                            </Draggable>
+                          );
+                        })}
+                        {provided.placeholder}
+                      </CardContent>
+                    )}
+                  </Droppable>
+                </Card>
+                );
+              })}
+            </div>
+          </DragDropContext>
         ) : (
           /* Table View */
           <Card className="glassmorphism">
@@ -1220,7 +1445,12 @@ export default function Projects() {
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
                                 <DropdownMenuItem
-                                  onClick={() => setEditingProject(project)}
+                                  onClick={() => {
+                                    if (project.id) {
+                                      setEditingProject(project);
+                                    }
+                                  }}
+                                  disabled={!project.id}
                                   data-testid={`button-edit-${index}`}
                                 >
                                   <Edit className="w-4 h-4 mr-2" />
@@ -1230,6 +1460,7 @@ export default function Projects() {
                                   <AlertDialogTrigger asChild>
                                     <DropdownMenuItem
                                       onSelect={(e) => e.preventDefault()}
+                                      disabled={!project.id}
                                       data-testid={`button-delete-${index}`}
                                     >
                                       <Trash2 className="w-4 h-4 mr-2" />
@@ -1246,7 +1477,11 @@ export default function Projects() {
                                     <AlertDialogFooter>
                                       <AlertDialogCancel>Cancel</AlertDialogCancel>
                                       <AlertDialogAction
-                                        onClick={() => deleteMutation.mutate(project.id)}
+                                        onClick={() => {
+                                          if (project.id) {
+                                            deleteMutation.mutate(project.id);
+                                          }
+                                        }}
                                         className="bg-destructive text-destructive-foreground"
                                       >
                                         Delete
@@ -1277,6 +1512,8 @@ export default function Projects() {
               <ProjectForm
                 project={editingProject}
                 onSuccess={() => setEditingProject(null)}
+                createMutation={createMutation}
+                updateMutation={updateMutation}
               />
             )}
           </DialogContent>
@@ -1344,14 +1581,12 @@ export default function Projects() {
                 )}
 
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">Tasks ({getProjectTasks(viewingProject.id || '').length})</label>
-
-                  {/* Quick Task Actions */}
-                  <div className="mt-3 mb-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="text-sm font-medium text-muted-foreground">Tasks ({getProjectTasks(viewingProject.id || '').length})</label>
                     <QuickTaskActions
                       project={viewingProject}
                       users={users || []}
-                      compact={false}
+                      compact={true}
                       onTaskCreated={() => {
                         queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
                         queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
@@ -1395,43 +1630,27 @@ export default function Projects() {
                 <Button
                   variant="destructive"
                   onClick={() => {
-                    if (viewingProject) {
-                      setViewingProject(null);
-                      // Delete functionality will be handled by the existing AlertDialog in dropdown
-                      // For now, we'll trigger the existing delete process
-                      const deleteProject = async () => {
-                        try {
-                          const response = await apiRequest('DELETE', `/api/projects/${viewingProject.id}`);
-                          if (response.ok) {
-                            // Use React Query's cache invalidation instead of page reload
-                            queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
-                            toast({ title: "Success", description: "Project deleted successfully" });
-                          }
-                        } catch (error) {
-                          console.error('Failed to delete project:', error);
-                          toast({
-                            title: "Error",
-                            description: "Failed to delete project",
-                            variant: "destructive"
-                          });
-                        }
-                      };
-
+                    if (viewingProject && viewingProject.id) {
                       if (confirm(`Are you sure you want to delete "${viewingProject.name}"? This action cannot be undone.`)) {
-                        deleteProject();
+                        deleteMutation.mutate(viewingProject.id);
+                        setViewingProject(null);
                       }
                     }
                   }}
+                  disabled={!viewingProject?.id}
                 >
                   <Trash2 className="w-4 h-4 mr-2" />
                   Delete
                 </Button>
-                <Button onClick={() => {
-                  if (viewingProject) {
-                    setViewingProject(null);
-                    setEditingProject(viewingProject);
-                  }
-                }}>
+                <Button
+                  onClick={() => {
+                    if (viewingProject && viewingProject.id) {
+                      setViewingProject(null);
+                      setEditingProject(viewingProject);
+                    }
+                  }}
+                  disabled={!viewingProject?.id}
+                >
                   <Edit className="w-4 h-4 mr-2" />
                   Edit
                 </Button>

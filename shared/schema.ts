@@ -1124,6 +1124,20 @@ export const insertProjectSchema = createInsertSchema(projects).omit({
   path: ["endDate"],
 });
 
+// Update schema without refine validation that works with .partial()
+export const updateProjectSchema = createInsertSchema(projects).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  startDate: z.coerce.date().nullable().optional(),
+  endDate: z.coerce.date().nullable().optional(),
+  completedAt: z.coerce.date().nullable().optional(),
+  conversionDate: z.coerce.date().nullable().optional(),
+  requirements: z.string().optional(),
+  successCriteria: z.any().optional(), // JSONB field
+});
+
 export const insertTaskSchema = createInsertSchema(tasks).omit({
   id: true,
   createdAt: true,

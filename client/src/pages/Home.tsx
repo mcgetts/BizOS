@@ -31,7 +31,6 @@ import { WelcomeBanner } from "@/components/home/WelcomeBanner";
 import { MyTasksWidget } from "@/components/home/MyTasksWidget";
 import { UrgentAlertsWidget } from "@/components/home/UrgentAlertsWidget";
 import { UpcomingEventsWidget } from "@/components/home/UpcomingEventsWidget";
-import { QuickActionsHub } from "@/components/home/QuickActionsHub";
 import { AnalyticsSnapshot } from "@/components/home/AnalyticsSnapshot";
 
 interface DashboardKPIs {
@@ -115,26 +114,54 @@ export default function Home() {
     );
   }
 
-  // Quick navigation based on user role
-  const getQuickNavigation = () => {
-    const baseNavigation = [
-      { icon: FolderOpen, label: "Projects", href: "/projects", count: projects?.length || 0 },
-      { icon: CheckSquare, label: "Tasks", href: "/tasks", count: tasks?.filter(t => t.assignedTo === user?.id && t.status !== 'completed').length || 0 },
-      { icon: Users, label: "Team", href: "/team", count: users?.length || 0 },
-    ];
+  // Quick create actions based on user role
+  const getQuickCreateActions = () => {
+    const createActions = [];
 
-    // Add role-specific navigation
-    if (user?.role === 'admin' || user?.role === 'super_admin') {
-      baseNavigation.push(
-        { icon: BarChart3, label: "Analytics", href: "/analytics", count: null },
-        { icon: Star, label: "Admin", href: "/admin", count: null }
-      );
+    // Base create actions available to most roles
+    if (['admin', 'manager', 'employee', 'contractor', 'super_admin'].includes(user?.role?.toLowerCase() || '')) {
+      createActions.push({
+        icon: CheckSquare,
+        label: "New Task",
+        href: "/tasks?action=create",
+        description: "Create a new task"
+      });
     }
 
-    return baseNavigation;
+    // Project creation for managers and admins
+    if (['admin', 'manager', 'super_admin'].includes(user?.role?.toLowerCase() || '')) {
+      createActions.push({
+        icon: FolderOpen,
+        label: "New Project",
+        href: "/projects?action=create",
+        description: "Start a new project"
+      });
+    }
+
+    // Client management for admins and managers
+    if (['admin', 'manager', 'super_admin'].includes(user?.role?.toLowerCase() || '')) {
+      createActions.push({
+        icon: Users,
+        label: "Add Client",
+        href: "/sales?action=create-client",
+        description: "Register a new client"
+      });
+    }
+
+    // Invoice creation for financial roles
+    if (['admin', 'manager', 'super_admin'].includes(user?.role?.toLowerCase() || '')) {
+      createActions.push({
+        icon: Plus,
+        label: "New Invoice",
+        href: "/finance?action=create-invoice",
+        description: "Generate an invoice"
+      });
+    }
+
+    return createActions;
   };
 
-  const quickNavigation = getQuickNavigation();
+  const quickCreateActions = getQuickCreateActions();
 
   // Generate personalized greeting
   const getGreeting = () => {
@@ -160,37 +187,30 @@ export default function Home() {
         {/* Executive KPIs */}
         <DashboardKPIs />
 
-        {/* Quick Navigation Grid */}
+        {/* Quick Create Actions */}
         <Card className="glassmorphism">
           <CardHeader>
             <CardTitle className="flex items-center">
-              <Zap className="w-5 h-5 mr-2" />
-              Quick Access
+              <Plus className="w-5 h-5 mr-2" />
+              Quick Actions
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-              {quickNavigation.map((item) => {
-                const Icon = item.icon;
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+              {quickCreateActions.map((action) => {
+                const Icon = action.icon;
                 return (
                   <Button
-                    key={item.href}
+                    key={action.href}
                     variant="ghost"
                     className="h-20 flex-col space-y-2 hover:bg-primary/10 transition-all duration-200"
-                    onClick={() => window.location.href = item.href}
+                    onClick={() => window.location.href = action.href}
                   >
-                    <div className="relative">
-                      <Icon className="w-6 h-6" />
-                      {item.count !== null && item.count > 0 && (
-                        <Badge
-                          variant="destructive"
-                          className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center text-xs p-0"
-                        >
-                          {item.count}
-                        </Badge>
-                      )}
+                    <Icon className="w-6 h-6 text-primary" />
+                    <div className="text-center">
+                      <div className="text-sm font-medium">{action.label}</div>
+                      <div className="text-xs text-muted-foreground">{action.description}</div>
                     </div>
-                    <span className="text-sm font-medium">{item.label}</span>
                   </Button>
                 );
               })}
@@ -212,54 +232,51 @@ export default function Home() {
 
         {/* Secondary Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Quick Actions Hub */}
-          <QuickActionsHub userRole={user?.role} />
+          {/* Recent Activity Feed */}
+          <Card className="glassmorphism">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center">
+                  <Clock className="w-5 h-5 mr-2" />
+                  Recent Activity
+                </CardTitle>
+                <Button variant="ghost" size="sm" onClick={() => window.location.href = "/dashboard"}>
+                  View All
+                  <ArrowRight className="w-4 h-4 ml-1" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {/* Show recent system activity */}
+                <div className="flex items-start space-x-4">
+                  <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                    <CheckCircle className="w-4 h-4 text-primary" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-sm text-foreground">
+                      Welcome to your new <span className="font-medium text-primary">Central Hub</span>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {format(currentTime, "MMM d, yyyy 'at' h:mm a")}
+                    </div>
+                  </div>
+                  <Badge variant="outline">System</Badge>
+                </div>
+
+                {/* Placeholder for when real activity data is available */}
+                <div className="text-center py-8 text-muted-foreground">
+                  <Clock className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <div className="text-sm">Activity feed will populate as you use the system</div>
+                  <div className="text-xs">Complete tasks and projects to see recent activity here</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Analytics Snapshot */}
           <AnalyticsSnapshot />
         </div>
-
-        {/* Recent Activity Feed */}
-        <Card className="glassmorphism">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center">
-                <Clock className="w-5 h-5 mr-2" />
-                Recent Activity
-              </CardTitle>
-              <Button variant="ghost" size="sm" onClick={() => window.location.href = "/dashboard"}>
-                View All
-                <ArrowRight className="w-4 h-4 ml-1" />
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {/* Show recent system activity */}
-              <div className="flex items-start space-x-4">
-                <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
-                  <CheckCircle className="w-4 h-4 text-primary" />
-                </div>
-                <div className="flex-1">
-                  <div className="text-sm text-foreground">
-                    Welcome to your new <span className="font-medium text-primary">Central Hub</span>
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {format(currentTime, "MMM d, yyyy 'at' h:mm a")}
-                  </div>
-                </div>
-                <Badge variant="outline">System</Badge>
-              </div>
-
-              {/* Placeholder for when real activity data is available */}
-              <div className="text-center py-8 text-muted-foreground">
-                <Clock className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <div className="text-sm">Activity feed will populate as you use the system</div>
-                <div className="text-xs">Complete tasks and projects to see recent activity here</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </Layout>
   );

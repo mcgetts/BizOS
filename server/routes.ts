@@ -22,6 +22,7 @@ import {
   insertCompanySchema,
   insertSalesOpportunitySchema,
   insertProjectSchema,
+  updateProjectSchema,
   insertTaskSchema,
   insertInvoiceSchema,
   insertExpenseSchema,
@@ -2202,8 +2203,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put('/api/projects/:id', isAuthenticated, async (req: any, res) => {
     try {
-      const validatedData = insertProjectSchema.partial().parse(req.body);
+      console.log("PUT /api/projects/:id - Request body:", req.body);
+      console.log("PUT /api/projects/:id - Project ID:", req.params.id);
+
+      // Use the proper updateProjectSchema that works with .partial()
+      const validatedData = updateProjectSchema.partial().parse(req.body);
+      console.log("PUT /api/projects/:id - Validated data:", validatedData);
+
       const project = await storage.updateProject(req.params.id, validatedData);
+      console.log("PUT /api/projects/:id - Updated project:", project);
 
       // Broadcast the update to all connected clients, excluding the current user
       await wsManager.broadcastDataChange('update', 'project', project, req.user?.id);
@@ -2211,25 +2219,101 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(project);
     } catch (error) {
       console.error("Error updating project:", error);
-      res.status(400).json({ message: "Failed to update project" });
+      if (error instanceof Error) {
+        console.error("Error message:", error.message);
+        console.error("Error stack:", error.stack);
+
+        // Handle specific validation errors
+        if (error.name === 'ZodError') {
+          return res.status(400).json({
+            message: "Validation error",
+            details: "The provided data does not meet the required format",
+            errors: error.message
+          });
+        }
+
+        // Handle database constraint errors
+        if (error.message.includes('foreign key constraint')) {
+          return res.status(400).json({
+            message: "Invalid reference",
+            details: "One or more referenced entities (client, manager, etc.) do not exist"
+          });
+        }
+
+        // Handle other specific errors
+        res.status(400).json({
+          message: "Failed to update project",
+          details: error.message,
+          error: error.message
+        });
+      } else {
+        res.status(500).json({
+          message: "Internal server error",
+          details: "An unexpected error occurred while updating the project"
+        });
+      }
     }
   });
 
   app.delete('/api/projects/:id', isAuthenticated, async (req: any, res) => {
     try {
+      console.log("DELETE /api/projects/:id - Project ID:", req.params.id);
+
       // Get project data before deletion for broadcasting
       const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      // Check for associated tasks and their statuses before deletion
+      const associatedTasks = await storage.getTasksByProject(req.params.id);
+      console.log("DELETE /api/projects/:id - Associated tasks:", associatedTasks.length);
+
+      if (associatedTasks.length > 0) {
+        // Check for incomplete tasks (anything not "completed")
+        const incompleteTasks = associatedTasks.filter(task =>
+          task.status !== 'completed' && task.status !== 'cancelled'
+        );
+
+        console.log("DELETE /api/projects/:id - Incomplete tasks:", incompleteTasks.length);
+
+        if (incompleteTasks.length > 0) {
+          return res.status(400).json({
+            message: "Cannot delete project with incomplete tasks",
+            details: `This project has ${incompleteTasks.length} incomplete task(s). Please complete, cancel, or reassign these tasks before deleting the project.`,
+            totalTasks: associatedTasks.length,
+            incompleteTasks: incompleteTasks.length,
+            completedTasks: associatedTasks.length - incompleteTasks.length,
+            tasks: incompleteTasks.map(task => ({
+              id: task.id,
+              title: task.title,
+              status: task.status || 'todo'
+            }))
+          });
+        }
+
+        // If all tasks are completed/cancelled, allow deletion
+        console.log("DELETE /api/projects/:id - All tasks are completed/cancelled, allowing deletion");
+      }
+
+      // Proceed with deletion if no tasks exist or all tasks are completed/cancelled
       await storage.deleteProject(req.params.id);
+      console.log("DELETE /api/projects/:id - Project deleted successfully");
 
       // Broadcast the deletion to all connected clients, excluding the current user
-      if (project) {
-        await wsManager.broadcastDataChange('delete', 'project', { id: req.params.id, ...project }, req.user?.id);
-      }
+      await wsManager.broadcastDataChange('delete', 'project', { id: req.params.id, ...project }, req.user?.id);
 
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting project:", error);
-      res.status(500).json({ message: "Failed to delete project" });
+      if (error instanceof Error && error.message.includes('foreign key constraint')) {
+        res.status(400).json({
+          message: "Cannot delete project with associated data",
+          details: "This project has associated tasks or other data that must be removed first."
+        });
+      } else {
+        res.status(500).json({ message: "Failed to delete project", error: error instanceof Error ? error.message : String(error) });
+      }
     }
   });
 
