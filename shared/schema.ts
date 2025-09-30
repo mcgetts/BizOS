@@ -568,6 +568,19 @@ export const projectComments = pgTable("project_comments", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Task comments for task-specific discussions
+export const taskComments = pgTable("task_comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  taskId: varchar("task_id").references(() => tasks.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").references(() => users.id),
+  content: text("content").notNull(),
+  type: varchar("type").default("comment"), // comment, status_update, note
+  mentionedUsers: text("mentioned_users").array(), // array of user IDs
+  attachments: jsonb("attachments"), // file references
+  editedAt: timestamp("edited_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Project activity log for automatic system updates
 export const projectActivity = pgTable("project_activity", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1025,6 +1038,7 @@ export const taskRelations = relations(tasks, ({ one, many }) => ({
   timeEntries: many(timeEntries),
   dependencies: many(taskDependencies, { relationName: "dependencies" }),
   dependents: many(taskDependencies, { relationName: "dependents" }),
+  comments: many(taskComments),
 }));
 
 // Insert schemas
@@ -1394,6 +1408,20 @@ export const insertProjectActivitySchema = createInsertSchema(projectActivity).o
   createdAt: true,
 });
 
+export const insertTaskCommentSchema = createInsertSchema(taskComments).omit({
+  id: true,
+  createdAt: true,
+  editedAt: true,
+}).extend({
+  mentionedUsers: z.array(z.string()).optional(),
+  attachments: z.array(z.object({
+    name: z.string(),
+    url: z.string(),
+    type: z.string(),
+    size: z.number().optional(),
+  })).optional(),
+});
+
 // Resource Management Insert Schemas
 export const insertUserCapacitySchema = createInsertSchema(userCapacity).omit({
   id: true,
@@ -1629,6 +1657,18 @@ export const projectCommentRelations = relations(projectComments, ({ one }) => (
   }),
   user: one(users, {
     fields: [projectComments.userId],
+    references: [users.id],
+  }),
+}));
+
+// Task comment relations
+export const taskCommentRelations = relations(taskComments, ({ one }) => ({
+  task: one(tasks, {
+    fields: [taskComments.taskId],
+    references: [tasks.id],
+  }),
+  user: one(users, {
+    fields: [taskComments.userId],
     references: [users.id],
   }),
 }));
@@ -1925,6 +1965,8 @@ export type InsertTaskDependency = z.infer<typeof insertTaskDependencySchema>;
 export type TaskDependency = typeof taskDependencies.$inferSelect;
 export type InsertProjectComment = z.infer<typeof insertProjectCommentSchema>;
 export type ProjectComment = typeof projectComments.$inferSelect;
+export type InsertTaskComment = z.infer<typeof insertTaskCommentSchema>;
+export type TaskComment = typeof taskComments.$inferSelect;
 export type InsertProjectActivity = z.infer<typeof insertProjectActivitySchema>;
 export type ProjectActivity = typeof projectActivity.$inferSelect;
 

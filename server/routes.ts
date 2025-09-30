@@ -61,11 +61,13 @@ import {
   taskTemplates,
   taskDependencies,
   projectComments,
+  taskComments,
   projectActivity,
   insertProjectTemplateSchema,
   insertTaskTemplateSchema,
   insertTaskDependencySchema,
   insertProjectCommentSchema,
+  insertTaskCommentSchema,
   insertProjectActivitySchema,
   // Resource management tables
   userCapacity,
@@ -2537,6 +2539,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting task:", error);
       res.status(500).json({ message: "Failed to delete task" });
+    }
+  });
+
+  // Task Comments routes
+  app.get('/api/tasks/:id/comments', isAuthenticated, async (req, res) => {
+    try {
+      const comments = await db.select({
+        id: taskComments.id,
+        taskId: taskComments.taskId,
+        userId: taskComments.userId,
+        content: taskComments.content,
+        type: taskComments.type,
+        mentionedUsers: taskComments.mentionedUsers,
+        attachments: taskComments.attachments,
+        editedAt: taskComments.editedAt,
+        createdAt: taskComments.createdAt,
+        userFirstName: users.firstName,
+        userLastName: users.lastName,
+      })
+        .from(taskComments)
+        .leftJoin(users, eq(taskComments.userId, users.id))
+        .where(eq(taskComments.taskId, req.params.id))
+        .orderBy(desc(taskComments.createdAt));
+      res.json(comments);
+    } catch (error) {
+      console.error("Error fetching task comments:", error);
+      res.status(500).json({ message: "Failed to fetch task comments" });
+    }
+  });
+
+  app.post('/api/tasks/:id/comments', isAuthenticated, async (req: any, res) => {
+    try {
+      const validatedData = insertTaskCommentSchema.parse(req.body);
+      const comment = await db.insert(taskComments).values({
+        ...validatedData,
+        taskId: req.params.id,
+        userId: req.user.id,
+      }).returning();
+
+      // Get task details for notifications
+      const task = await db.select().from(tasks).where(eq(tasks.id, req.params.id)).limit(1);
+      if (task.length) {
+        const currentUser = req.user;
+        const notificationsToSend = [];
+
+        // Notify task assignee if different from commenter
+        if (task[0].assignedTo && task[0].assignedTo !== currentUser.id) {
+          notificationsToSend.push({
+            userId: task[0].assignedTo,
+            type: 'task_comment_added',
+            title: 'New Task Comment',
+            message: `${currentUser.firstName} ${currentUser.lastName} commented on "${task[0].title}"`,
+            data: { taskId: req.params.id, commentId: comment[0].id, commentBy: currentUser.id }
+          });
+        }
+
+        // Notify task creator if different from commenter and assignee
+        if (task[0].createdBy && task[0].createdBy !== currentUser.id && task[0].createdBy !== task[0].assignedTo) {
+          notificationsToSend.push({
+            userId: task[0].createdBy,
+            type: 'task_comment_added',
+            title: 'Task Comment',
+            message: `${currentUser.firstName} ${currentUser.lastName} commented on "${task[0].title}"`,
+            data: { taskId: req.params.id, commentId: comment[0].id, commentBy: currentUser.id }
+          });
+        }
+
+        // Send all notifications
+        for (const notificationData of notificationsToSend) {
+          await db.insert(notifications).values(notificationData);
+          await wsManager.broadcastNotification(notificationData.userId, notificationData);
+        }
+      }
+
+      res.status(201).json(comment[0]);
+    } catch (error) {
+      console.error("Error creating task comment:", error);
+      res.status(400).json({ message: "Failed to create task comment" });
     }
   });
 

@@ -211,30 +211,6 @@ export default function Landing() {
           })}
         </div>
 
-        {/* CTA Section */}
-        <div className="text-center">
-          <Card className="glassmorphism max-w-2xl mx-auto">
-            <CardContent className="p-8">
-              <h2 className="text-3xl font-bold text-foreground mb-4">
-                Ready to Transform Your Business?
-              </h2>
-              <p className="text-muted-foreground mb-6">
-                Join thousands of businesses that have streamlined their operations with BizOS. 
-                Get started today and experience the difference.
-              </p>
-              <Button
-                size="lg"
-                onClick={() => {
-                  setAuthMode('register');
-                  setShowAuth(true);
-                }}
-                data-testid="button-start-free"
-              >
-                Start Your Journey
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
       </main>
 
       {/* Footer */}

@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Table as TableComponent, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -30,7 +31,8 @@ import { DependencyVisualization } from "@/components/DependencyVisualization";
 import { TaskTimeTracker } from "@/components/TaskTimeTracker";
 import { TaskNotifications } from "@/components/TaskNotifications";
 import { TaskAnalytics } from "@/components/TaskAnalytics";
-import { 
+import { TaskComments } from "@/components/TaskComments";
+import {
   Plus,
   Search,
   Clock,
@@ -54,7 +56,9 @@ import {
   ArrowRight,
   GitBranch,
   BarChart3,
-  Network
+  Network,
+  Bell,
+  MessageSquare
 } from "lucide-react";
 
 // Form validation schema for task creation/editing
@@ -1343,12 +1347,33 @@ export default function Tasks() {
                   </div>
                 </div>
 
-                {/* Time Tracking and Notifications */}
-                <div className="border-t pt-4 space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <TaskTimeTracker task={viewingTask} compact={false} />
-                    <TaskNotifications task={viewingTask} compact={false} />
-                  </div>
+                {/* Comments, Time Tracking and Notifications Tabs */}
+                <div className="border-t pt-4">
+                  <Tabs defaultValue="comments" className="w-full">
+                    <TabsList className="grid w-full grid-cols-3">
+                      <TabsTrigger value="comments" className="flex items-center gap-1">
+                        <MessageSquare className="h-3 w-3" />
+                        Comments
+                      </TabsTrigger>
+                      <TabsTrigger value="time" className="flex items-center gap-1">
+                        <Timer className="h-3 w-3" />
+                        Time Tracking
+                      </TabsTrigger>
+                      <TabsTrigger value="notifications" className="flex items-center gap-1">
+                        <Bell className="h-3 w-3" />
+                        Notifications
+                      </TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="comments" className="mt-4">
+                      <TaskComments task={viewingTask} />
+                    </TabsContent>
+                    <TabsContent value="time" className="mt-4">
+                      <TaskTimeTracker task={viewingTask} compact={false} />
+                    </TabsContent>
+                    <TabsContent value="notifications" className="mt-4">
+                      <TaskNotifications task={viewingTask} compact={false} />
+                    </TabsContent>
+                  </Tabs>
                 </div>
               </div>
             )}

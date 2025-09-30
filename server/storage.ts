@@ -1923,7 +1923,7 @@ export class DatabaseStorage implements IStorage {
     rate?: number;
   }) {
     try {
-      const [result] = await this.db.insert(timeEntries).values({
+      const [result] = await db.insert(timeEntries).values({
         userId: data.userId,
         projectId: data.projectId,
         taskId: data.taskId,
@@ -1961,7 +1961,7 @@ export class DatabaseStorage implements IStorage {
       if (data.billable !== undefined) updateData.billable = data.billable;
       if (data.rate !== undefined) updateData.rate = data.rate.toString();
 
-      const [result] = await this.db.update(timeEntries)
+      const [result] = await db.update(timeEntries)
         .set(updateData)
         .where(eq(timeEntries.id, id))
         .returning();
@@ -1975,7 +1975,7 @@ export class DatabaseStorage implements IStorage {
 
   async deleteTimeEntry(id: string) {
     try {
-      await this.db.delete(timeEntries).where(eq(timeEntries.id, id));
+      await db.delete(timeEntries).where(eq(timeEntries.id, id));
     } catch (error) {
       console.error("Error deleting time entry:", error);
       throw error;
@@ -1992,7 +1992,7 @@ export class DatabaseStorage implements IStorage {
       const endDate = options.endDate ? new Date(options.endDate) : new Date();
 
       // Get time entries for the period
-      const entries = await this.db.select()
+      const entries = await db.select()
         .from(timeEntries)
         .where(and(
           eq(timeEntries.userId, options.userId),

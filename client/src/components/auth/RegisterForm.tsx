@@ -9,6 +9,7 @@ import { Eye, EyeOff, Loader2, Check, X } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { registerUserSchema, type RegisterUser } from "@shared/schema";
+import { z } from "zod";
 
 interface RegisterFormProps {
   onSubmit: (data: RegisterUser) => Promise<void>;
@@ -68,6 +69,16 @@ function calculatePasswordStrength(password: string): PasswordStrength {
   return { score, feedback, color };
 }
 
+// Extended schema for form validation with confirm password
+const registerFormSchema = registerUserSchema.extend({
+  confirmPassword: z.string().min(1, "Please confirm your password")
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords do not match",
+  path: ["confirmPassword"]
+});
+
+type RegisterFormData = z.infer<typeof registerFormSchema>;
+
 export function RegisterForm({
   onSubmit,
   onSwitchToLogin,
@@ -75,29 +86,36 @@ export function RegisterForm({
   error
 }: RegisterFormProps) {
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const {
     register,
     handleSubmit,
     watch,
     formState: { errors, isSubmitting, isValid }
-  } = useForm<RegisterUser>({
-    resolver: zodResolver(registerUserSchema),
+  } = useForm<RegisterFormData>({
+    resolver: zodResolver(registerFormSchema),
     mode: "onChange",
     defaultValues: {
       email: "",
       password: "",
+      confirmPassword: "",
       firstName: "",
       lastName: "",
-      phone: "",
-      department: "",
-      position: ""
+      phone: ""
     }
   });
 
   const watchPassword = watch("password", "");
+  const watchConfirmPassword = watch("confirmPassword", "");
   const passwordStrength = calculatePasswordStrength(watchPassword);
   const loading = isLoading || isSubmitting;
+
+  // Handle form submission - remove confirmPassword before sending
+  const handleFormSubmit = async (data: RegisterFormData) => {
+    const { confirmPassword, ...submitData } = data;
+    await onSubmit(submitData as RegisterUser);
+  };
 
   return (
     <Card className="w-full max-w-md mx-auto">
@@ -116,7 +134,7 @@ export function RegisterForm({
           </Alert>
         )}
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="firstName">First Name</Label>
@@ -223,6 +241,43 @@ export function RegisterForm({
           </div>
 
           <div className="space-y-2">
+            <Label htmlFor="confirmPassword">Confirm Password</Label>
+            <div className="relative">
+              <Input
+                id="confirmPassword"
+                type={showConfirmPassword ? "text" : "password"}
+                placeholder="Re-enter your password"
+                {...register("confirmPassword")}
+                disabled={loading}
+                className="pr-10"
+              />
+              <button
+                type="button"
+                className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                disabled={loading}
+              >
+                {showConfirmPassword ? (
+                  <EyeOff className="h-4 w-4 text-gray-400" />
+                ) : (
+                  <Eye className="h-4 w-4 text-gray-400" />
+                )}
+              </button>
+            </div>
+
+            {watchConfirmPassword && watchPassword === watchConfirmPassword && (
+              <div className="flex items-center space-x-1 text-xs text-green-600">
+                <Check className="h-3 w-3" />
+                <span>Passwords match</span>
+              </div>
+            )}
+
+            {errors.confirmPassword && (
+              <p className="text-sm text-red-600">{errors.confirmPassword.message}</p>
+            )}
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="phone">Phone (Optional)</Label>
             <Input
               id="phone"
@@ -234,34 +289,6 @@ export function RegisterForm({
             {errors.phone && (
               <p className="text-sm text-red-600">{errors.phone.message}</p>
             )}
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="department">Department (Optional)</Label>
-              <Input
-                id="department"
-                placeholder="Engineering"
-                {...register("department")}
-                disabled={loading}
-              />
-              {errors.department && (
-                <p className="text-sm text-red-600">{errors.department.message}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="position">Position (Optional)</Label>
-              <Input
-                id="position"
-                placeholder="Software Engineer"
-                {...register("position")}
-                disabled={loading}
-              />
-              {errors.position && (
-                <p className="text-sm text-red-600">{errors.position.message}</p>
-              )}
-            </div>
           </div>
 
           <Button
