@@ -40,7 +40,11 @@ import {
   Trash2,
   Building2,
   Globe,
-  MapPin
+  MapPin,
+  PoundSterling,
+  Target,
+  Award,
+  Briefcase
 } from "lucide-react";
 
 // Form validation schema for client creation/editing
@@ -760,18 +764,24 @@ export default function Clients() {
   return (
     <Layout title="Sales Management" breadcrumbs={["Sales"]}>
       <div className="space-y-6">
-        {/* Stats Cards */}
+        {/* Sales KPI Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <Card className="glassmorphism">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Total Contacts</p>
-                  <p className="text-2xl font-bold" data-testid="text-total-clients">
-                    {clients?.length || 0}
+                  <p className="text-sm font-medium text-muted-foreground">Pipeline Value</p>
+                  <p className="text-2xl font-bold" data-testid="text-pipeline-value">
+                    £{(() => {
+                      const pipelineValue = opportunities
+                        ?.filter((o: any) => !['closed_won', 'closed_lost'].includes(o.stage))
+                        .reduce((sum: number, o: any) => sum + parseFloat(o.value || '0'), 0) || 0;
+                      return pipelineValue.toLocaleString('en-GB', { maximumFractionDigits: 0 });
+                    })()}
                   </p>
+                  <p className="text-xs text-muted-foreground mt-1">Total value of active deals</p>
                 </div>
-                <Users className="w-8 h-8 text-primary" />
+                <PoundSterling className="w-8 h-8 text-primary" />
               </div>
             </CardContent>
           </Card>
@@ -780,12 +790,18 @@ export default function Clients() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Total Companies</p>
-                  <p className="text-2xl font-bold" data-testid="text-total-companies">
-                    {companies?.length || 0}
+                  <p className="text-sm font-medium text-muted-foreground">Expected Revenue</p>
+                  <p className="text-2xl font-bold text-green-600 dark:text-green-400" data-testid="text-expected-revenue">
+                    £{(() => {
+                      const expectedRevenue = opportunities
+                        ?.filter((o: any) => !['closed_won', 'closed_lost'].includes(o.stage))
+                        .reduce((sum: number, o: any) => sum + (parseFloat(o.value || '0') * (o.probability || 0) / 100), 0) || 0;
+                      return expectedRevenue.toLocaleString('en-GB', { maximumFractionDigits: 0 });
+                    })()}
                   </p>
+                  <p className="text-xs text-muted-foreground mt-1">Weighted pipeline value</p>
                 </div>
-                <Building2 className="w-8 h-8 text-blue-600" />
+                <Target className="w-8 h-8 text-green-600" />
               </div>
             </CardContent>
           </Card>
@@ -794,12 +810,27 @@ export default function Clients() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Active Contacts</p>
-                  <p className="text-2xl font-bold" data-testid="text-active-contacts">
-                    {clients?.filter((c: any) => c.isActive).length || 0}
+                  <p className="text-sm font-medium text-muted-foreground">Win Rate</p>
+                  <p className={`text-2xl font-bold ${(() => {
+                    const closedWon = opportunities?.filter((o: any) => o.stage === 'closed_won').length || 0;
+                    const closedLost = opportunities?.filter((o: any) => o.stage === 'closed_lost').length || 0;
+                    const totalClosed = closedWon + closedLost;
+                    const winRate = totalClosed > 0 ? (closedWon / totalClosed * 100) : 0;
+                    return winRate >= 50 ? 'text-green-600 dark:text-green-400' :
+                           winRate >= 30 ? 'text-yellow-600 dark:text-yellow-400' :
+                           'text-red-600 dark:text-red-400';
+                  })()}`} data-testid="text-win-rate">
+                    {(() => {
+                      const closedWon = opportunities?.filter((o: any) => o.stage === 'closed_won').length || 0;
+                      const closedLost = opportunities?.filter((o: any) => o.stage === 'closed_lost').length || 0;
+                      const totalClosed = closedWon + closedLost;
+                      const winRate = totalClosed > 0 ? (closedWon / totalClosed * 100) : 0;
+                      return winRate.toFixed(0);
+                    })()}%
                   </p>
+                  <p className="text-xs text-muted-foreground mt-1">Conversion rate</p>
                 </div>
-                <TrendingUp className="w-8 h-8 text-success" />
+                <Award className="w-8 h-8 text-success" />
               </div>
             </CardContent>
           </Card>
@@ -808,12 +839,13 @@ export default function Clients() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Primary Contacts</p>
-                  <p className="text-2xl font-bold" data-testid="text-primary-contacts">
-                    {clients?.filter((c: any) => c.isPrimaryContact).length || 0}
+                  <p className="text-sm font-medium text-muted-foreground">Active Opportunities</p>
+                  <p className="text-2xl font-bold text-orange-600 dark:text-orange-400" data-testid="text-active-opportunities">
+                    {opportunities?.filter((o: any) => !['closed_won', 'closed_lost'].includes(o.stage)).length || 0}
                   </p>
+                  <p className="text-xs text-muted-foreground mt-1">Open deals</p>
                 </div>
-                <Users className="w-8 h-8 text-warning" />
+                <Briefcase className="w-8 h-8 text-orange-600" />
               </div>
             </CardContent>
           </Card>
