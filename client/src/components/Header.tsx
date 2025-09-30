@@ -2,17 +2,23 @@ import { useTheme } from "@/components/ThemeProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NotificationPanel } from "@/components/NotificationPanel";
+import { UserProfileMenu } from "@/components/UserProfileMenu";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { Search, Sun, Moon, LogOut, Menu } from "lucide-react";
+import { Search, Sun, Moon, Menu } from "lucide-react";
 
 interface HeaderProps {
   title: string;
   breadcrumbs?: string[];
   user?: {
+    id?: string;
     firstName?: string;
     lastName?: string;
+    email?: string;
     role?: string;
+    enhancedRole?: string;
+    department?: string;
     profileImageUrl?: string;
+    position?: string;
   };
   onMenuClick?: () => void;
   showMenuButton?: boolean;
@@ -21,14 +27,6 @@ interface HeaderProps {
 export function Header({ title, breadcrumbs = [], user, onMenuClick, showMenuButton = false }: HeaderProps) {
   const { theme, setTheme } = useTheme();
   const isMobile = useIsMobile();
-
-  const handleLogout = () => {
-    window.location.href = "/api/logout";
-  };
-
-  const userDisplayName = user?.firstName && user?.lastName 
-    ? `${user.firstName} ${user.lastName}`
-    : user?.firstName || "User";
 
   return (
     <header className="bg-card/70 glassmorphism border-b border-border px-4 md:px-6 py-4" data-testid="header">
@@ -100,37 +98,8 @@ export function Header({ title, breadcrumbs = [], user, onMenuClick, showMenuBut
             )}
           </Button>
 
-          {/* User Menu - Responsive */}
-          <div className="flex items-center space-x-2 md:space-x-3">
-            <img
-              src={
-                user?.profileImageUrl ||
-                "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&h=100"
-              }
-              alt="Profile"
-              className="w-8 h-8 rounded-full object-cover"
-              data-testid="img-user-avatar"
-            />
-            {!isMobile && (
-              <div className="hidden md:block text-sm">
-                <div className="font-medium text-foreground" data-testid="text-user-name">
-                  {userDisplayName}
-                </div>
-                <div className="text-muted-foreground" data-testid="text-user-role">
-                  {user?.role || "Employee"}
-                </div>
-              </div>
-            )}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleLogout}
-              data-testid="button-logout"
-              title="Logout"
-            >
-              <LogOut className="w-4 h-4" />
-            </Button>
-          </div>
+          {/* User Profile Menu */}
+          <UserProfileMenu user={user} isMobile={isMobile} />
         </div>
       </div>
     </header>

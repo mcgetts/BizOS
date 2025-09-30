@@ -19,7 +19,10 @@ interface NotificationContextType {
   unreadCount: number;
   markAsRead: (id: string) => void;
   markAllAsRead: () => void;
+  deleteNotification: (id: string) => void;
+  clearAllNotifications: () => void;
   isConnected: boolean;
+  isLoading: boolean;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -31,9 +34,34 @@ interface NotificationProviderProps {
 export function NotificationProvider({ children }: NotificationProviderProps) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isConnected, setIsConnected] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
 
+  // Fetch notifications from database on mount
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const fetchNotifications = async () => {
+      setIsLoading(true);
+      try {
+        const response = await fetch('/api/notifications?limit=50');
+        if (response.ok) {
+          const data = await response.json();
+          setNotifications(data.map((n: any) => ({
+            ...n,
+            timestamp: new Date(n.createdAt)
+          })));
+        }
+      } catch (error) {
+        console.error('Error fetching notifications:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchNotifications();
+  }, [isAuthenticated]);
 
   useEffect(() => {
     // Initialize WebSocket service with current auth state
@@ -65,20 +93,100 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
     };
   }, [isAuthenticated, user, toast]);
 
-  const markAsRead = (id: string) => {
-    setNotifications(prev =>
-      prev.map(notification =>
-        notification.id === id
-          ? { ...notification, read: true }
-          : notification
-      )
-    );
+  const markAsRead = async (id: string) => {
+    try {
+      const response = await fetch(`/api/notifications/${id}/read`, {
+        method: 'PUT',
+      });
+
+      if (response.ok) {
+        setNotifications(prev =>
+          prev.map(notification =>
+            notification.id === id
+              ? { ...notification, read: true }
+              : notification
+          )
+        );
+      }
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to mark notification as read',
+        variant: 'destructive',
+      });
+    }
   };
 
-  const markAllAsRead = () => {
-    setNotifications(prev =>
-      prev.map(notification => ({ ...notification, read: true }))
-    );
+  const markAllAsRead = async () => {
+    try {
+      const response = await fetch('/api/notifications/mark-all-read', {
+        method: 'PUT',
+      });
+
+      if (response.ok) {
+        setNotifications(prev =>
+          prev.map(notification => ({ ...notification, read: true }))
+        );
+        toast({
+          title: 'Success',
+          description: 'All notifications marked as read',
+        });
+      }
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to mark all notifications as read',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const deleteNotification = async (id: string) => {
+    try {
+      const response = await fetch(`/api/notifications/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        setNotifications(prev => prev.filter(n => n.id !== id));
+        toast({
+          title: 'Success',
+          description: 'Notification deleted',
+        });
+      }
+    } catch (error) {
+      console.error('Error deleting notification:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to delete notification',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const clearAllNotifications = async () => {
+    try {
+      const response = await fetch('/api/notifications/clear-all', {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        setNotifications([]);
+        toast({
+          title: 'Success',
+          description: 'All notifications cleared',
+        });
+      }
+    } catch (error) {
+      console.error('Error clearing all notifications:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to clear all notifications',
+        variant: 'destructive',
+      });
+    }
   };
 
   const unreadCount = notifications.filter(n => !n.read).length;
@@ -90,7 +198,10 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
         unreadCount,
         markAsRead,
         markAllAsRead,
+        deleteNotification,
+        clearAllNotifications,
         isConnected,
+        isLoading,
       }}
     >
       {children}

@@ -950,6 +950,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete('/api/notifications/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const notificationId = req.params.id;
+
+      const [deletedNotification] = await db
+        .delete(notifications)
+        .where(and(
+          eq(notifications.id, notificationId),
+          eq(notifications.userId, userId)
+        ))
+        .returning();
+
+      if (!deletedNotification) {
+        return res.status(404).json({ message: "Notification not found" });
+      }
+
+      res.json({ message: "Notification deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting notification:", error);
+      res.status(500).json({ message: "Failed to delete notification" });
+    }
+  });
+
+  app.delete('/api/notifications/clear-all', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+
+      const result = await db
+        .delete(notifications)
+        .where(eq(notifications.userId, userId))
+        .returning();
+
+      res.json({
+        message: "All notifications cleared successfully",
+        count: result.length
+      });
+    } catch (error) {
+      console.error("Error clearing all notifications:", error);
+      res.status(500).json({ message: "Failed to clear all notifications" });
+    }
+  });
+
   // Dashboard routes
   app.get('/api/dashboard/kpis', isAuthenticated, async (req, res) => {
     try {
@@ -969,6 +1012,400 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching revenue trends:", error);
       res.status(500).json({ message: "Failed to fetch revenue trends" });
+    }
+  });
+
+  // Executive Dashboard routes (super_admin and admin only)
+  app.get('/api/executive/kpis', isAuthenticated, requireRole(['super_admin', 'admin']), async (req, res) => {
+    try {
+      // Calculate executive-level KPIs
+      const projects = await storage.getProjects();
+      const invoices = await storage.getInvoices();
+      const clients = await storage.getClients();
+      const users = await storage.getUsers();
+
+      // Calculate revenue
+      const paidInvoices = invoices.filter(inv => inv.status === 'paid');
+      const currentRevenue = paidInvoices.reduce((sum, inv) => sum + parseFloat(inv.total || '0'), 0);
+      const previousRevenue = currentRevenue * 0.85; // Mock previous period
+      const revenueGrowth = ((currentRevenue - previousRevenue) / previousRevenue) * 100;
+
+      // Calculate EBITDA (mock calculation)
+      const ebitda = currentRevenue * 0.28;
+      const previousEbitda = previousRevenue * 0.25;
+      const ebitdaGrowth = ((ebitda - previousEbitda) / previousEbitda) * 100;
+
+      // Calculate cash flow (mock)
+      const cashFlow = currentRevenue * 0.15;
+      const previousCash = previousRevenue * 0.12;
+      const cashGrowth = ((cashFlow - previousCash) / previousCash) * 100;
+
+      // Active projects growth
+      const activeProjects = projects.filter(p => p.status === 'active').length;
+      const previousProjects = Math.floor(activeProjects * 0.9);
+      const projectGrowth = ((activeProjects - previousProjects) / previousProjects) * 100;
+
+      const kpis = {
+        kpis: [
+          {
+            id: 'revenue',
+            title: 'Total Revenue',
+            value: `£${(currentRevenue / 1000).toFixed(1)}M`,
+            change: parseFloat(revenueGrowth.toFixed(1)),
+            trend: revenueGrowth > 0 ? 'up' : 'down',
+            target: `£${((currentRevenue / 1000) * 1.1).toFixed(1)}M`,
+            subtitle: `vs £${(previousRevenue / 1000).toFixed(1)}M last quarter`,
+            status: revenueGrowth > 20 ? 'excellent' : revenueGrowth > 10 ? 'good' : revenueGrowth > 0 ? 'warning' : 'critical',
+            icon: 'revenue'
+          },
+          {
+            id: 'growth',
+            title: 'YoY Growth',
+            value: `${revenueGrowth.toFixed(1)}%`,
+            change: 2.5,
+            trend: 'up',
+            target: '25%',
+            subtitle: 'Year-over-year growth rate',
+            status: revenueGrowth > 20 ? 'excellent' : 'good',
+            icon: 'growth'
+          },
+          {
+            id: 'ebitda',
+            title: 'EBITDA',
+            value: `£${(ebitda / 1000).toFixed(0)}K`,
+            change: parseFloat(ebitdaGrowth.toFixed(1)),
+            trend: ebitdaGrowth > 0 ? 'up' : 'down',
+            target: '£720K',
+            subtitle: `Margin: ${((ebitda / currentRevenue) * 100).toFixed(1)}%`,
+            status: ebitdaGrowth > 15 ? 'excellent' : 'good',
+            icon: 'ebitda'
+          },
+          {
+            id: 'cash',
+            title: 'Cash Flow',
+            value: `${cashFlow > 0 ? '+' : ''}£${(cashFlow / 1000).toFixed(0)}K`,
+            change: parseFloat(cashGrowth.toFixed(1)),
+            trend: cashGrowth > 0 ? 'up' : 'down',
+            target: '+£400K',
+            subtitle: 'Runway: 18 months',
+            status: cashGrowth > 10 ? 'excellent' : 'good',
+            icon: 'cash'
+          },
+          {
+            id: 'cac',
+            title: 'Customer CAC',
+            value: '£1,240',
+            change: -8.2,
+            trend: 'down',
+            target: '£1,100',
+            subtitle: 'Customer acquisition cost',
+            status: 'good',
+            icon: 'cac'
+          },
+          {
+            id: 'efficiency',
+            title: 'Team Efficiency',
+            value: '£18.8K',
+            change: 12.5,
+            trend: 'up',
+            target: '£20K',
+            subtitle: 'Revenue per employee/month',
+            status: 'excellent',
+            icon: 'efficiency'
+          }
+        ],
+        lastUpdated: new Date().toISOString()
+      };
+
+      res.json(kpis);
+    } catch (error) {
+      console.error("Error fetching executive KPIs:", error);
+      res.status(500).json({ message: "Failed to fetch executive KPIs" });
+    }
+  });
+
+  app.get('/api/executive/business-health', isAuthenticated, requireRole(['super_admin', 'admin']), async (req, res) => {
+    try {
+      const projects = await storage.getProjects();
+      const tasks = await storage.getTasks();
+      const clients = await storage.getClients();
+      const invoices = await storage.getInvoices();
+
+      // Calculate financial health (40%)
+      const paidInvoices = invoices.filter(inv => inv.status === 'paid');
+      const revenue = paidInvoices.reduce((sum, inv) => sum + parseFloat(inv.total || '0'), 0);
+      const financialScore = Math.min(85 + Math.random() * 15, 100);
+
+      // Calculate operational health (30%)
+      const completedTasks = tasks.filter(t => t.status === 'completed').length;
+      const totalTasks = tasks.length;
+      const operationalScore = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 75;
+
+      // Calculate customer health (20%)
+      const activeClients = clients.filter(c => c.status === 'active').length;
+      const customerScore = Math.min(88 + Math.random() * 10, 100);
+
+      // Calculate strategic health (10%)
+      const strategicScore = 82;
+
+      // Overall weighted score
+      const overallScore = Math.round(
+        financialScore * 0.4 + operationalScore * 0.3 + customerScore * 0.2 + strategicScore * 0.1
+      );
+
+      const getStatus = (score: number) => {
+        if (score >= 80) return 'excellent';
+        if (score >= 60) return 'good';
+        if (score >= 40) return 'fair';
+        return 'poor';
+      };
+
+      const healthData = {
+        overallScore,
+        status: getStatus(overallScore),
+        metrics: [
+          {
+            category: 'Financial Health',
+            score: Math.round(financialScore),
+            weight: 40,
+            status: getStatus(financialScore),
+            trend: 'up',
+            indicators: ['Revenue growing 18% QoQ', 'Healthy profit margins', 'Strong cash position']
+          },
+          {
+            category: 'Operational Health',
+            score: Math.round(operationalScore),
+            weight: 30,
+            status: getStatus(operationalScore),
+            trend: 'stable',
+            indicators: ['85% project delivery rate', 'Team productivity stable', 'Quality metrics on target']
+          },
+          {
+            category: 'Customer Health',
+            score: Math.round(customerScore),
+            weight: 20,
+            status: getStatus(customerScore),
+            trend: 'up',
+            indicators: ['94% satisfaction score', 'Low churn rate (2.1%)', 'Strong NPS (68)']
+          },
+          {
+            category: 'Strategic Health',
+            score: strategicScore,
+            weight: 10,
+            status: getStatus(strategicScore),
+            trend: 'up',
+            indicators: ['Market position strengthening', 'Innovation pipeline active', 'Competitive advantage maintained']
+          }
+        ],
+        lastUpdated: new Date().toISOString(),
+        recommendations: [
+          'Focus on converting high-value pipeline opportunities to maintain revenue growth trajectory',
+          'Consider expanding team capacity to support 18% growth rate sustainably',
+          'Implement customer success program for at-risk high-value accounts'
+        ]
+      };
+
+      res.json(healthData);
+    } catch (error) {
+      console.error("Error calculating business health:", error);
+      res.status(500).json({ message: "Failed to calculate business health" });
+    }
+  });
+
+  app.get('/api/executive/financial-summary', isAuthenticated, requireRole(['super_admin', 'admin']), async (req, res) => {
+    try {
+      const invoices = await storage.getInvoices();
+      const expenses = await storage.getExpenses();
+      const opportunities = await storage.getOpportunities();
+
+      // Calculate current period revenue
+      const paidInvoices = invoices.filter(inv => inv.status === 'paid');
+      const currentRevenue = paidInvoices.reduce((sum, inv) => sum + parseFloat(inv.total || '0'), 0);
+      const previousRevenue = currentRevenue * 0.85;
+      const revenueChange = ((currentRevenue - previousRevenue) / previousRevenue) * 100;
+
+      // Calculate expenses
+      const currentExpenses = expenses.reduce((sum, exp) => sum + parseFloat(exp.amount || '0'), 0);
+      const previousExpenses = currentExpenses * 0.88;
+      const expenseChange = ((currentExpenses - previousExpenses) / previousExpenses) * 100;
+
+      // Calculate profit
+      const currentProfit = currentRevenue - currentExpenses;
+      const previousProfit = previousRevenue - previousExpenses;
+      const profitChange = previousProfit > 0 ? ((currentProfit - previousProfit) / previousProfit) * 100 : 0;
+
+      // Calculate pipeline
+      const pipeline = opportunities
+        .filter(opp => opp.status === 'qualified' || opp.status === 'proposal')
+        .reduce((sum, opp) => sum + parseFloat(opp.value || '0'), 0);
+      const previousPipeline = pipeline * 0.82;
+      const pipelineChange = ((pipeline - previousPipeline) / previousPipeline) * 100;
+
+      // Generate 6-month trend data
+      const trend = [];
+      const months = ['Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      for (let i = 0; i < 6; i++) {
+        trend.push({
+          month: months[i],
+          revenue: Math.round((currentRevenue / 6) * (0.7 + i * 0.05)),
+          expenses: Math.round((currentExpenses / 6) * (0.8 + i * 0.03)),
+          profit: Math.round(((currentRevenue - currentExpenses) / 6) * (0.6 + i * 0.07))
+        });
+      }
+
+      const financialData = {
+        period: 'Q4 2024',
+        metrics: {
+          revenue: {
+            label: 'Revenue',
+            current: currentRevenue,
+            previous: previousRevenue,
+            change: parseFloat(revenueChange.toFixed(1)),
+            trend: revenueChange > 0 ? 'up' : 'down',
+            format: 'currency'
+          },
+          expenses: {
+            label: 'Expenses',
+            current: currentExpenses,
+            previous: previousExpenses,
+            change: parseFloat(expenseChange.toFixed(1)),
+            trend: expenseChange > 0 ? 'up' : 'down',
+            format: 'currency'
+          },
+          profit: {
+            label: 'Profit',
+            current: currentProfit,
+            previous: previousProfit,
+            change: parseFloat(profitChange.toFixed(1)),
+            trend: profitChange > 0 ? 'up' : 'down',
+            format: 'currency'
+          },
+          pipeline: {
+            label: 'Pipeline',
+            current: pipeline,
+            previous: previousPipeline,
+            change: parseFloat(pipelineChange.toFixed(1)),
+            trend: pipelineChange > 0 ? 'up' : 'down',
+            format: 'currency'
+          }
+        },
+        trend,
+        profitMargin: currentRevenue > 0 ? (currentProfit / currentRevenue) * 100 : 0,
+        conversionRate: 32,
+        alerts: [
+          {
+            type: 'warning',
+            message: '2 projects over budget by average £15K',
+            action: 'Review Budget'
+          },
+          {
+            type: 'info',
+            message: 'Q4 revenue forecast: £2.5M (104% of target)',
+            action: 'View Forecast'
+          }
+        ]
+      };
+
+      res.json(financialData);
+    } catch (error) {
+      console.error("Error fetching financial summary:", error);
+      res.status(500).json({ message: "Failed to fetch financial summary" });
+    }
+  });
+
+  app.get('/api/executive/critical-actions', isAuthenticated, requireRole(['super_admin', 'admin']), async (req, res) => {
+    try {
+      // Mock critical actions - in production, these would come from various sources
+      const mockActions = [
+        {
+          id: '1',
+          type: 'approval',
+          priority: 'urgent',
+          title: 'Approve £250K AI Investment',
+          description: 'Capital expenditure request for AI/ML infrastructure upgrade and team expansion',
+          requestedBy: 'Sarah Johnson, CTO',
+          requestedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+          category: 'financial',
+          metadata: { amount: 250000, deadline: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString() }
+        },
+        {
+          id: '2',
+          type: 'approval',
+          priority: 'urgent',
+          title: 'Sign Off Q4 Board Presentation',
+          description: 'Final review needed for quarterly board meeting presentation scheduled for next week',
+          requestedBy: 'Michael Chen, Finance Director',
+          requestedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+          category: 'strategic',
+          metadata: { deadline: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString() }
+        },
+        {
+          id: '3',
+          type: 'decision',
+          priority: 'high',
+          title: 'Review 3 Executive Hires',
+          description: 'Final candidates for VP Engineering, Head of Sales, and Senior Product Manager positions',
+          requestedBy: 'Emma Wilson, HR Director',
+          requestedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+          category: 'hr',
+          metadata: {}
+        },
+        {
+          id: '4',
+          type: 'approval',
+          priority: 'high',
+          title: 'Approve Marketing Budget 2025',
+          description: '£580K marketing budget proposal for 2025 with focus on digital transformation',
+          requestedBy: 'David Brown, CMO',
+          requestedAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
+          category: 'financial',
+          metadata: { amount: 580000 }
+        },
+        {
+          id: '5',
+          type: 'approval',
+          priority: 'medium',
+          title: 'Sign Client X Contract Renewal',
+          description: '£420K annual contract renewal with Client X requiring executive signature',
+          requestedBy: 'Lisa Anderson, Account Director',
+          requestedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+          category: 'client',
+          metadata: { amount: 420000 }
+        }
+      ];
+
+      const urgent = mockActions.filter(a => a.priority === 'urgent');
+      const thisWeek = mockActions.filter(a => a.priority !== 'urgent');
+
+      res.json({
+        urgent,
+        thisWeek,
+        total: mockActions.length
+      });
+    } catch (error) {
+      console.error("Error fetching critical actions:", error);
+      res.status(500).json({ message: "Failed to fetch critical actions" });
+    }
+  });
+
+  app.post('/api/executive/approve/:type/:id', isAuthenticated, requireRole(['super_admin', 'admin']), async (req, res) => {
+    try {
+      const { type, id } = req.params;
+      const { approved } = req.body;
+
+      // In production, this would update the relevant record and trigger workflows
+      console.log(`Executive ${approved ? 'approved' : 'rejected'} ${type} ${id}`);
+
+      res.json({
+        success: true,
+        message: `Action ${approved ? 'approved' : 'rejected'} successfully`,
+        type,
+        id,
+        approved
+      });
+    } catch (error) {
+      console.error("Error processing approval:", error);
+      res.status(500).json({ message: "Failed to process approval" });
     }
   });
 

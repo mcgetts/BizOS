@@ -23,6 +23,7 @@ import {
   Home,
   ChevronDown,
   ChevronRight,
+  Crown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -34,9 +35,17 @@ const homeHub = {
   icon: Home,
 };
 
-// Executive Dashboard - Second Level
+// Executive Dashboard - VIP Level (super_admin, admin only)
+const executiveDashboard = {
+  title: "Executive",
+  href: "/executive",
+  icon: Crown,
+  requiresRole: ["super_admin", "admin"],
+};
+
+// Standard Dashboard - Second Level
 const execDashboard = {
-  title: "Exec Dashboard",
+  title: "Dashboard",
   href: "/dashboard",
   icon: LayoutDashboard,
 };
@@ -135,6 +144,7 @@ interface SidebarProps {
     firstName?: string;
     lastName?: string;
     role?: string;
+    enhancedRole?: string;
     profileImageUrl?: string;
   };
   isOpen?: boolean;
@@ -227,7 +237,35 @@ export function Sidebar({ user, isOpen = false, onOpenChange }: SidebarProps) {
           })()}
         </div>
 
-        {/* Executive Dashboard */}
+        {/* Executive Dashboard - Only for super_admin and admin */}
+        {(user?.enhancedRole === 'super_admin' || user?.enhancedRole === 'admin') && (
+          <div className="mb-2">
+            {(() => {
+              const isActive = location === executiveDashboard.href;
+              const Icon = executiveDashboard.icon;
+
+              return (
+                <Link
+                  key={executiveDashboard.href}
+                  href={executiveDashboard.href}
+                  className={cn(
+                    "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors border-2 border-purple-200 dark:border-purple-800",
+                    isActive
+                      ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
+                      : "text-sidebar-foreground hover:bg-purple-50 dark:hover:bg-purple-950 hover:text-sidebar-accent-foreground"
+                  )}
+                  data-testid={`link-executive`}
+                  onClick={() => isMobile && onOpenChange?.(false)}
+                >
+                  <Icon className="w-5 h-5" />
+                  {(!collapsed || isMobile) && <span className="font-semibold">{executiveDashboard.title}</span>}
+                </Link>
+              );
+            })()}
+          </div>
+        )}
+
+        {/* Standard Dashboard */}
         <div className="mb-4">
           {(() => {
             const isActive = location === execDashboard.href;

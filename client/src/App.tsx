@@ -11,6 +11,7 @@ import Landing from "@/pages/Landing";
 import EmailVerification from "@/pages/EmailVerification";
 import Home from "@/pages/Home";
 import Dashboard from "@/pages/Dashboard";
+import Executive from "@/pages/Executive";
 import Clients from "@/pages/Clients";
 import Analytics from "@/pages/Analytics";
 import Projects from "@/pages/Projects";
@@ -54,6 +55,7 @@ function Router() {
         <>
           <Route path="/" component={Home} />
           <Route path="/dashboard" component={Dashboard} />
+          <Route path="/executive" component={Executive} />
           <Route path="/sales" component={Clients} />
           <Route path="/projects" component={Projects} />
           <Route path="/tasks" component={Tasks} />
