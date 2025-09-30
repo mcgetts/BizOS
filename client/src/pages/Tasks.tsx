@@ -521,41 +521,6 @@ export default function Tasks() {
     setDraggedTask(null);
   };
 
-  if (authLoading || isLoading) {
-    return (
-      <Layout title="Task Management">
-        <div className="p-6">
-          <div className="animate-pulse space-y-4">
-            <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/3"></div>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              {[...Array(4)].map((_, i) => (
-                <div key={i} className="h-24 bg-gray-200 dark:bg-gray-700 rounded"></div>
-              ))}
-            </div>
-            <div className="h-96 bg-gray-200 dark:bg-gray-700 rounded"></div>
-          </div>
-        </div>
-      </Layout>
-    );
-  }
-
-  if (!user) {
-    return (
-      <Layout title="Task Management">
-        <div className="p-6">
-          <div className="text-center py-12">
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-              Authentication Required
-            </h2>
-            <p className="text-gray-600 dark:text-gray-400 mt-2">
-              Please log in to view and manage tasks.
-            </p>
-          </div>
-        </div>
-      </Layout>
-    );
-  }
-
   // Helper function to get task dependencies
   const getTaskDependencies = (taskId: string) => {
     return taskDependencies?.filter(dep => dep.taskId === taskId) || [];
@@ -664,6 +629,42 @@ export default function Tasks() {
   const handleEditSuccess = () => {
     setEditingTask(null);
   };
+
+  // Early returns AFTER all hooks and logic
+  if (authLoading || isLoading) {
+    return (
+      <Layout title="Task Management">
+        <div className="p-6">
+          <div className="animate-pulse space-y-4">
+            <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/3"></div>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="h-24 bg-gray-200 dark:bg-gray-700 rounded"></div>
+              ))}
+            </div>
+            <div className="h-96 bg-gray-200 dark:bg-gray-700 rounded"></div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (!user) {
+    return (
+      <Layout title="Task Management">
+        <div className="p-6">
+          <div className="text-center py-12">
+            <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+              Authentication Required
+            </h2>
+            <p className="text-gray-600 dark:text-gray-400 mt-2">
+              Please log in to view and manage tasks.
+            </p>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout title="Task Management">
