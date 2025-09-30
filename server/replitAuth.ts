@@ -393,19 +393,27 @@ export const requireRole = (allowedRoles: string[]): RequestHandler => {
     if (!req.user) {
       return res.status(401).json({ message: "Unauthorized" });
     }
-    
+
     try {
-      const userId = req.user.claims.sub;
+      // Support both OAuth and local authentication
+      const userId = req.user.claims?.sub || req.user.id;
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized: Invalid user session" });
+      }
+
       const user = await storage.getUser(userId);
-      
-      if (!user || !user.role || !allowedRoles.includes(user.role)) {
-        return res.status(403).json({ 
+
+      // Check enhancedRole first, fallback to role
+      const userRole = user?.enhancedRole || user?.role;
+
+      if (!user || !userRole || !allowedRoles.includes(userRole)) {
+        return res.status(403).json({
           message: "Forbidden: Insufficient privileges",
           required_roles: allowedRoles,
-          user_role: user?.role || 'unknown'
+          user_role: userRole || 'unknown'
         });
       }
-      
+
       // Attach user data to request for further use
       req.currentUser = user;
       next();

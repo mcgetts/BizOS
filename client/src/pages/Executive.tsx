@@ -7,6 +7,8 @@ import { ExecutiveKPIGrid } from "@/components/executive/ExecutiveKPIGrid";
 import { BusinessHealthScore } from "@/components/executive/BusinessHealthScore";
 import { FinancialPerformance } from "@/components/executive/FinancialPerformance";
 import { CriticalActions } from "@/components/executive/CriticalActions";
+import { CustomerIntelligence } from "@/components/executive/CustomerIntelligence";
+import { StrategicProjects } from "@/components/executive/StrategicProjects";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,8 +18,6 @@ import {
   RefreshCw,
   Calendar,
   TrendingUp,
-  Users,
-  Target,
   AlertTriangle,
 } from "lucide-react";
 
@@ -125,76 +125,11 @@ export default function Executive() {
             {/* Financial Performance */}
             <FinancialPerformance />
 
-            {/* Customer Intelligence (Placeholder) */}
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2">
-                    <Users className="w-5 h-5" />
-                    Customer Intelligence
-                  </CardTitle>
-                  <Badge variant="secondary">Coming Soon</Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">Total Clients</p>
-                    <p className="text-2xl font-bold">247</p>
-                    <p className="text-xs text-green-600 dark:text-green-400">+12.5% MoM</p>
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">Client Health</p>
-                    <p className="text-2xl font-bold">94.2%</p>
-                    <p className="text-xs text-green-600 dark:text-green-400">+2.1% MoM</p>
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">Churn Risk</p>
-                    <p className="text-2xl font-bold">3</p>
-                    <p className="text-xs text-yellow-600 dark:text-yellow-400">2 high-value</p>
-                  </div>
-                </div>
-                <p className="text-sm text-muted-foreground mt-4">
-                  Full customer intelligence dashboard with AI-powered insights coming in next release.
-                </p>
-              </CardContent>
-            </Card>
+            {/* Customer Intelligence */}
+            <CustomerIntelligence />
 
-            {/* Strategic Projects Portfolio (Placeholder) */}
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2">
-                    <Target className="w-5 h-5" />
-                    Strategic Projects Portfolio
-                  </CardTitle>
-                  <Badge variant="secondary">Coming Soon</Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">Active Projects</p>
-                    <p className="text-2xl font-bold">42</p>
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">On Time</p>
-                    <p className="text-2xl font-bold text-green-600">85%</p>
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">On Budget</p>
-                    <p className="text-2xl font-bold text-yellow-600">78%</p>
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">At Risk</p>
-                    <p className="text-2xl font-bold text-red-600">5</p>
-                  </div>
-                </div>
-                <p className="text-sm text-muted-foreground mt-4">
-                  Comprehensive portfolio management with ROI tracking and resource allocation coming soon.
-                </p>
-              </CardContent>
-            </Card>
+            {/* Strategic Projects Portfolio */}
+            <StrategicProjects />
           </div>
 
           {/* Right Column: Action Center (1/3 width) */}

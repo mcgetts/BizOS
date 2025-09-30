@@ -53,7 +53,9 @@
       "Bash(git remote add:*)",
       "Bash(printf:*)",
       "Bash(yes n)",
-      "Bash(psql:*)"
+      "Bash(psql:*)",
+      "Bash(python3:*)",
+      "Read(//tmp/**)"
     ],
     "deny": [],
     "ask": []

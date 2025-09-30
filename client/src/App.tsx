@@ -10,7 +10,6 @@ import NotFound from "@/pages/not-found";
 import Landing from "@/pages/Landing";
 import EmailVerification from "@/pages/EmailVerification";
 import Home from "@/pages/Home";
-import Dashboard from "@/pages/Dashboard";
 import Executive from "@/pages/Executive";
 import Clients from "@/pages/Clients";
 import Analytics from "@/pages/Analytics";
@@ -54,8 +53,9 @@ function Router() {
       ) : (
         <>
           <Route path="/" component={Home} />
-          <Route path="/dashboard" component={Dashboard} />
           <Route path="/executive" component={Executive} />
+          {/* Legacy dashboard route - redirect to executive for admins, home for others */}
+          <Route path="/dashboard">{() => { window.location.replace('/executive'); return null; }}</Route>
           <Route path="/sales" component={Clients} />
           <Route path="/projects" component={Projects} />
           <Route path="/tasks" component={Tasks} />

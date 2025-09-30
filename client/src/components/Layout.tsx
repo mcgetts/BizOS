@@ -21,6 +21,9 @@ export function Layout({ children, title, breadcrumbs }: LayoutProps) {
     firstName: user.firstName || undefined,
     lastName: user.lastName || undefined,
     role: user.role || undefined,
+    enhancedRole: user.enhancedRole || undefined,
+    department: user.department || undefined,
+    email: user.email || undefined,
     profileImageUrl: user.profileImageUrl || undefined,
   } : undefined;
 

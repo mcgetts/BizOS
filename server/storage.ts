@@ -251,6 +251,8 @@ export class DatabaseStorage implements IStorage {
           lastName: userData.lastName,
           profileImageUrl: userData.profileImageUrl,
           updatedAt: new Date(),
+          // DO NOT update role/enhancedRole - preserve existing values from database
+          // This prevents OAuth logins from resetting admin roles to default
         },
       })
       .returning();

@@ -43,13 +43,6 @@ const executiveDashboard = {
   requiresRole: ["super_admin", "admin"],
 };
 
-// Standard Dashboard - Second Level
-const execDashboard = {
-  title: "Dashboard",
-  href: "/dashboard",
-  icon: LayoutDashboard,
-};
-
 // Business Flow Groups
 const navigationGroups = [
   {
@@ -239,7 +232,7 @@ export function Sidebar({ user, isOpen = false, onOpenChange }: SidebarProps) {
 
         {/* Executive Dashboard - Only for super_admin and admin */}
         {(user?.enhancedRole === 'super_admin' || user?.enhancedRole === 'admin') && (
-          <div className="mb-2">
+          <div className="mb-4">
             {(() => {
               const isActive = location === executiveDashboard.href;
               const Icon = executiveDashboard.icon;
@@ -264,32 +257,6 @@ export function Sidebar({ user, isOpen = false, onOpenChange }: SidebarProps) {
             })()}
           </div>
         )}
-
-        {/* Standard Dashboard */}
-        <div className="mb-4">
-          {(() => {
-            const isActive = location === execDashboard.href;
-            const Icon = execDashboard.icon;
-
-            return (
-              <Link
-                key={execDashboard.href}
-                href={execDashboard.href}
-                className={cn(
-                  "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors",
-                  isActive
-                    ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                )}
-                data-testid={`link-dashboard`}
-                onClick={() => isMobile && onOpenChange?.(false)}
-              >
-                <Icon className="w-5 h-5" />
-                {(!collapsed || isMobile) && <span>{execDashboard.title}</span>}
-              </Link>
-            );
-          })()}
-        </div>
 
         {/* Business Flow Groups */}
         {navigationGroups.map((group, groupIndex) => {

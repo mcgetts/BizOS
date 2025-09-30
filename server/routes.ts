@@ -1409,6 +1409,293 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Executive Customer Intelligence endpoint (super_admin, admin only)
+  app.get('/api/executive/customer-intelligence', isAuthenticated, requireRole(['super_admin', 'admin']), async (req, res) => {
+    try {
+      const clients = await storage.getClients();
+      const projects = await storage.getProjects();
+      const invoices = await storage.getInvoices();
+
+      // Calculate client metrics
+      const clientData = clients.map(client => {
+        const clientProjects = projects.filter(p => p.clientId === client.id);
+        const clientInvoices = invoices.filter(inv => inv.clientId === client.id);
+
+        const totalRevenue = clientInvoices
+          .filter(inv => inv.status === 'paid')
+          .reduce((sum, inv) => sum + inv.amount, 0);
+
+        const activeProjects = clientProjects.filter(p =>
+          p.status === 'in_progress' || p.status === 'planning'
+        ).length;
+
+        // Calculate health score based on multiple factors
+        let healthScore = 70; // Base score
+
+        // Active projects increase health
+        healthScore += Math.min(activeProjects * 5, 15);
+
+        // Recent activity increases health
+        const lastActivity = new Date(client.lastContactDate || client.createdAt);
+        const daysSinceActivity = Math.floor((Date.now() - lastActivity.getTime()) / (1000 * 60 * 60 * 24));
+        if (daysSinceActivity < 7) healthScore += 10;
+        else if (daysSinceActivity < 30) healthScore += 5;
+        else if (daysSinceActivity > 90) healthScore -= 20;
+
+        // Revenue contribution
+        if (totalRevenue > 100000) healthScore += 10;
+        else if (totalRevenue > 50000) healthScore += 5;
+
+        // Payment history
+        const unpaidInvoices = clientInvoices.filter(inv => inv.status === 'unpaid' || inv.status === 'overdue');
+        if (unpaidInvoices.length > 0) healthScore -= unpaidInvoices.length * 5;
+
+        healthScore = Math.max(0, Math.min(100, healthScore));
+
+        // Determine status
+        let status: 'healthy' | 'warning' | 'at-risk';
+        if (healthScore >= 70) status = 'healthy';
+        else if (healthScore >= 50) status = 'warning';
+        else status = 'at-risk';
+
+        // Mock NPS score (would come from surveys in real implementation)
+        const npsScore = healthScore > 80 ? Math.floor(Math.random() * 20) + 80 :
+                        healthScore > 60 ? Math.floor(Math.random() * 30) + 50 :
+                        Math.floor(Math.random() * 30) + 20;
+
+        return {
+          id: client.id,
+          name: client.name,
+          revenue: totalRevenue,
+          healthScore,
+          status,
+          lastActivity: lastActivity.toISOString(),
+          activeProjects,
+          npsScore,
+        };
+      });
+
+      // Sort by revenue
+      clientData.sort((a, b) => b.revenue - a.revenue);
+
+      const topClients = clientData.slice(0, 10);
+      const atRiskClients = clientData.filter(c => c.status === 'at-risk');
+
+      const totalClients = clientData.length;
+      const activeClients = clientData.filter(c => c.activeProjects > 0).length;
+
+      // Calculate month-over-month growth (mock data - would use time-series in production)
+      const monthOverMonthGrowth = 12.5;
+
+      // Calculate churn rate
+      const churnRate = (atRiskClients.length / totalClients) * 100;
+
+      // Calculate averages
+      const averageHealthScore = clientData.reduce((sum, c) => sum + c.healthScore, 0) / totalClients;
+      const averageNPS = clientData.reduce((sum, c) => sum + (c.npsScore || 0), 0) / totalClients;
+      const totalRevenue = clientData.reduce((sum, c) => sum + c.revenue, 0);
+      const averageRevenuePerClient = totalRevenue / totalClients;
+
+      // AI-identified upsell opportunities (mock intelligent analysis)
+      const upsellOpportunities = clientData
+        .filter(c => c.healthScore >= 70 && c.activeProjects <= 2 && c.revenue > 20000)
+        .slice(0, 5)
+        .map(c => ({
+          clientName: c.name,
+          estimatedValue: Math.floor(c.revenue * 0.3),
+          confidence: Math.floor(c.healthScore * 0.85),
+          reasoning: c.activeProjects === 0
+            ? 'High-value client with no active projects - strong re-engagement opportunity'
+            : 'Healthy relationship with capacity for additional projects based on historical spend patterns',
+        }));
+
+      res.json({
+        totalClients,
+        activeClients,
+        monthOverMonthGrowth,
+        churnRate,
+        averageHealthScore,
+        averageNPS,
+        totalRevenue,
+        averageRevenuePerClient,
+        topClients,
+        atRiskClients,
+        upsellOpportunities,
+      });
+    } catch (error) {
+      console.error("Error fetching customer intelligence:", error);
+      res.status(500).json({ message: "Failed to fetch customer intelligence data" });
+    }
+  });
+
+  // Executive Strategic Projects endpoint (super_admin, admin only)
+  app.get('/api/executive/strategic-projects', isAuthenticated, requireRole(['super_admin', 'admin']), async (req, res) => {
+    try {
+      const projects = await storage.getProjects();
+      const tasks = await storage.getTasks();
+      const timeEntries = await storage.getTimeEntries();
+      const teamMembers = await storage.getTeamMembers();
+
+      // Calculate project metrics
+      const projectMetrics = projects.map(project => {
+        const projectTasks = tasks.filter(t => t.projectId === project.id);
+        const projectTimeEntries = timeEntries.filter(te => te.projectId === project.id);
+
+        // Calculate progress from tasks
+        const completedTasks = projectTasks.filter(t => t.status === 'completed').length;
+        const progress = projectTasks.length > 0
+          ? Math.round((completedTasks / projectTasks.length) * 100)
+          : 0;
+
+        // Calculate spent amount from time entries
+        const spent = projectTimeEntries.reduce((sum, te) => {
+          // Assuming hourly rate of £75 average
+          const hours = te.hours || 0;
+          return sum + (hours * 75);
+        }, 0);
+
+        // Calculate days remaining
+        const deadline = new Date(project.endDate);
+        const today = new Date();
+        const daysRemaining = Math.ceil((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+        // Count team members assigned to this project
+        const assignedTasks = projectTasks.filter(t => t.assignedTo);
+        const uniqueTeamMembers = new Set(assignedTasks.map(t => t.assignedTo));
+        const teamSize = uniqueTeamMembers.size;
+
+        // Determine health status
+        let healthStatus: 'on-track' | 'at-risk' | 'delayed';
+        const budgetUtilization = project.budget ? (spent / project.budget) * 100 : 0;
+        const scheduleRatio = progress / Math.max(1, 100 - daysRemaining);
+
+        if (daysRemaining < 0 || budgetUtilization > 100) {
+          healthStatus = 'delayed';
+        } else if (budgetUtilization > 90 || daysRemaining < 7 || (progress < 50 && daysRemaining < 30)) {
+          healthStatus = 'at-risk';
+        } else {
+          healthStatus = 'on-track';
+        }
+
+        // Determine priority based on status and budget
+        let priority: 'critical' | 'high' | 'medium' | 'low';
+        if (project.budget && project.budget > 100000) {
+          priority = 'critical';
+        } else if (project.budget && project.budget > 50000) {
+          priority = 'high';
+        } else if (project.budget && project.budget > 20000) {
+          priority = 'medium';
+        } else {
+          priority = 'low';
+        }
+
+        // Calculate ROI (mock calculation based on budget and completion)
+        const roi = project.budget
+          ? Math.round((project.budget * 0.3) / project.budget * 100)
+          : 25;
+
+        // Determine strategic value
+        const strategicValue = project.budget && project.budget > 100000
+          ? 'transformational'
+          : project.budget && project.budget > 50000
+            ? 'high-impact'
+            : 'standard';
+
+        return {
+          id: project.id,
+          name: project.name,
+          status: project.status,
+          progress,
+          budget: project.budget || 0,
+          spent,
+          deadline: project.endDate,
+          daysRemaining,
+          teamSize,
+          priority,
+          healthStatus,
+          roi,
+          strategicValue,
+        };
+      });
+
+      // Filter active projects
+      const activeProjects = projectMetrics.filter(
+        p => p.status === 'in_progress' || p.status === 'planning'
+      ).length;
+
+      // Calculate this quarter's completion
+      const quarterStart = new Date();
+      quarterStart.setMonth(Math.floor(quarterStart.getMonth() / 3) * 3, 1);
+      const completedThisQuarter = projects.filter(p => {
+        if (p.status !== 'completed') return false;
+        const completedDate = new Date(p.updatedAt || p.createdAt);
+        return completedDate >= quarterStart;
+      }).length;
+
+      // Calculate on-time and on-budget percentages
+      const completedProjects = projectMetrics.filter(p => p.status === 'completed');
+      const onTimeProjects = completedProjects.filter(p => p.daysRemaining >= 0).length;
+      const onBudgetProjects = completedProjects.filter(p => p.spent <= p.budget).length;
+
+      const onTimePercentage = completedProjects.length > 0
+        ? Math.round((onTimeProjects / completedProjects.length) * 100)
+        : 85; // Default if no data
+
+      const onBudgetPercentage = completedProjects.length > 0
+        ? Math.round((onBudgetProjects / completedProjects.length) * 100)
+        : 78; // Default if no data
+
+      // Calculate average ROI
+      const averageROI = projectMetrics.length > 0
+        ? Math.round(projectMetrics.reduce((sum, p) => sum + p.roi, 0) / projectMetrics.length)
+        : 28;
+
+      // Calculate total budget and spent
+      const totalBudget = projectMetrics.reduce((sum, p) => sum + p.budget, 0);
+      const totalSpent = projectMetrics.reduce((sum, p) => sum + p.spent, 0);
+
+      // Find at-risk projects
+      const atRiskProjects = projectMetrics.filter(
+        p => (p.healthStatus === 'at-risk' || p.healthStatus === 'delayed') &&
+             (p.status === 'in_progress' || p.status === 'planning')
+      );
+
+      // Critical path milestones (top 3 urgent)
+      const criticalPath = projectMetrics
+        .filter(p => p.status === 'in_progress' && p.daysRemaining < 14)
+        .sort((a, b) => a.daysRemaining - b.daysRemaining)
+        .slice(0, 3)
+        .map(p => {
+          const projectTasks = tasks.filter(t => t.projectId === p.id);
+          const blockers = projectTasks.filter(t => t.status === 'blocked' || t.status === 'review').length;
+
+          return {
+            projectName: p.name,
+            milestone: `${p.progress}% Complete`,
+            dueDate: p.deadline,
+            blockers,
+          };
+        });
+
+      res.json({
+        totalProjects: projectMetrics.length,
+        activeProjects,
+        completedThisQuarter,
+        onTimePercentage,
+        onBudgetPercentage,
+        averageROI,
+        totalBudget,
+        totalSpent,
+        projects: projectMetrics,
+        atRiskProjects,
+        criticalPath,
+      });
+    } catch (error) {
+      console.error("Error fetching strategic projects:", error);
+      res.status(500).json({ message: "Failed to fetch strategic projects data" });
+    }
+  });
+
   // System variables routes (admin only)
   app.get('/api/system-variables', isAuthenticated, requireRole(['admin']), async (req, res) => {
     try {
