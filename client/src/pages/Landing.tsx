@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AuthContainer } from "@/components/auth/AuthContainer";
-import { Building2, Users, FolderOpen, PoundSterling, BookOpen, Megaphone, Monitor, CheckCircle } from "lucide-react";
+import { Building2, Users, FolderOpen, PoundSterling, BookOpen, Megaphone, Monitor, CheckCircle, BarChart3, Lock, Smartphone, Zap, Brain, Clock } from "lucide-react";
 
 export default function Landing() {
   const [showAuth, setShowAuth] = useState(false);
@@ -112,34 +112,64 @@ export default function Landing() {
 
   const features = [
     {
-      icon: Users,
-      title: "Client Management",
-      description: "Complete CRM system with lead pipeline and interaction tracking"
+      icon: FolderOpen,
+      title: "Advanced Project Management",
+      description: "Professional Gantt charts with dependency tracking, critical path analysis, and real-time collaboration"
     },
     {
-      icon: FolderOpen,
-      title: "Project Management",
-      description: "Portfolio tracking with client portals and team collaboration"
+      icon: Brain,
+      title: "AI-Powered Analytics",
+      description: "Predictive insights, revenue forecasting, risk assessment, and strategic recommendations"
     },
     {
       icon: PoundSterling,
-      title: "Financial Management",
-      description: "Invoice generation, payment tracking, and expense management"
+      title: "Complete Budget Management",
+      description: "Real-time cost tracking, automated billing, variance analysis, and profitability analytics"
     },
     {
-      icon: BookOpen,
-      title: "Knowledge Hub",
-      description: "Centralized documentation, SOPs, and training materials"
+      icon: Clock,
+      title: "Integrated Time Tracking",
+      description: "Real-time timers with budget impact calculations and seamless billing integration"
+    },
+    {
+      icon: Lock,
+      title: "Enterprise Security",
+      description: "Role-based access control, multi-factor authentication, and comprehensive audit logging"
+    },
+    {
+      icon: Smartphone,
+      title: "Mobile-First Platform",
+      description: "Touch-optimized interfaces with responsive design across all devices"
+    },
+    {
+      icon: Zap,
+      title: "Third-Party Integrations",
+      description: "Slack, Microsoft Teams, and GitHub integration with automated workflow sync"
+    },
+    {
+      icon: BarChart3,
+      title: "Business Intelligence",
+      description: "Executive KPI tracking, team performance analytics, and AI-generated insights"
+    },
+    {
+      icon: Users,
+      title: "Complete CRM System",
+      description: "Lead pipeline management, client tracking, and automated opportunity workflows"
     },
     {
       icon: Megaphone,
-      title: "Marketing",
-      description: "Campaign planning, content calendar, and ROI tracking"
+      title: "Marketing Suite",
+      description: "Campaign planning, content calendar, and ROI tracking with analytics integration"
+    },
+    {
+      icon: BookOpen,
+      title: "Knowledge Management",
+      description: "Centralized documentation, SOPs, training materials, and team collaboration"
     },
     {
       icon: Building2,
-      title: "Admin Portal",
-      description: "User management, system configuration, and analytics"
+      title: "Admin & Configuration",
+      description: "User management, department-based permissions, and system configuration"
     }
   ];
 
@@ -182,13 +212,31 @@ export default function Landing() {
       <main className="flex-1 container mx-auto px-6 py-12">
         <div className="text-center mb-16">
           <h1 className="text-5xl font-bold text-foreground mb-6" data-testid="text-hero-title">
-            Business Operating System
+            Enterprise Business Operating System
           </h1>
           <p className="text-xl text-muted-foreground mb-8 max-w-3xl mx-auto" data-testid="text-hero-description">
-            A comprehensive business management platform that consolidates multiple business functions 
-            into one unified, professional-grade system. Streamline your operations, enhance productivity, 
-            and drive growth with BizOS.
+            Production-ready enterprise platform with AI-powered analytics, advanced security, mobile-first design,
+            and comprehensive third-party integrations. Streamline operations, optimize resources, and drive growth
+            with intelligent automation and real-time business intelligence.
           </p>
+          <div className="flex flex-wrap justify-center gap-4 mt-8 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-green-600" />
+              <span>AI Business Intelligence</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-green-600" />
+              <span>Enterprise Security (RBAC + MFA)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-green-600" />
+              <span>Mobile-Optimized</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-green-600" />
+              <span>Slack/Teams/GitHub Integration</span>
+            </div>
+          </div>
         </div>
 
         {/* Features Grid */}
