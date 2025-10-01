@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NotificationPanel } from "@/components/NotificationPanel";
 import { UserProfileMenu } from "@/components/UserProfileMenu";
+import { OrganizationIndicator } from "@/components/OrganizationIndicator";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Search, Sun, Moon, Menu } from "lucide-react";
 
@@ -68,6 +69,9 @@ export function Header({ title, breadcrumbs = [], user, onMenuClick, showMenuBut
         </div>
         
         <div className="flex items-center space-x-2 md:space-x-4">
+          {/* Organization Indicator - Hidden on mobile */}
+          {!isMobile && <OrganizationIndicator />}
+
           {/* Search - Hidden on mobile */}
           {!isMobile && (
             <div className="relative">

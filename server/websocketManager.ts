@@ -8,12 +8,14 @@ import { eq, desc } from 'drizzle-orm';
 
 interface AuthenticatedWebSocket extends WebSocket {
   userId?: string;
+  organizationId?: string;
   isAlive?: boolean;
 }
 
 interface WebSocketMessage {
   type: 'auth' | 'notification' | 'ping' | 'pong' | 'data_change';
   userId?: string;
+  organizationId?: string;
   data?: any;
 }
 
@@ -28,6 +30,7 @@ interface DataChangeMessage {
 class WebSocketManager {
   private wss: WebSocketServer | null = null;
   private clients: Map<string, Set<AuthenticatedWebSocket>> = new Map();
+  private organizationClients: Map<string, Set<AuthenticatedWebSocket>> = new Map();
 
   setup(server: Server) {
     this.wss = new WebSocketServer({
@@ -96,8 +99,14 @@ class WebSocketManager {
       case 'auth':
         if (message.userId) {
           ws.userId = message.userId;
+          ws.organizationId = message.organizationId;
           this.addClient(message.userId, ws);
-          console.log(`WebSocket authenticated for user: ${message.userId}`);
+
+          if (message.organizationId) {
+            this.addOrganizationClient(message.organizationId, ws);
+          }
+
+          console.log(`WebSocket authenticated for user: ${message.userId}, org: ${message.organizationId}`);
 
           // Send authentication confirmation
           ws.send(JSON.stringify({
@@ -126,6 +135,13 @@ class WebSocketManager {
     this.clients.get(userId)!.add(ws);
   }
 
+  private addOrganizationClient(organizationId: string, ws: AuthenticatedWebSocket) {
+    if (!this.organizationClients.has(organizationId)) {
+      this.organizationClients.set(organizationId, new Set());
+    }
+    this.organizationClients.get(organizationId)!.add(ws);
+  }
+
   private removeClient(ws: AuthenticatedWebSocket) {
     if (ws.userId) {
       const userClients = this.clients.get(ws.userId);
@@ -133,6 +149,16 @@ class WebSocketManager {
         userClients.delete(ws);
         if (userClients.size === 0) {
           this.clients.delete(ws.userId);
+        }
+      }
+    }
+
+    if (ws.organizationId) {
+      const orgClients = this.organizationClients.get(ws.organizationId);
+      if (orgClients) {
+        orgClients.delete(ws);
+        if (orgClients.size === 0) {
+          this.organizationClients.delete(ws.organizationId);
         }
       }
     }
@@ -289,6 +315,39 @@ class WebSocketManager {
     }
 
     console.log(`Data change broadcasted to all: ${operation} ${entity} to ${this.getConnectionCount()} clients`);
+  }
+
+  async broadcastToOrganization(organizationId: string, operation: 'create' | 'update' | 'delete', entity: string, data: any, excludeUserId?: string) {
+    const message = JSON.stringify({
+      type: 'data_change',
+      operation,
+      entity,
+      data,
+      timestamp: new Date().toISOString()
+    });
+
+    // Broadcast to all connected clients in this organization
+    const orgClients = this.organizationClients.get(organizationId);
+    if (orgClients) {
+      let sentCount = 0;
+      orgClients.forEach((ws) => {
+        if (ws.readyState === WebSocket.OPEN && (!excludeUserId || ws.userId !== excludeUserId)) {
+          ws.send(message);
+          sentCount++;
+        }
+      });
+
+      console.log(`Data change broadcasted to organization ${organizationId}: ${operation} ${entity} to ${sentCount} clients`);
+    }
+  }
+
+  getOrganizationConnectionCount(organizationId: string): number {
+    const orgClients = this.organizationClients.get(organizationId);
+    return orgClients ? orgClients.size : 0;
+  }
+
+  getConnectedOrganizations(): string[] {
+    return Array.from(this.organizationClients.keys());
   }
 
   private async sendEmailNotification(notification: any, user: any) {

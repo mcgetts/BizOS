@@ -14,6 +14,9 @@ import {
   knowledgeArticles,
   marketingCampaigns,
   supportTickets,
+  supportTicketComments,
+  slaConfigurations,
+  ticketEscalations,
   timeEntries,
   clientInteractions,
   systemVariables,
@@ -79,6 +82,7 @@ import {
 import { db } from "./db";
 import { eq, desc, and, or, like, sql, count, gte, lte } from "drizzle-orm";
 import { calculateSlaMetrics, calculateBusinessImpact, DEFAULT_SLA_CONFIGS } from "@shared/slaUtils";
+import { getOrganizationId } from "./tenancy/tenantContext";
 
 // Interface for storage operations
 export interface IStorage {
@@ -346,6 +350,7 @@ export class DatabaseStorage implements IStorage {
 
   // Client operations
   async getClients(): Promise<ClientWithCompany[]> {
+    const organizationId = getOrganizationId();
     return await db
       .select({
         id: clients.id,
@@ -377,11 +382,16 @@ export class DatabaseStorage implements IStorage {
         updatedAt: clients.updatedAt,
       })
       .from(clients)
-      .leftJoin(companies, eq(clients.companyId, companies.id))
+      .leftJoin(companies, and(
+        eq(clients.companyId, companies.id),
+        eq(companies.organizationId, organizationId)
+      ))
+      .where(eq(clients.organizationId, organizationId))
       .orderBy(desc(clients.createdAt));
   }
 
   async getClient(id: string): Promise<ClientWithCompany | undefined> {
+    const organizationId = getOrganizationId();
     const [client] = await db
       .select({
         id: clients.id,
@@ -413,59 +423,103 @@ export class DatabaseStorage implements IStorage {
         updatedAt: clients.updatedAt,
       })
       .from(clients)
-      .leftJoin(companies, eq(clients.companyId, companies.id))
-      .where(eq(clients.id, id));
+      .leftJoin(companies, and(
+        eq(clients.companyId, companies.id),
+        eq(companies.organizationId, organizationId)
+      ))
+      .where(and(
+        eq(clients.id, id),
+        eq(clients.organizationId, organizationId)
+      ));
     return client;
   }
 
   async createClient(client: InsertClient): Promise<Client> {
-    const [newClient] = await db.insert(clients).values(client).returning();
+    const organizationId = getOrganizationId();
+    const [newClient] = await db.insert(clients).values({
+      ...client,
+      organizationId
+    }).returning();
     return newClient;
   }
 
   async updateClient(id: string, client: Partial<InsertClient>): Promise<Client> {
+    const organizationId = getOrganizationId();
     const [updatedClient] = await db
       .update(clients)
       .set({ ...client, updatedAt: new Date() })
-      .where(eq(clients.id, id))
+      .where(and(
+        eq(clients.id, id),
+        eq(clients.organizationId, organizationId)
+      ))
       .returning();
     return updatedClient;
   }
 
   async deleteClient(id: string): Promise<void> {
-    await db.delete(clients).where(eq(clients.id, id));
+    const organizationId = getOrganizationId();
+    await db.delete(clients).where(and(
+      eq(clients.id, id),
+      eq(clients.organizationId, organizationId)
+    ));
   }
 
   // Company operations
   async getCompanies(): Promise<Company[]> {
-    return await db.select().from(companies).where(eq(companies.isActive, true)).orderBy(desc(companies.createdAt));
+    const organizationId = getOrganizationId();
+    return await db.select().from(companies)
+      .where(and(
+        eq(companies.isActive, true),
+        eq(companies.organizationId, organizationId)
+      ))
+      .orderBy(desc(companies.createdAt));
   }
 
   async getCompany(id: string): Promise<Company | undefined> {
-    const [company] = await db.select().from(companies).where(eq(companies.id, id));
+    const organizationId = getOrganizationId();
+    const [company] = await db.select().from(companies)
+      .where(and(
+        eq(companies.id, id),
+        eq(companies.organizationId, organizationId)
+      ));
     return company;
   }
 
   async createCompany(company: InsertCompany): Promise<Company> {
-    const [newCompany] = await db.insert(companies).values(company).returning();
+    const organizationId = getOrganizationId();
+    const [newCompany] = await db.insert(companies).values({
+      ...company,
+      organizationId
+    }).returning();
     return newCompany;
   }
 
   async updateCompany(id: string, company: Partial<InsertCompany>): Promise<Company> {
+    const organizationId = getOrganizationId();
     const [updatedCompany] = await db
       .update(companies)
       .set({ ...company, updatedAt: new Date() })
-      .where(eq(companies.id, id))
+      .where(and(
+        eq(companies.id, id),
+        eq(companies.organizationId, organizationId)
+      ))
       .returning();
     return updatedCompany;
   }
 
   async deleteCompany(id: string): Promise<void> {
-    await db.update(companies).set({ isActive: false }).where(eq(companies.id, id));
+    const organizationId = getOrganizationId();
+    await db.update(companies)
+      .set({ isActive: false })
+      .where(and(
+        eq(companies.id, id),
+        eq(companies.organizationId, organizationId)
+      ));
   }
 
   // Sales opportunity operations
   async getSalesOpportunities(): Promise<SalesOpportunityWithRelations[]> {
+    const organizationId = getOrganizationId();
     return await db
       .select({
         id: salesOpportunities.id,
@@ -512,9 +566,16 @@ export class DatabaseStorage implements IStorage {
         }
       })
       .from(salesOpportunities)
-      .leftJoin(companies, eq(salesOpportunities.companyId, companies.id))
-      .leftJoin(clients, eq(salesOpportunities.contactId, clients.id))
+      .leftJoin(companies, and(
+        eq(salesOpportunities.companyId, companies.id),
+        eq(companies.organizationId, organizationId)
+      ))
+      .leftJoin(clients, and(
+        eq(salesOpportunities.contactId, clients.id),
+        eq(clients.organizationId, organizationId)
+      ))
       .leftJoin(users, eq(salesOpportunities.assignedTo, users.id))
+      .where(eq(salesOpportunities.organizationId, organizationId))
       .orderBy(desc(salesOpportunities.lastActivityDate));
   }
 
@@ -565,14 +626,24 @@ export class DatabaseStorage implements IStorage {
         }
       })
       .from(salesOpportunities)
-      .leftJoin(companies, eq(salesOpportunities.companyId, companies.id))
-      .leftJoin(clients, eq(salesOpportunities.contactId, clients.id))
+      .leftJoin(companies, and(
+        eq(salesOpportunities.companyId, companies.id),
+        eq(companies.organizationId, getOrganizationId())
+      ))
+      .leftJoin(clients, and(
+        eq(salesOpportunities.contactId, clients.id),
+        eq(clients.organizationId, getOrganizationId())
+      ))
       .leftJoin(users, eq(salesOpportunities.assignedTo, users.id))
-      .where(eq(salesOpportunities.id, id));
+      .where(and(
+        eq(salesOpportunities.id, id),
+        eq(salesOpportunities.organizationId, getOrganizationId())
+      ));
     return opportunity;
   }
 
   async getSalesOpportunitiesByStage(stage: string): Promise<SalesOpportunityWithRelations[]> {
+    const organizationId = getOrganizationId();
     return await db
       .select({
         id: salesOpportunities.id,
@@ -619,22 +690,34 @@ export class DatabaseStorage implements IStorage {
         }
       })
       .from(salesOpportunities)
-      .leftJoin(companies, eq(salesOpportunities.companyId, companies.id))
-      .leftJoin(clients, eq(salesOpportunities.contactId, clients.id))
+      .leftJoin(companies, and(
+        eq(salesOpportunities.companyId, companies.id),
+        eq(companies.organizationId, organizationId)
+      ))
+      .leftJoin(clients, and(
+        eq(salesOpportunities.contactId, clients.id),
+        eq(clients.organizationId, organizationId)
+      ))
       .leftJoin(users, eq(salesOpportunities.assignedTo, users.id))
-      .where(eq(salesOpportunities.stage, stage))
+      .where(and(
+        eq(salesOpportunities.stage, stage),
+        eq(salesOpportunities.organizationId, organizationId)
+      ))
       .orderBy(desc(salesOpportunities.lastActivityDate));
   }
 
   async createSalesOpportunity(opportunity: InsertSalesOpportunity): Promise<SalesOpportunity> {
+    const organizationId = getOrganizationId();
     const [newOpportunity] = await db.insert(salesOpportunities).values({
       ...opportunity,
+      organizationId,
       lastActivityDate: new Date(),
     }).returning();
     return newOpportunity;
   }
 
   async updateSalesOpportunity(id: string, opportunity: Partial<InsertSalesOpportunity>): Promise<SalesOpportunity> {
+    const organizationId = getOrganizationId();
     const [updatedOpportunity] = await db
       .update(salesOpportunities)
       .set({
@@ -642,7 +725,10 @@ export class DatabaseStorage implements IStorage {
         updatedAt: new Date(),
         lastActivityDate: new Date(),
       })
-      .where(eq(salesOpportunities.id, id))
+      .where(and(
+        eq(salesOpportunities.id, id),
+        eq(salesOpportunities.organizationId, organizationId)
+      ))
       .returning();
     return updatedOpportunity;
   }
@@ -672,24 +758,38 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteSalesOpportunity(id: string): Promise<void> {
+    const organizationId = getOrganizationId();
     // Transactionally delete all related records first to maintain referential integrity
     await db.transaction(async (tx) => {
       // Delete related next steps
-      await tx.delete(opportunityNextSteps).where(eq(opportunityNextSteps.opportunityId, id));
-      
+      await tx.delete(opportunityNextSteps).where(and(
+        eq(opportunityNextSteps.opportunityId, id),
+        eq(opportunityNextSteps.organizationId, organizationId)
+      ));
+
       // Delete related communications
-      await tx.delete(opportunityCommunications).where(eq(opportunityCommunications.opportunityId, id));
-      
+      await tx.delete(opportunityCommunications).where(and(
+        eq(opportunityCommunications.opportunityId, id),
+        eq(opportunityCommunications.organizationId, organizationId)
+      ));
+
       // Delete related stakeholders
-      await tx.delete(opportunityStakeholders).where(eq(opportunityStakeholders.opportunityId, id));
-      
+      await tx.delete(opportunityStakeholders).where(and(
+        eq(opportunityStakeholders.opportunityId, id),
+        eq(opportunityStakeholders.organizationId, organizationId)
+      ));
+
       // Finally delete the opportunity itself
-      await tx.delete(salesOpportunities).where(eq(salesOpportunities.id, id));
+      await tx.delete(salesOpportunities).where(and(
+        eq(salesOpportunities.id, id),
+        eq(salesOpportunities.organizationId, organizationId)
+      ));
     });
   }
 
   // Opportunity next steps operations
   async getOpportunityNextSteps(opportunityId: string): Promise<OpportunityNextStep[]> {
+    const organizationId = getOrganizationId();
     return await db
       .select({
         id: opportunityNextSteps.id,
@@ -713,61 +813,89 @@ export class DatabaseStorage implements IStorage {
       })
       .from(opportunityNextSteps)
       .leftJoin(users, eq(opportunityNextSteps.assignedTo, users.id))
-      .where(eq(opportunityNextSteps.opportunityId, opportunityId))
+      .where(and(
+        eq(opportunityNextSteps.opportunityId, opportunityId),
+        eq(opportunityNextSteps.organizationId, organizationId)
+      ))
       .orderBy(desc(opportunityNextSteps.createdAt));
   }
 
   async getOpportunityNextStep(id: string): Promise<OpportunityNextStep | undefined> {
+    const organizationId = getOrganizationId();
     const [nextStep] = await db
       .select()
       .from(opportunityNextSteps)
-      .where(eq(opportunityNextSteps.id, id));
+      .where(and(
+        eq(opportunityNextSteps.id, id),
+        eq(opportunityNextSteps.organizationId, organizationId)
+      ));
     return nextStep;
   }
 
   async createOpportunityNextStep(nextStep: InsertOpportunityNextStep): Promise<OpportunityNextStep> {
+    const organizationId = getOrganizationId();
     return await db.transaction(async (tx) => {
-      const [result] = await tx.insert(opportunityNextSteps).values(nextStep).returning();
-      
+      const [result] = await tx.insert(opportunityNextSteps).values({
+        ...nextStep,
+        organizationId
+      }).returning();
+
       // Update parent opportunity's last activity date to the step creation time
       if (nextStep.opportunityId) {
         await tx.update(salesOpportunities)
           .set({ lastActivityDate: result.createdAt })
-          .where(eq(salesOpportunities.id, nextStep.opportunityId));
+          .where(and(
+            eq(salesOpportunities.id, nextStep.opportunityId),
+            eq(salesOpportunities.organizationId, organizationId)
+          ));
       }
-      
+
       return result;
     });
   }
 
   async updateOpportunityNextStep(id: string, nextStep: Partial<InsertOpportunityNextStep>): Promise<OpportunityNextStep> {
+    const organizationId = getOrganizationId();
     return await db.transaction(async (tx) => {
       const [result] = await tx
         .update(opportunityNextSteps)
         .set({ ...nextStep, updatedAt: new Date() })
-        .where(eq(opportunityNextSteps.id, id))
+        .where(and(
+          eq(opportunityNextSteps.id, id),
+          eq(opportunityNextSteps.organizationId, organizationId)
+        ))
         .returning();
-      
+
       // Update parent opportunity's last activity date to the step's updated time
       if (result.opportunityId) {
         await tx.update(salesOpportunities)
           .set({ lastActivityDate: result.updatedAt })
-          .where(eq(salesOpportunities.id, result.opportunityId));
+          .where(and(
+            eq(salesOpportunities.id, result.opportunityId),
+            eq(salesOpportunities.organizationId, organizationId)
+          ));
       }
-      
+
       return result;
     });
   }
 
   async deleteOpportunityNextStep(id: string): Promise<void> {
+    const organizationId = getOrganizationId();
     await db.transaction(async (tx) => {
       // Get the opportunity ID before deleting the next step
       const [nextStep] = await tx.select({ opportunityId: opportunityNextSteps.opportunityId })
         .from(opportunityNextSteps)
-        .where(eq(opportunityNextSteps.id, id));
-      
+        .where(and(
+          eq(opportunityNextSteps.id, id),
+          eq(opportunityNextSteps.organizationId, organizationId)
+        ));
+
       if (nextStep) {
-        await tx.delete(opportunityNextSteps).where(eq(opportunityNextSteps.id, id));
+        await tx.delete(opportunityNextSteps).where(and(
+          eq(opportunityNextSteps.id, id),
+          eq(opportunityNextSteps.organizationId, organizationId)
+        ));
         
         // Update parent opportunity's last activity date
         await this.recomputeLastActivityDate(nextStep.opportunityId!, tx);
@@ -777,6 +905,7 @@ export class DatabaseStorage implements IStorage {
 
   // Opportunity communications operations
   async getOpportunityCommunications(opportunityId: string): Promise<OpportunityCommunication[]> {
+    const organizationId = getOrganizationId();
     return await db
       .select({
         id: opportunityCommunications.id,
@@ -801,62 +930,90 @@ export class DatabaseStorage implements IStorage {
       })
       .from(opportunityCommunications)
       .leftJoin(users, eq(opportunityCommunications.recordedBy, users.id))
-      .where(eq(opportunityCommunications.opportunityId, opportunityId))
+      .where(and(
+        eq(opportunityCommunications.opportunityId, opportunityId),
+        eq(opportunityCommunications.organizationId, organizationId)
+      ))
       .orderBy(desc(opportunityCommunications.communicationDate));
   }
 
   async getOpportunityCommunication(id: string): Promise<OpportunityCommunication | undefined> {
+    const organizationId = getOrganizationId();
     const [communication] = await db
       .select()
       .from(opportunityCommunications)
-      .where(eq(opportunityCommunications.id, id));
+      .where(and(
+        eq(opportunityCommunications.id, id),
+        eq(opportunityCommunications.organizationId, organizationId)
+      ));
     return communication;
   }
 
   async createOpportunityCommunication(communication: InsertOpportunityCommunication): Promise<OpportunityCommunication> {
+    const organizationId = getOrganizationId();
     return await db.transaction(async (tx) => {
-      const [result] = await tx.insert(opportunityCommunications).values(communication).returning();
-      
+      const [result] = await tx.insert(opportunityCommunications).values({
+        ...communication,
+        organizationId
+      }).returning();
+
       // Update parent opportunity's last activity date to the communication date
       if (communication.opportunityId) {
         await tx.update(salesOpportunities)
           .set({ lastActivityDate: result.communicationDate })
-          .where(eq(salesOpportunities.id, communication.opportunityId));
+          .where(and(
+            eq(salesOpportunities.id, communication.opportunityId),
+            eq(salesOpportunities.organizationId, organizationId)
+          ));
       }
-      
+
       return result;
     });
   }
 
   async updateOpportunityCommunication(id: string, communication: Partial<InsertOpportunityCommunication>): Promise<OpportunityCommunication> {
+    const organizationId = getOrganizationId();
     return await db.transaction(async (tx) => {
       const [result] = await tx
         .update(opportunityCommunications)
         .set({ ...communication, updatedAt: new Date() })
-        .where(eq(opportunityCommunications.id, id))
+        .where(and(
+          eq(opportunityCommunications.id, id),
+          eq(opportunityCommunications.organizationId, organizationId)
+        ))
         .returning();
-      
+
       // Update parent opportunity's last activity date to the communication date or updated time
       if (result.opportunityId) {
         await tx.update(salesOpportunities)
           .set({ lastActivityDate: result.communicationDate || result.updatedAt })
-          .where(eq(salesOpportunities.id, result.opportunityId));
+          .where(and(
+            eq(salesOpportunities.id, result.opportunityId),
+            eq(salesOpportunities.organizationId, organizationId)
+          ));
       }
-      
+
       return result;
     });
   }
 
   async deleteOpportunityCommunication(id: string): Promise<void> {
+    const organizationId = getOrganizationId();
     await db.transaction(async (tx) => {
       // Get the opportunity ID before deleting the communication
       const [communication] = await tx.select({ opportunityId: opportunityCommunications.opportunityId })
         .from(opportunityCommunications)
-        .where(eq(opportunityCommunications.id, id));
+        .where(and(
+          eq(opportunityCommunications.id, id),
+          eq(opportunityCommunications.organizationId, organizationId)
+        ));
       
       if (communication) {
-        await tx.delete(opportunityCommunications).where(eq(opportunityCommunications.id, id));
-        
+        await tx.delete(opportunityCommunications).where(and(
+          eq(opportunityCommunications.id, id),
+          eq(opportunityCommunications.organizationId, organizationId)
+        ));
+
         // Update parent opportunity's last activity date
         await this.recomputeLastActivityDate(communication.opportunityId!, tx);
       }
@@ -865,6 +1022,7 @@ export class DatabaseStorage implements IStorage {
 
   // Opportunity stakeholders operations
   async getOpportunityStakeholders(opportunityId: string): Promise<OpportunityStakeholder[]> {
+    const organizationId = getOrganizationId();
     return await db
       .select({
         id: opportunityStakeholders.id,
@@ -887,62 +1045,90 @@ export class DatabaseStorage implements IStorage {
       })
       .from(opportunityStakeholders)
       .leftJoin(users, eq(opportunityStakeholders.createdBy, users.id))
-      .where(eq(opportunityStakeholders.opportunityId, opportunityId))
+      .where(and(
+        eq(opportunityStakeholders.opportunityId, opportunityId),
+        eq(opportunityStakeholders.organizationId, organizationId)
+      ))
       .orderBy(opportunityStakeholders.name);
   }
 
   async getOpportunityStakeholder(id: string): Promise<OpportunityStakeholder | undefined> {
+    const organizationId = getOrganizationId();
     const [stakeholder] = await db
       .select()
       .from(opportunityStakeholders)
-      .where(eq(opportunityStakeholders.id, id));
+      .where(and(
+        eq(opportunityStakeholders.id, id),
+        eq(opportunityStakeholders.organizationId, organizationId)
+      ));
     return stakeholder;
   }
 
   async createOpportunityStakeholder(stakeholder: InsertOpportunityStakeholder): Promise<OpportunityStakeholder> {
+    const organizationId = getOrganizationId();
     return await db.transaction(async (tx) => {
-      const [result] = await tx.insert(opportunityStakeholders).values(stakeholder).returning();
-      
+      const [result] = await tx.insert(opportunityStakeholders).values({
+        ...stakeholder,
+        organizationId
+      }).returning();
+
       // Update parent opportunity's last activity date
       if (stakeholder.opportunityId) {
         await tx.update(salesOpportunities)
           .set({ lastActivityDate: new Date() })
-          .where(eq(salesOpportunities.id, stakeholder.opportunityId));
+          .where(and(
+            eq(salesOpportunities.id, stakeholder.opportunityId),
+            eq(salesOpportunities.organizationId, organizationId)
+          ));
       }
-      
+
       return result;
     });
   }
 
   async updateOpportunityStakeholder(id: string, stakeholder: Partial<InsertOpportunityStakeholder>): Promise<OpportunityStakeholder> {
+    const organizationId = getOrganizationId();
     return await db.transaction(async (tx) => {
       const [result] = await tx
         .update(opportunityStakeholders)
         .set({ ...stakeholder, updatedAt: new Date() })
-        .where(eq(opportunityStakeholders.id, id))
+        .where(and(
+          eq(opportunityStakeholders.id, id),
+          eq(opportunityStakeholders.organizationId, organizationId)
+        ))
         .returning();
-      
+
       // Update parent opportunity's last activity date
       if (result.opportunityId) {
         await tx.update(salesOpportunities)
           .set({ lastActivityDate: new Date() })
-          .where(eq(salesOpportunities.id, result.opportunityId));
+          .where(and(
+            eq(salesOpportunities.id, result.opportunityId),
+            eq(salesOpportunities.organizationId, organizationId)
+          ));
       }
-      
+
       return result;
     });
   }
 
   async deleteOpportunityStakeholder(id: string): Promise<void> {
+    const organizationId = getOrganizationId();
     await db.transaction(async (tx) => {
       // Get the opportunity ID before deleting the stakeholder
       const [stakeholder] = await tx.select({ opportunityId: opportunityStakeholders.opportunityId })
         .from(opportunityStakeholders)
-        .where(eq(opportunityStakeholders.id, id));
-      
+        .where(and(
+          eq(opportunityStakeholders.id, id),
+          eq(opportunityStakeholders.organizationId, organizationId)
+        ));
+
       if (stakeholder) {
-        await tx.delete(opportunityStakeholders).where(eq(opportunityStakeholders.id, id));
-        
+        await tx.delete(opportunityStakeholders).where(and(
+          eq(opportunityStakeholders.id, id),
+          eq(opportunityStakeholders.organizationId, organizationId)
+        ));
+
         // Update parent opportunity's last activity date
         await this.recomputeLastActivityDate(stakeholder.opportunityId!, tx);
       }
@@ -951,193 +1137,333 @@ export class DatabaseStorage implements IStorage {
 
   // Project operations
   async getProjects(): Promise<Project[]> {
-    return await db.select().from(projects).orderBy(desc(projects.createdAt));
+    const organizationId = getOrganizationId();
+    return await db.select().from(projects)
+      .where(eq(projects.organizationId, organizationId))
+      .orderBy(desc(projects.createdAt));
   }
 
   async getProject(id: string): Promise<Project | undefined> {
-    const [project] = await db.select().from(projects).where(eq(projects.id, id));
+    const organizationId = getOrganizationId();
+    const [project] = await db.select().from(projects)
+      .where(and(
+        eq(projects.id, id),
+        eq(projects.organizationId, organizationId)
+      ));
     return project;
   }
 
   async getProjectsByClient(clientId: string): Promise<Project[]> {
-    return await db.select().from(projects).where(eq(projects.clientId, clientId));
+    const organizationId = getOrganizationId();
+    return await db.select().from(projects)
+      .where(and(
+        eq(projects.clientId, clientId),
+        eq(projects.organizationId, organizationId)
+      ));
   }
 
   async createProject(project: InsertProject): Promise<Project> {
-    const [newProject] = await db.insert(projects).values(project).returning();
+    const organizationId = getOrganizationId();
+    const [newProject] = await db.insert(projects).values({
+      ...project,
+      organizationId
+    }).returning();
     return newProject;
   }
 
   async updateProject(id: string, project: Partial<InsertProject>): Promise<Project> {
+    const organizationId = getOrganizationId();
     const [updatedProject] = await db
       .update(projects)
       .set({ ...project, updatedAt: new Date() })
-      .where(eq(projects.id, id))
+      .where(and(
+        eq(projects.id, id),
+        eq(projects.organizationId, organizationId)
+      ))
       .returning();
     return updatedProject;
   }
 
   async deleteProject(id: string): Promise<void> {
-    await db.delete(projects).where(eq(projects.id, id));
+    const organizationId = getOrganizationId();
+    await db.delete(projects).where(and(
+      eq(projects.id, id),
+      eq(projects.organizationId, organizationId)
+    ));
   }
 
   // Task operations
   async getTasks(): Promise<Task[]> {
-    return await db.select().from(tasks).orderBy(desc(tasks.createdAt));
+    const organizationId = getOrganizationId();
+    return await db.select().from(tasks)
+      .where(eq(tasks.organizationId, organizationId))
+      .orderBy(desc(tasks.createdAt));
   }
 
   async getTask(id: string): Promise<Task | undefined> {
-    const [task] = await db.select().from(tasks).where(eq(tasks.id, id));
+    const organizationId = getOrganizationId();
+    const [task] = await db.select().from(tasks)
+      .where(and(
+        eq(tasks.id, id),
+        eq(tasks.organizationId, organizationId)
+      ));
     return task;
   }
 
   async getTasksByProject(projectId: string): Promise<Task[]> {
-    return await db.select().from(tasks).where(eq(tasks.projectId, projectId));
+    const organizationId = getOrganizationId();
+    return await db.select().from(tasks)
+      .where(and(
+        eq(tasks.projectId, projectId),
+        eq(tasks.organizationId, organizationId)
+      ));
   }
 
   async getTasksByUser(userId: string): Promise<Task[]> {
-    return await db.select().from(tasks).where(eq(tasks.assignedTo, userId));
+    const organizationId = getOrganizationId();
+    return await db.select().from(tasks)
+      .where(and(
+        eq(tasks.assignedTo, userId),
+        eq(tasks.organizationId, organizationId)
+      ));
   }
 
   async createTask(task: InsertTask): Promise<Task> {
-    const [newTask] = await db.insert(tasks).values(task).returning();
+    const organizationId = getOrganizationId();
+    const [newTask] = await db.insert(tasks).values({
+      ...task,
+      organizationId
+    }).returning();
     return newTask;
   }
 
   async updateTask(id: string, task: Partial<InsertTask>): Promise<Task> {
+    const organizationId = getOrganizationId();
     const [updatedTask] = await db
       .update(tasks)
       .set({ ...task, updatedAt: new Date() })
-      .where(eq(tasks.id, id))
+      .where(and(
+        eq(tasks.id, id),
+        eq(tasks.organizationId, organizationId)
+      ))
       .returning();
     return updatedTask;
   }
 
   async deleteTask(id: string): Promise<void> {
-    await db.delete(tasks).where(eq(tasks.id, id));
+    const organizationId = getOrganizationId();
+    await db.delete(tasks).where(and(
+      eq(tasks.id, id),
+      eq(tasks.organizationId, organizationId)
+    ));
   }
 
   // Financial operations
   async getInvoices(): Promise<Invoice[]> {
-    return await db.select().from(invoices).orderBy(desc(invoices.createdAt));
+    const organizationId = getOrganizationId();
+    return await db.select().from(invoices)
+      .where(eq(invoices.organizationId, organizationId))
+      .orderBy(desc(invoices.createdAt));
   }
 
   async getInvoice(id: string): Promise<Invoice | undefined> {
-    const [invoice] = await db.select().from(invoices).where(eq(invoices.id, id));
+    const organizationId = getOrganizationId();
+    const [invoice] = await db.select().from(invoices)
+      .where(and(
+        eq(invoices.id, id),
+        eq(invoices.organizationId, organizationId)
+      ));
     return invoice;
   }
 
   async createInvoice(invoice: InsertInvoice): Promise<Invoice> {
-    const [newInvoice] = await db.insert(invoices).values(invoice).returning();
+    const organizationId = getOrganizationId();
+    const [newInvoice] = await db.insert(invoices).values({
+      ...invoice,
+      organizationId
+    }).returning();
     return newInvoice;
   }
 
   async updateInvoice(id: string, invoice: Partial<InsertInvoice>): Promise<Invoice> {
+    const organizationId = getOrganizationId();
     const [updatedInvoice] = await db
       .update(invoices)
       .set({ ...invoice, updatedAt: new Date() })
-      .where(eq(invoices.id, id))
+      .where(and(
+        eq(invoices.id, id),
+        eq(invoices.organizationId, organizationId)
+      ))
       .returning();
     return updatedInvoice;
   }
 
   async getExpenses(): Promise<Expense[]> {
-    return await db.select().from(expenses).orderBy(desc(expenses.createdAt));
+    const organizationId = getOrganizationId();
+    return await db.select().from(expenses)
+      .where(eq(expenses.organizationId, organizationId))
+      .orderBy(desc(expenses.createdAt));
   }
 
   async createExpense(expense: InsertExpense): Promise<Expense> {
-    const [newExpense] = await db.insert(expenses).values(expense).returning();
+    const organizationId = getOrganizationId();
+    const [newExpense] = await db.insert(expenses).values({
+      ...expense,
+      organizationId
+    }).returning();
     return newExpense;
   }
 
   async getExpense(id: string): Promise<Expense | undefined> {
-    const [expense] = await db.select().from(expenses).where(eq(expenses.id, id));
+    const organizationId = getOrganizationId();
+    const [expense] = await db.select().from(expenses)
+      .where(and(
+        eq(expenses.id, id),
+        eq(expenses.organizationId, organizationId)
+      ));
     return expense;
   }
 
   async updateExpense(id: string, expense: Partial<InsertExpense>): Promise<Expense> {
+    const organizationId = getOrganizationId();
     const [updatedExpense] = await db
       .update(expenses)
       .set(expense)
-      .where(eq(expenses.id, id))
+      .where(and(
+        eq(expenses.id, id),
+        eq(expenses.organizationId, organizationId)
+      ))
       .returning();
     return updatedExpense;
   }
 
   async deleteExpense(id: string): Promise<void> {
-    await db.delete(expenses).where(eq(expenses.id, id));
+    const organizationId = getOrganizationId();
+    await db.delete(expenses).where(and(
+      eq(expenses.id, id),
+      eq(expenses.organizationId, organizationId)
+    ));
   }
 
   async deleteInvoice(id: string): Promise<void> {
-    await db.delete(invoices).where(eq(invoices.id, id));
+    const organizationId = getOrganizationId();
+    await db.delete(invoices).where(and(
+      eq(invoices.id, id),
+      eq(invoices.organizationId, organizationId)
+    ));
   }
 
   // Knowledge operations
   async getKnowledgeArticles(): Promise<KnowledgeArticle[]> {
-    return await db.select().from(knowledgeArticles).orderBy(desc(knowledgeArticles.createdAt));
+    const organizationId = getOrganizationId();
+    return await db.select().from(knowledgeArticles)
+      .where(eq(knowledgeArticles.organizationId, organizationId))
+      .orderBy(desc(knowledgeArticles.createdAt));
   }
 
   async getKnowledgeArticle(id: string): Promise<KnowledgeArticle | undefined> {
-    const [article] = await db.select().from(knowledgeArticles).where(eq(knowledgeArticles.id, id));
+    const organizationId = getOrganizationId();
+    const [article] = await db.select().from(knowledgeArticles)
+      .where(and(
+        eq(knowledgeArticles.id, id),
+        eq(knowledgeArticles.organizationId, organizationId)
+      ));
     return article;
   }
 
   async createKnowledgeArticle(article: InsertKnowledgeArticle): Promise<KnowledgeArticle> {
-    const [newArticle] = await db.insert(knowledgeArticles).values(article).returning();
+    const organizationId = getOrganizationId();
+    const [newArticle] = await db.insert(knowledgeArticles).values({
+      ...article,
+      organizationId
+    }).returning();
     return newArticle;
   }
 
   async updateKnowledgeArticle(id: string, article: Partial<InsertKnowledgeArticle>): Promise<KnowledgeArticle> {
+    const organizationId = getOrganizationId();
     const [updatedArticle] = await db
       .update(knowledgeArticles)
       .set({ ...article, updatedAt: new Date() })
-      .where(eq(knowledgeArticles.id, id))
+      .where(and(
+        eq(knowledgeArticles.id, id),
+        eq(knowledgeArticles.organizationId, organizationId)
+      ))
       .returning();
     return updatedArticle;
   }
 
   async deleteKnowledgeArticle(id: string): Promise<void> {
-    await db.delete(knowledgeArticles).where(eq(knowledgeArticles.id, id));
+    const organizationId = getOrganizationId();
+    await db.delete(knowledgeArticles).where(and(
+      eq(knowledgeArticles.id, id),
+      eq(knowledgeArticles.organizationId, organizationId)
+    ));
   }
 
   // Marketing operations
   async getMarketingCampaigns(): Promise<MarketingCampaign[]> {
-    return await db.select().from(marketingCampaigns).orderBy(desc(marketingCampaigns.createdAt));
+    const organizationId = getOrganizationId();
+    return await db.select().from(marketingCampaigns)
+      .where(eq(marketingCampaigns.organizationId, organizationId))
+      .orderBy(desc(marketingCampaigns.createdAt));
   }
 
   async getMarketingCampaign(id: string): Promise<MarketingCampaign | undefined> {
-    const [campaign] = await db.select().from(marketingCampaigns).where(eq(marketingCampaigns.id, id));
+    const organizationId = getOrganizationId();
+    const [campaign] = await db.select().from(marketingCampaigns)
+      .where(and(
+        eq(marketingCampaigns.id, id),
+        eq(marketingCampaigns.organizationId, organizationId)
+      ));
     return campaign;
   }
 
   async createMarketingCampaign(campaign: InsertMarketingCampaign): Promise<MarketingCampaign> {
-    const [newCampaign] = await db.insert(marketingCampaigns).values(campaign).returning();
+    const organizationId = getOrganizationId();
+    const [newCampaign] = await db.insert(marketingCampaigns).values({
+      ...campaign,
+      organizationId
+    }).returning();
     return newCampaign;
   }
 
   async updateMarketingCampaign(id: string, campaign: Partial<InsertMarketingCampaign>): Promise<MarketingCampaign> {
+    const organizationId = getOrganizationId();
     const [updatedCampaign] = await db
       .update(marketingCampaigns)
       .set({ ...campaign, updatedAt: new Date() })
-      .where(eq(marketingCampaigns.id, id))
+      .where(and(
+        eq(marketingCampaigns.id, id),
+        eq(marketingCampaigns.organizationId, organizationId)
+      ))
       .returning();
     return updatedCampaign;
   }
 
   // Support operations
   async getSupportTickets(): Promise<SupportTicket[]> {
-    return await db.select().from(supportTickets).orderBy(desc(supportTickets.createdAt));
+    const organizationId = getOrganizationId();
+    return await db.select().from(supportTickets)
+      .where(eq(supportTickets.organizationId, organizationId))
+      .orderBy(desc(supportTickets.createdAt));
   }
 
   async getSupportTicket(id: string): Promise<SupportTicket | undefined> {
-    const [ticket] = await db.select().from(supportTickets).where(eq(supportTickets.id, id));
+    const organizationId = getOrganizationId();
+    const [ticket] = await db.select().from(supportTickets)
+      .where(and(
+        eq(supportTickets.id, id),
+        eq(supportTickets.organizationId, organizationId)
+      ));
     return ticket;
   }
 
   // Generate unique ticket number atomically with retry logic
   private async generateUniqueTicketNumber(): Promise<string> {
+    const organizationId = getOrganizationId();
     const maxRetries = 10;
-    
+
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const now = new Date();
       const year = now.getFullYear();
@@ -1145,28 +1471,32 @@ export class DatabaseStorage implements IStorage {
       const day = String(now.getDate()).padStart(2, '0');
       const time = now.getTime().toString().slice(-6); // Last 6 digits of timestamp
       const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-      
+
       const ticketNumber = `ST-${year}${month}${day}-${time}${random}`;
-      
-      // Check if this ticket number already exists
+
+      // Check if this ticket number already exists in this organization
       const [existing] = await db
         .select({ id: supportTickets.id })
         .from(supportTickets)
-        .where(eq(supportTickets.ticketNumber, ticketNumber))
+        .where(and(
+          eq(supportTickets.ticketNumber, ticketNumber),
+          eq(supportTickets.organizationId, organizationId)
+        ))
         .limit(1);
-      
+
       if (!existing) {
         return ticketNumber;
       }
-      
+
       // Small delay before retry to avoid tight collision loops
       await new Promise(resolve => setTimeout(resolve, 10));
     }
-    
+
     throw new Error('Failed to generate unique ticket number after maximum retries');
   }
 
   async createSupportTicket(ticket: InsertSupportTicket): Promise<SupportTicket> {
+    const organizationId = getOrganizationId();
     // Server-side ticket number generation (never trust client)
     const ticketNumber = await this.generateUniqueTicketNumber();
 
@@ -1190,6 +1520,7 @@ export class DatabaseStorage implements IStorage {
     const ticketData = {
       ...ticket,
       ticketNumber,
+      organizationId,
       businessImpact,
       responseTimeHours,
       resolutionTimeHours,
@@ -1207,17 +1538,22 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateSupportTicket(id: string, ticket: Partial<InsertSupportTicket>): Promise<SupportTicket> {
+    const organizationId = getOrganizationId();
     // Get current ticket to check status transitions
-    const [currentTicket] = await db.select().from(supportTickets).where(eq(supportTickets.id, id));
+    const [currentTicket] = await db.select().from(supportTickets)
+      .where(and(
+        eq(supportTickets.id, id),
+        eq(supportTickets.organizationId, organizationId)
+      ));
     if (!currentTicket) {
       throw new Error('Ticket not found');
     }
-    
+
     const updateData: any = {
       ...ticket,
       updatedAt: new Date(),
     };
-    
+
     // Server-side timestamp authority for status transitions
     if (ticket.status && ticket.status !== currentTicket.status) {
       switch (ticket.status) {
@@ -1234,38 +1570,51 @@ export class DatabaseStorage implements IStorage {
           break;
       }
     }
-    
+
     // Never allow client to override ticket number or system timestamps
     delete updateData.ticketNumber;
     delete updateData.createdAt;
-    
+
     const [updatedTicket] = await db
       .update(supportTickets)
       .set(updateData)
-      .where(eq(supportTickets.id, id))
+      .where(and(
+        eq(supportTickets.id, id),
+        eq(supportTickets.organizationId, organizationId)
+      ))
       .returning();
-    
+
     return updatedTicket;
   }
 
   async deleteSupportTicket(id: string): Promise<void> {
-    await db.delete(supportTickets).where(eq(supportTickets.id, id));
+    const organizationId = getOrganizationId();
+    await db.delete(supportTickets).where(and(
+      eq(supportTickets.id, id),
+      eq(supportTickets.organizationId, organizationId)
+    ));
   }
 
   // Support ticket comments operations
   async getSupportTicketComments(ticketId: string): Promise<SupportTicketComment[]> {
+    const organizationId = getOrganizationId();
     return await db
       .select()
       .from(supportTicketComments)
-      .where(eq(supportTicketComments.ticketId, ticketId))
+      .where(and(
+        eq(supportTicketComments.ticketId, ticketId),
+        eq(supportTicketComments.organizationId, organizationId)
+      ))
       .orderBy(supportTicketComments.createdAt);
   }
 
   async createSupportTicketComment(comment: InsertSupportTicketComment): Promise<SupportTicketComment> {
+    const organizationId = getOrganizationId();
     const [newComment] = await db
       .insert(supportTicketComments)
       .values({
         ...comment,
+        organizationId,
         createdAt: new Date(),
         updatedAt: new Date(),
       })
@@ -1274,43 +1623,61 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateSupportTicketComment(id: string, comment: UpdateSupportTicketComment): Promise<SupportTicketComment> {
+    const organizationId = getOrganizationId();
     const [updatedComment] = await db
       .update(supportTicketComments)
       .set({
         ...comment,
         updatedAt: new Date(),
       })
-      .where(eq(supportTicketComments.id, id))
+      .where(and(
+        eq(supportTicketComments.id, id),
+        eq(supportTicketComments.organizationId, organizationId)
+      ))
       .returning();
     return updatedComment;
   }
 
   async deleteSupportTicketComment(id: string): Promise<void> {
-    await db.delete(supportTicketComments).where(eq(supportTicketComments.id, id));
+    const organizationId = getOrganizationId();
+    await db.delete(supportTicketComments).where(and(
+      eq(supportTicketComments.id, id),
+      eq(supportTicketComments.organizationId, organizationId)
+    ));
   }
 
   // SLA configuration operations
   async getSlaConfigurations(): Promise<SlaConfiguration[]> {
+    const organizationId = getOrganizationId();
     return await db
       .select()
       .from(slaConfigurations)
-      .where(eq(slaConfigurations.isActive, true))
+      .where(and(
+        eq(slaConfigurations.isActive, true),
+        eq(slaConfigurations.organizationId, organizationId)
+      ))
       .orderBy(slaConfigurations.priority, slaConfigurations.name);
   }
 
   async getSlaConfiguration(id: string): Promise<SlaConfiguration | undefined> {
+    const organizationId = getOrganizationId();
     const [config] = await db
       .select()
       .from(slaConfigurations)
-      .where(eq(slaConfigurations.id, id));
+      .where(and(
+        eq(slaConfigurations.id, id),
+        eq(slaConfigurations.organizationId, organizationId)
+      ));
     return config;
   }
 
   async createSlaConfiguration(config: InsertSlaConfiguration): Promise<SlaConfiguration> {
+    const organizationId = getOrganizationId();
     const [newConfig] = await db
       .insert(slaConfigurations)
       .values({
         ...config,
+        organizationId,
         createdAt: new Date(),
         updatedAt: new Date(),
       })
@@ -1319,37 +1686,51 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateSlaConfiguration(id: string, config: UpdateSlaConfiguration): Promise<SlaConfiguration> {
+    const organizationId = getOrganizationId();
     const [updatedConfig] = await db
       .update(slaConfigurations)
       .set({
         ...config,
         updatedAt: new Date(),
       })
-      .where(eq(slaConfigurations.id, id))
+      .where(and(
+        eq(slaConfigurations.id, id),
+        eq(slaConfigurations.organizationId, organizationId)
+      ))
       .returning();
     return updatedConfig;
   }
 
   async deleteSlaConfiguration(id: string): Promise<void> {
+    const organizationId = getOrganizationId();
     await db.update(slaConfigurations)
       .set({ isActive: false })
-      .where(eq(slaConfigurations.id, id));
+      .where(and(
+        eq(slaConfigurations.id, id),
+        eq(slaConfigurations.organizationId, organizationId)
+      ));
   }
 
   // Ticket escalation operations
   async getTicketEscalations(ticketId: string): Promise<TicketEscalation[]> {
+    const organizationId = getOrganizationId();
     return await db
       .select()
       .from(ticketEscalations)
-      .where(eq(ticketEscalations.ticketId, ticketId))
+      .where(and(
+        eq(ticketEscalations.ticketId, ticketId),
+        eq(ticketEscalations.organizationId, organizationId)
+      ))
       .orderBy(ticketEscalations.createdAt);
   }
 
   async createTicketEscalation(escalation: InsertTicketEscalation): Promise<TicketEscalation> {
+    const organizationId = getOrganizationId();
     const [newEscalation] = await db
       .insert(ticketEscalations)
       .values({
         ...escalation,
+        organizationId,
         createdAt: new Date(),
       })
       .returning();
@@ -1358,6 +1739,7 @@ export class DatabaseStorage implements IStorage {
 
   // Enhanced support operations
   async updateTicketSlaMetrics(ticketId: string, metrics: Partial<SupportTicket>): Promise<SupportTicket> {
+    const organizationId = getOrganizationId();
     const [updatedTicket] = await db
       .update(supportTickets)
       .set({
@@ -1365,18 +1747,23 @@ export class DatabaseStorage implements IStorage {
         updatedAt: new Date(),
         lastActivityAt: new Date(),
       })
-      .where(eq(supportTickets.id, ticketId))
+      .where(and(
+        eq(supportTickets.id, ticketId),
+        eq(supportTickets.organizationId, organizationId)
+      ))
       .returning();
     return updatedTicket;
   }
 
   async getOverdueTickets(): Promise<SupportTicket[]> {
+    const organizationId = getOrganizationId();
     const now = new Date();
     return await db
       .select()
       .from(supportTickets)
       .where(
         and(
+          eq(supportTickets.organizationId, organizationId),
           or(
             eq(supportTickets.status, 'open'),
             eq(supportTickets.status, 'in_progress')
@@ -1388,6 +1775,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTicketsNeedingEscalation(): Promise<SupportTicket[]> {
+    const organizationId = getOrganizationId();
     const now = new Date();
     // Get tickets that are open/in_progress and past their escalation time
     return await db
@@ -1395,6 +1783,7 @@ export class DatabaseStorage implements IStorage {
       .from(supportTickets)
       .where(
         and(
+          eq(supportTickets.organizationId, organizationId),
           or(
             eq(supportTickets.status, 'open'),
             eq(supportTickets.status, 'in_progress')
@@ -1407,6 +1796,7 @@ export class DatabaseStorage implements IStorage {
 
   // Support analytics operations
   async getSupportAnalytics(timeRange: { start: Date; end: Date }): Promise<any> {
+    const organizationId = getOrganizationId();
     const { calculateSupportKPIs, calculateSupportTrends, generateSupportPredictions } = await import('@shared/supportAnalytics');
 
     // Get tickets in time range
@@ -1415,6 +1805,7 @@ export class DatabaseStorage implements IStorage {
       .from(supportTickets)
       .where(
         and(
+          eq(supportTickets.organizationId, organizationId),
           gte(supportTickets.createdAt, timeRange.start),
           lte(supportTickets.createdAt, timeRange.end)
         )
@@ -1430,6 +1821,7 @@ export class DatabaseStorage implements IStorage {
       .from(supportTickets)
       .where(
         and(
+          eq(supportTickets.organizationId, organizationId),
           gte(supportTickets.createdAt, previousStart),
           lte(supportTickets.createdAt, previousEnd)
         )
@@ -1450,6 +1842,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAgentPerformanceMetrics(timeRange: { start: Date; end: Date }): Promise<any[]> {
+    const organizationId = getOrganizationId();
     const { calculateAgentPerformance } = await import('@shared/supportAnalytics');
 
     // Get tickets and users
@@ -1458,6 +1851,7 @@ export class DatabaseStorage implements IStorage {
       .from(supportTickets)
       .where(
         and(
+          eq(supportTickets.organizationId, organizationId),
           gte(supportTickets.createdAt, timeRange.start),
           lte(supportTickets.createdAt, timeRange.end)
         )
@@ -1469,6 +1863,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getSupportTrends(timeRange: { start: Date; end: Date }): Promise<any> {
+    const organizationId = getOrganizationId();
     const { calculateSupportTrends } = await import('@shared/supportAnalytics');
 
     const tickets = await db
@@ -1476,6 +1871,7 @@ export class DatabaseStorage implements IStorage {
       .from(supportTickets)
       .where(
         and(
+          eq(supportTickets.organizationId, organizationId),
           gte(supportTickets.createdAt, timeRange.start),
           lte(supportTickets.createdAt, timeRange.end)
         )
@@ -1485,6 +1881,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTicketVolumeByCategory(timeRange: { start: Date; end: Date }): Promise<any[]> {
+    const organizationId = getOrganizationId();
     const results = await db
       .select({
         category: supportTickets.category,
@@ -1495,6 +1892,7 @@ export class DatabaseStorage implements IStorage {
       .from(supportTickets)
       .where(
         and(
+          eq(supportTickets.organizationId, organizationId),
           gte(supportTickets.createdAt, timeRange.start),
           lte(supportTickets.createdAt, timeRange.end)
         )
@@ -1511,6 +1909,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getResponseTimeMetrics(timeRange: { start: Date; end: Date }): Promise<any> {
+    const organizationId = getOrganizationId();
     const [result] = await db
       .select({
         avgResponseTime: sql<number>`avg(actual_response_minutes)`,
@@ -1526,6 +1925,7 @@ export class DatabaseStorage implements IStorage {
       .from(supportTickets)
       .where(
         and(
+          eq(supportTickets.organizationId, organizationId),
           gte(supportTickets.createdAt, timeRange.start),
           lte(supportTickets.createdAt, timeRange.end)
         )
@@ -1544,6 +1944,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getSLAComplianceReport(timeRange: { start: Date; end: Date }): Promise<any> {
+    const organizationId = getOrganizationId();
     const [overall] = await db
       .select({
         totalTickets: sql<number>`count(*)`,
@@ -1555,6 +1956,7 @@ export class DatabaseStorage implements IStorage {
       .from(supportTickets)
       .where(
         and(
+          eq(supportTickets.organizationId, organizationId),
           gte(supportTickets.createdAt, timeRange.start),
           lte(supportTickets.createdAt, timeRange.end)
         )
@@ -1571,6 +1973,7 @@ export class DatabaseStorage implements IStorage {
       .from(supportTickets)
       .where(
         and(
+          eq(supportTickets.organizationId, organizationId),
           gte(supportTickets.createdAt, timeRange.start),
           lte(supportTickets.createdAt, timeRange.end)
         )
@@ -1586,6 +1989,7 @@ export class DatabaseStorage implements IStorage {
       .from(supportTickets)
       .where(
         and(
+          eq(supportTickets.organizationId, organizationId),
           gte(supportTickets.createdAt, timeRange.start),
           lte(supportTickets.createdAt, timeRange.end)
         )
@@ -1618,29 +2022,40 @@ export class DatabaseStorage implements IStorage {
 
   // System variables operations
   async getSystemVariables(): Promise<SystemVariable[]> {
+    const organizationId = getOrganizationId();
     return await db
       .select()
       .from(systemVariables)
+      .where(eq(systemVariables.organizationId, organizationId))
       .orderBy(systemVariables.category, systemVariables.key);
   }
 
   async getSystemVariable(key: string): Promise<SystemVariable | undefined> {
+    const organizationId = getOrganizationId();
     const [variable] = await db
       .select()
       .from(systemVariables)
-      .where(eq(systemVariables.key, key));
+      .where(and(
+        eq(systemVariables.key, key),
+        eq(systemVariables.organizationId, organizationId)
+      ));
     return variable;
   }
 
   async createSystemVariable(variableData: InsertSystemVariable): Promise<SystemVariable> {
+    const organizationId = getOrganizationId();
     const [variable] = await db
       .insert(systemVariables)
-      .values(variableData)
+      .values({
+        ...variableData,
+        organizationId
+      })
       .returning();
     return variable;
   }
 
   async updateSystemVariable(key: string, variableData: UpdateSystemVariable): Promise<SystemVariable> {
+    const organizationId = getOrganizationId();
     // First, check if the variable exists
     const existingVariable = await this.getSystemVariable(key);
 
@@ -1649,13 +2064,17 @@ export class DatabaseStorage implements IStorage {
       const [variable] = await db
         .update(systemVariables)
         .set({ ...variableData, updatedAt: new Date() })
-        .where(eq(systemVariables.key, key))
+        .where(and(
+          eq(systemVariables.key, key),
+          eq(systemVariables.organizationId, organizationId)
+        ))
         .returning();
       return variable;
     } else {
       // Create new variable with default values
       const defaultData = {
         key,
+        organizationId,
         value: variableData.value || '',
         description: variableData.description || '',
         category: variableData.category || 'general',
@@ -1673,22 +2092,31 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteSystemVariable(key: string): Promise<void> {
-    await db.delete(systemVariables).where(eq(systemVariables.key, key));
+    const organizationId = getOrganizationId();
+    await db.delete(systemVariables).where(and(
+      eq(systemVariables.key, key),
+      eq(systemVariables.organizationId, organizationId)
+    ));
   }
 
   // System settings operations (access control, domains, etc.)
   async getSystemSetting(key: string): Promise<SystemSetting | undefined> {
+    const organizationId = getOrganizationId();
     const [setting] = await db
       .select()
       .from(systemSettings)
-      .where(eq(systemSettings.key, key));
+      .where(and(
+        eq(systemSettings.key, key),
+        eq(systemSettings.organizationId, organizationId)
+      ));
     return setting;
   }
 
   async upsertSystemSetting(key: string, value: Record<string, any>): Promise<SystemSetting> {
+    const organizationId = getOrganizationId();
     const [setting] = await db
       .insert(systemSettings)
-      .values({ key, value })
+      .values({ key, value, organizationId })
       .onConflictDoUpdate({
         target: systemSettings.key,
         set: { value, updatedAt: new Date() },
@@ -1698,47 +2126,67 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllSystemSettings(): Promise<SystemSetting[]> {
+    const organizationId = getOrganizationId();
     return await db
       .select()
       .from(systemSettings)
+      .where(eq(systemSettings.organizationId, organizationId))
       .orderBy(systemSettings.key);
   }
 
   // User invitation operations
   async getUserInvitations(): Promise<UserInvitation[]> {
+    const organizationId = getOrganizationId();
     return await db
       .select()
       .from(userInvitations)
+      .where(eq(userInvitations.organizationId, organizationId))
       .orderBy(desc(userInvitations.createdAt));
   }
 
   async getUserInvitation(token: string): Promise<UserInvitation | undefined> {
+    const organizationId = getOrganizationId();
     const [invitation] = await db
       .select()
       .from(userInvitations)
-      .where(eq(userInvitations.token, token));
+      .where(and(
+        eq(userInvitations.token, token),
+        eq(userInvitations.organizationId, organizationId)
+      ));
     return invitation;
   }
 
   async createUserInvitation(invitationData: Omit<UserInvitation, 'id' | 'createdAt' | 'updatedAt'>): Promise<UserInvitation> {
+    const organizationId = getOrganizationId();
     const [invitation] = await db
       .insert(userInvitations)
-      .values(invitationData)
+      .values({
+        ...invitationData,
+        organizationId
+      })
       .returning();
     return invitation;
   }
 
   async updateUserInvitation(token: string, data: Partial<Omit<UserInvitation, 'id' | 'token' | 'createdAt' | 'updatedAt'>>): Promise<UserInvitation> {
+    const organizationId = getOrganizationId();
     const [invitation] = await db
       .update(userInvitations)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(userInvitations.token, token))
+      .where(and(
+        eq(userInvitations.token, token),
+        eq(userInvitations.organizationId, organizationId)
+      ))
       .returning();
     return invitation;
   }
 
   async deleteUserInvitation(token: string): Promise<void> {
-    await db.delete(userInvitations).where(eq(userInvitations.token, token));
+    const organizationId = getOrganizationId();
+    await db.delete(userInvitations).where(and(
+      eq(userInvitations.token, token),
+      eq(userInvitations.organizationId, organizationId)
+    ));
   }
 
   // Dashboard analytics
@@ -1748,6 +2196,7 @@ export class DatabaseStorage implements IStorage {
     projects: { current: number; target: number; growth: number };
     tickets: { current: number; target: number; growth: number };
   }> {
+    const organizationId = getOrganizationId();
     const currentYear = new Date().getFullYear();
     const currentDate = new Date();
     const lastMonthDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
@@ -1757,7 +2206,10 @@ export class DatabaseStorage implements IStorage {
     const businessTargets = await db
       .select()
       .from(systemVariables)
-      .where(like(systemVariables.key, '%_target_%'));
+      .where(and(
+        like(systemVariables.key, '%_target_%'),
+        eq(systemVariables.organizationId, organizationId)
+      ));
 
     const getTarget = (targetKey: string, defaultTarget: number) => {
       const target = businessTargets.find(t => t.key === targetKey);
@@ -1768,13 +2220,17 @@ export class DatabaseStorage implements IStorage {
     const [currentRevenue] = await db
       .select({ total: sql<number>`COALESCE(SUM(${invoices.total}), 0)` })
       .from(invoices)
-      .where(eq(invoices.status, 'paid'));
+      .where(and(
+        eq(invoices.status, 'paid'),
+        eq(invoices.organizationId, organizationId)
+      ));
 
     const [lastMonthRevenue] = await db
       .select({ total: sql<number>`COALESCE(SUM(${invoices.total}), 0)` })
       .from(invoices)
       .where(and(
         eq(invoices.status, 'paid'),
+        eq(invoices.organizationId, organizationId),
         sql`${invoices.paidAt} >= ${lastMonthDate.toISOString()}`,
         sql`${invoices.paidAt} < ${currentDate.toISOString()}`
       ));
@@ -1784,6 +2240,7 @@ export class DatabaseStorage implements IStorage {
       .from(invoices)
       .where(and(
         eq(invoices.status, 'paid'),
+        eq(invoices.organizationId, organizationId),
         sql`${invoices.paidAt} >= ${twoMonthsAgoDate.toISOString()}`,
         sql`${invoices.paidAt} < ${lastMonthDate.toISOString()}`
       ));
@@ -1796,13 +2253,17 @@ export class DatabaseStorage implements IStorage {
     const [currentPipeline] = await db
       .select({ total: sql<number>`COALESCE(SUM(${invoices.total}), 0)` })
       .from(invoices)
-      .where(or(eq(invoices.status, 'pending'), eq(invoices.status, 'draft')));
+      .where(and(
+        or(eq(invoices.status, 'pending'), eq(invoices.status, 'draft')),
+        eq(invoices.organizationId, organizationId)
+      ));
 
     const [lastMonthPipeline] = await db
       .select({ total: sql<number>`COALESCE(SUM(${invoices.total}), 0)` })
       .from(invoices)
       .where(and(
         or(eq(invoices.status, 'pending'), eq(invoices.status, 'draft')),
+        eq(invoices.organizationId, organizationId),
         sql`${invoices.createdAt} >= ${lastMonthDate.toISOString()}`,
         sql`${invoices.createdAt} < ${currentDate.toISOString()}`
       ));
@@ -1812,6 +2273,7 @@ export class DatabaseStorage implements IStorage {
       .from(invoices)
       .where(and(
         or(eq(invoices.status, 'pending'), eq(invoices.status, 'draft')),
+        eq(invoices.organizationId, organizationId),
         sql`${invoices.createdAt} >= ${twoMonthsAgoDate.toISOString()}`,
         sql`${invoices.createdAt} < ${lastMonthDate.toISOString()}`
       ));
@@ -1824,13 +2286,17 @@ export class DatabaseStorage implements IStorage {
     const [currentProjects] = await db
       .select({ count: count() })
       .from(projects)
-      .where(or(eq(projects.status, 'in_progress'), eq(projects.status, 'planning')));
+      .where(and(
+        or(eq(projects.status, 'in_progress'), eq(projects.status, 'planning')),
+        eq(projects.organizationId, organizationId)
+      ));
 
     const [lastMonthProjects] = await db
       .select({ count: count() })
       .from(projects)
       .where(and(
         or(eq(projects.status, 'in_progress'), eq(projects.status, 'planning')),
+        eq(projects.organizationId, organizationId),
         sql`${projects.createdAt} >= ${lastMonthDate.toISOString()}`,
         sql`${projects.createdAt} < ${currentDate.toISOString()}`
       ));
@@ -1840,6 +2306,7 @@ export class DatabaseStorage implements IStorage {
       .from(projects)
       .where(and(
         or(eq(projects.status, 'in_progress'), eq(projects.status, 'planning')),
+        eq(projects.organizationId, organizationId),
         sql`${projects.createdAt} >= ${twoMonthsAgoDate.toISOString()}`,
         sql`${projects.createdAt} < ${lastMonthDate.toISOString()}`
       ));
@@ -1852,13 +2319,17 @@ export class DatabaseStorage implements IStorage {
     const [currentTickets] = await db
       .select({ count: count() })
       .from(supportTickets)
-      .where(or(eq(supportTickets.status, 'open'), eq(supportTickets.status, 'in_progress')));
+      .where(and(
+        or(eq(supportTickets.status, 'open'), eq(supportTickets.status, 'in_progress')),
+        eq(supportTickets.organizationId, organizationId)
+      ));
 
     const [lastMonthTickets] = await db
       .select({ count: count() })
       .from(supportTickets)
       .where(and(
         or(eq(supportTickets.status, 'open'), eq(supportTickets.status, 'in_progress')),
+        eq(supportTickets.organizationId, organizationId),
         sql`${supportTickets.createdAt} >= ${lastMonthDate.toISOString()}`,
         sql`${supportTickets.createdAt} < ${currentDate.toISOString()}`
       ));
@@ -1868,6 +2339,7 @@ export class DatabaseStorage implements IStorage {
       .from(supportTickets)
       .where(and(
         or(eq(supportTickets.status, 'open'), eq(supportTickets.status, 'in_progress')),
+        eq(supportTickets.organizationId, organizationId),
         sql`${supportTickets.createdAt} >= ${twoMonthsAgoDate.toISOString()}`,
         sql`${supportTickets.createdAt} < ${lastMonthDate.toISOString()}`
       ));
@@ -1906,6 +2378,7 @@ export class DatabaseStorage implements IStorage {
     revenue: number;
     invoiceCount: number;
   }>> {
+    const organizationId = getOrganizationId();
     // Get revenue trends by grouping paid invoices by month
     const result = await db
       .select({
@@ -1919,6 +2392,7 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(invoices.status, 'paid'),
+          eq(invoices.organizationId, organizationId),
           sql`${invoices.paidAt} >= CURRENT_DATE - INTERVAL '${sql.raw(months.toString())} months'`
         )
       )
@@ -1968,8 +2442,9 @@ export class DatabaseStorage implements IStorage {
     userId?: string;
   } = {}) {
     try {
+      const organizationId = getOrganizationId();
       let query = db.select().from(timeEntries);
-      const conditions = [];
+      const conditions = [eq(timeEntries.organizationId, organizationId)];
 
       if (options.startDate && options.endDate) {
         conditions.push(and(
@@ -2008,6 +2483,7 @@ export class DatabaseStorage implements IStorage {
     rate?: number;
   }) {
     try {
+      const organizationId = getOrganizationId();
       const [result] = await db.insert(timeEntries).values({
         userId: data.userId,
         projectId: data.projectId,
@@ -2017,6 +2493,7 @@ export class DatabaseStorage implements IStorage {
         date: data.date,
         billable: data.billable ?? true,
         rate: data.rate?.toString(),
+        organizationId
       }).returning();
 
       return result;
@@ -2036,6 +2513,7 @@ export class DatabaseStorage implements IStorage {
     rate: number;
   }>) {
     try {
+      const organizationId = getOrganizationId();
       const updateData: any = {};
 
       if (data.projectId) updateData.projectId = data.projectId;
@@ -2048,7 +2526,10 @@ export class DatabaseStorage implements IStorage {
 
       const [result] = await db.update(timeEntries)
         .set(updateData)
-        .where(eq(timeEntries.id, id))
+        .where(and(
+          eq(timeEntries.id, id),
+          eq(timeEntries.organizationId, organizationId)
+        ))
         .returning();
 
       return result;
@@ -2060,7 +2541,11 @@ export class DatabaseStorage implements IStorage {
 
   async deleteTimeEntry(id: string) {
     try {
-      await db.delete(timeEntries).where(eq(timeEntries.id, id));
+      const organizationId = getOrganizationId();
+      await db.delete(timeEntries).where(and(
+        eq(timeEntries.id, id),
+        eq(timeEntries.organizationId, organizationId)
+      ));
     } catch (error) {
       console.error("Error deleting time entry:", error);
       throw error;
@@ -2073,6 +2558,7 @@ export class DatabaseStorage implements IStorage {
     userId: string;
   }) {
     try {
+      const organizationId = getOrganizationId();
       const startDate = options.startDate ? new Date(options.startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const endDate = options.endDate ? new Date(options.endDate) : new Date();
 
@@ -2081,6 +2567,7 @@ export class DatabaseStorage implements IStorage {
         .from(timeEntries)
         .where(and(
           eq(timeEntries.userId, options.userId),
+          eq(timeEntries.organizationId, organizationId),
           gte(timeEntries.date, startDate),
           lte(timeEntries.date, endDate)
         ));

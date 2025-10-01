@@ -58,7 +58,12 @@
       "Read(//tmp/**)",
       "Bash(timeout 5 curl -s \"http://localhost:5000/admin\")",
       "Bash(/dev/null)",
-      "Bash(journalctl:*)"
+      "Bash(journalctl:*)",
+      "Bash(yes \"\")",
+      "Bash(grep:*)",
+      "Bash(test:*)",
+      "Bash(env)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []

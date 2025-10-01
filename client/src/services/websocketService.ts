@@ -4,6 +4,7 @@ import type { Notification } from '@/contexts/NotificationContext';
 interface WebSocketMessage {
   type: 'auth' | 'notification' | 'data_change' | 'auth_success' | 'pong' | 'error';
   userId?: string;
+  organizationId?: string;
   data?: any;
   id?: string;
   notificationType?: string;
@@ -81,10 +82,11 @@ class WebSocketService {
         this.isConnected = true;
         this.notifyConnectionListeners(true);
 
-        // Send authentication message
+        // Send authentication message with organizationId for multi-tenant support
         this.ws?.send(JSON.stringify({
           type: 'auth',
-          userId: this.user.id
+          userId: this.user.id,
+          organizationId: this.user.defaultOrganizationId
         }));
       };
 

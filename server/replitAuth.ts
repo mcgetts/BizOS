@@ -158,18 +158,35 @@ export async function setupAuth(app: Express) {
   ) => {
     const user = {};
     updateUserSession(user, tokens);
-    
+
     // Retrieve invitation token from session if present
     const invitationToken = req.session?.invitationToken;
-    
+
     try {
-      await upsertUser(tokens.claims(), invitationToken);
-      
+      const claims = tokens.claims();
+      await upsertUser(claims, invitationToken);
+
       // Clear invitation token from session after use
       if (invitationToken) {
         delete req.session.invitationToken;
       }
-      
+
+      // Fetch the full user object from database to include defaultOrganizationId
+      const dbUser = await storage.getUser(claims["sub"]);
+      if (dbUser) {
+        Object.assign(user, {
+          id: dbUser.id,
+          email: dbUser.email,
+          firstName: dbUser.firstName,
+          lastName: dbUser.lastName,
+          role: dbUser.role,
+          enhancedRole: dbUser.enhancedRole,
+          department: dbUser.department,
+          authProvider: dbUser.authProvider,
+          defaultOrganizationId: dbUser.defaultOrganizationId, // For multi-tenant support
+        });
+      }
+
       verified(null, user);
     } catch (error) {
       // Pass error to passport
@@ -279,6 +296,7 @@ export async function setupAuth(app: Express) {
           enhancedRole: user.enhancedRole, // Critical: Include enhancedRole for UI role display
           department: user.department,
           authProvider: user.authProvider,
+          defaultOrganizationId: user.defaultOrganizationId, // For multi-tenant support
           isLocal: true
         };
 

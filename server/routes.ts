@@ -12,6 +12,7 @@ import { RBACMiddleware, PermissionChecks } from "./security/rbacMiddleware";
 import { mfaRoutes } from "./routes/mfaRoutes.js";
 import { authMfaRoutes } from "./routes/authMfaRoutes.js";
 import { sessionRoutes } from "./routes/sessionRoutes.js";
+import { resolveTenant, requireTenant } from "./middleware/tenantMiddleware";
 import {
   insertUserSchema,
   registerUserSchema,
@@ -268,6 +269,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/mfa', mfaRoutes);
   app.use('/api/auth', authMfaRoutes);
   app.use('/api/sessions', sessionRoutes);
+
+  // Apply tenant middleware to all authenticated API routes
+  // This must come AFTER auth setup and BEFORE route definitions
+  app.use('/api/*', isAuthenticated, resolveTenant);
 
   // Initialize integration manager for third-party notifications
   const integrationManager = new IntegrationManager(defaultIntegrationConfig);

@@ -55,6 +55,10 @@ export const sessions = pgTable(
 // User storage table (mandatory for Replit Auth)
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // Multi-tenancy: users can belong to multiple organizations via organizationMembers
+  // defaultOrganizationId stores the user's preferred/last-used organization
+  defaultOrganizationId: varchar("default_organization_id").references(() => organizations.id),
+
   email: varchar("email").unique(),
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
@@ -90,11 +94,15 @@ export const users = pgTable("users", {
   twoFactorTempExpires: timestamp("two_factor_temp_expires"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  // Performance index for default organization lookups
+  index("idx_users_default_org").on(table.defaultOrganizationId),
+]);
 
 // Clients table (now represents individual contacts within companies)
 export const clients = pgTable("clients", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   name: varchar("name").notNull(),
   email: varchar("email"),
   phone: varchar("phone"),
@@ -117,11 +125,14 @@ export const clients = pgTable("clients", {
   totalValue: decimal("total_value", { precision: 10, scale: 2 }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_clients_org").on(table.organizationId),
+]);
 
 // Projects table
 export const projects = pgTable("projects", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   name: varchar("name").notNull(),
   description: text("description"),
   companyId: varchar("company_id").references(() => companies.id),
@@ -145,11 +156,14 @@ export const projects = pgTable("projects", {
   originalValue: decimal("original_value", { precision: 10, scale: 2 }), // Original opportunity value
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_projects_org").on(table.organizationId),
+]);
 
 // Tasks table
 export const tasks = pgTable("tasks", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   title: varchar("title").notNull(),
   description: text("description"),
   projectId: varchar("project_id").references(() => projects.id),
@@ -165,11 +179,14 @@ export const tasks = pgTable("tasks", {
   tags: text("tags").array(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_tasks_org").on(table.organizationId),
+]);
 
 // Time entries table
 export const timeEntries = pgTable("time_entries", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   userId: varchar("user_id").references(() => users.id),
   projectId: varchar("project_id").references(() => projects.id),
   taskId: varchar("task_id").references(() => tasks.id),
@@ -179,11 +196,14 @@ export const timeEntries = pgTable("time_entries", {
   billable: boolean("billable").default(true),
   rate: decimal("rate", { precision: 8, scale: 2 }),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_time_entries_org").on(table.organizationId),
+]);
 
 // Invoices table
 export const invoices = pgTable("invoices", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   invoiceNumber: varchar("invoice_number").unique().notNull(),
   companyId: varchar("company_id").references(() => companies.id),
   clientId: varchar("client_id").references(() => clients.id), // Contact person
@@ -198,11 +218,14 @@ export const invoices = pgTable("invoices", {
   terms: text("terms"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_invoices_org").on(table.organizationId),
+]);
 
 // Expenses table
 export const expenses = pgTable("expenses", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   description: text("description").notNull(),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   category: varchar("category"), // travel, meals, supplies, software, etc.
@@ -213,11 +236,14 @@ export const expenses = pgTable("expenses", {
   reimbursed: boolean("reimbursed").default(false),
   date: timestamp("date").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_expenses_org").on(table.organizationId),
+]);
 
 // Documents table
 export const documents = pgTable("documents", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   name: varchar("name").notNull(),
   description: text("description"),
   fileUrl: varchar("file_url").notNull(),
@@ -232,11 +258,14 @@ export const documents = pgTable("documents", {
   tags: text("tags").array(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_documents_org").on(table.organizationId),
+]);
 
 // Knowledge articles table
 export const knowledgeArticles = pgTable("knowledge_articles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   title: varchar("title").notNull(),
   content: text("content").notNull(),
   category: varchar("category"), // sop, training, policy, faq, etc.
@@ -247,11 +276,14 @@ export const knowledgeArticles = pgTable("knowledge_articles", {
   viewCount: integer("view_count").default(0),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_knowledge_articles_org").on(table.organizationId),
+]);
 
 // Marketing campaigns table
 export const marketingCampaigns = pgTable("marketing_campaigns", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   name: varchar("name").notNull(),
   description: text("description"),
   type: varchar("type"), // email, social, paid_ads, content, etc.
@@ -266,11 +298,14 @@ export const marketingCampaigns = pgTable("marketing_campaigns", {
   managerId: varchar("manager_id").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_marketing_campaigns_org").on(table.organizationId),
+]);
 
 // Opportunity file attachments table
 export const opportunityFileAttachments = pgTable("opportunity_file_attachments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   opportunityId: varchar("opportunity_id").references(() => salesOpportunities.id, { onDelete: "cascade" }),
   communicationId: varchar("communication_id").references(() => opportunityCommunications.id, { onDelete: "cascade" }), // Optional - link to specific communication
   fileName: varchar("file_name").notNull(),
@@ -284,11 +319,14 @@ export const opportunityFileAttachments = pgTable("opportunity_file_attachments"
   uploadedAt: timestamp("uploaded_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_opportunity_file_attachments_org").on(table.organizationId),
+]);
 
 // Support tickets table
 export const supportTickets = pgTable("support_tickets", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   ticketNumber: varchar("ticket_number").unique().notNull(),
   title: varchar("title").notNull(),
   description: text("description").notNull(),
@@ -317,11 +355,14 @@ export const supportTickets = pgTable("support_tickets", {
   tags: text("tags"), // JSON array of tags for categorization
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_support_tickets_org").on(table.organizationId),
+]);
 
 // Support ticket comments table for internal collaboration
 export const supportTicketComments = pgTable("support_ticket_comments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   ticketId: varchar("ticket_id").references(() => supportTickets.id, { onDelete: 'cascade' }).notNull(),
   userId: varchar("user_id").references(() => users.id).notNull(),
   content: text("content").notNull(),
@@ -329,11 +370,14 @@ export const supportTicketComments = pgTable("support_ticket_comments", {
   attachments: text("attachments"), // JSON array of file attachments
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_support_ticket_comments_org").on(table.organizationId),
+]);
 
 // SLA configuration table
 export const slaConfigurations = pgTable("sla_configurations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   name: varchar("name").notNull(),
   priority: varchar("priority").notNull(), // low, medium, high, urgent
   category: varchar("category"), // technical, billing, general, etc.
@@ -345,11 +389,14 @@ export const slaConfigurations = pgTable("sla_configurations", {
   createdBy: varchar("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_sla_configurations_org").on(table.organizationId),
+]);
 
 // Ticket escalation history
 export const ticketEscalations = pgTable("ticket_escalations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   ticketId: varchar("ticket_id").references(() => supportTickets.id, { onDelete: 'cascade' }).notNull(),
   fromUserId: varchar("from_user_id").references(() => users.id),
   toUserId: varchar("to_user_id").references(() => users.id).notNull(),
@@ -357,11 +404,14 @@ export const ticketEscalations = pgTable("ticket_escalations", {
   reason: text("reason").notNull(),
   automatedRule: varchar("automated_rule"), // Rule that triggered auto-escalation
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_ticket_escalations_org").on(table.organizationId),
+]);
 
 // Company goals table
 export const companyGoals = pgTable("company_goals", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   metric: varchar("metric").notNull(), // revenue, pipeline, projects, tickets
   target: decimal("target", { precision: 12, scale: 2 }).notNull(),
   year: integer("year").notNull(),
@@ -370,11 +420,14 @@ export const companyGoals = pgTable("company_goals", {
   createdBy: varchar("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_company_goals_org").on(table.organizationId),
+]);
 
 // System variables table
 export const systemVariables = pgTable("system_variables", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   key: varchar("key").unique().notNull(), // e.g., 'default_currency', 'date_format', 'timezone'
   value: text("value").notNull(), // e.g., 'GBP', 'DD/MM/YYYY', 'Europe/London'
   description: text("description"), // Human-readable description
@@ -384,11 +437,14 @@ export const systemVariables = pgTable("system_variables", {
   updatedBy: varchar("updated_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_system_variables_org").on(table.organizationId),
+]);
 
 // Client interactions table
 export const clientInteractions = pgTable("client_interactions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   clientId: varchar("client_id").references(() => clients.id),
   userId: varchar("user_id").references(() => users.id),
   type: varchar("type"), // call, email, meeting, note, etc.
@@ -397,11 +453,70 @@ export const clientInteractions = pgTable("client_interactions", {
   outcome: varchar("outcome"), // positive, neutral, negative
   followUpDate: timestamp("follow_up_date"),
   createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_client_interactions_org").on(table.organizationId),
+]);
+
+// ====================================
+// MULTI-TENANCY TABLES
+// ====================================
+
+// Organizations table - represents separate tenant instances
+export const organizations = pgTable("organizations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name").notNull(),
+  subdomain: varchar("subdomain").notNull().unique(), // For tenant routing (e.g., "acme")
+  slug: varchar("slug").notNull().unique(), // URL-safe identifier
+
+  // Billing & plan information
+  planTier: varchar("plan_tier").default("starter"), // starter, professional, enterprise
+  status: varchar("status").default("trial"), // trial, active, suspended, cancelled
+  billingEmail: varchar("billing_email"),
+  billingStatus: varchar("billing_status").default("current"), // current, past_due, cancelled
+
+  // Limits & features
+  maxUsers: integer("max_users").default(5), // User limit per plan
+  settings: jsonb("settings").$type<{
+    features?: string[];
+    branding?: { logo?: string; primaryColor?: string };
+    notifications?: { email?: boolean; slack?: boolean };
+  }>(),
+
+  // Ownership
+  ownerId: varchar("owner_id"), // Will reference users.id after users table is defined
+
+  // Timestamps
+  trialEndsAt: timestamp("trial_ends_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+// Organization Members - junction table for user-organization relationships
+export const organizationMembers = pgTable("organization_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
+  userId: varchar("user_id"), // Will reference users.id after users table is defined
+
+  // Role within this organization
+  role: varchar("role").default("member"), // owner, admin, member
+
+  // Status
+  status: varchar("status").default("active"), // active, invited, suspended
+  invitedBy: varchar("invited_by"), // User ID who sent the invitation
+
+  // Timestamps
+  joinedAt: timestamp("joined_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  // Composite unique constraint: user can only be in an organization once
+  index("idx_org_members_unique").on(table.organizationId, table.userId),
+]);
 
 // Companies table
 export const companies = pgTable("companies", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   name: varchar("name").notNull(),
   industry: varchar("industry").$type<Industry>(),
   website: varchar("website"),
@@ -419,11 +534,15 @@ export const companies = pgTable("companies", {
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  // Performance index for tenant queries
+  index("idx_companies_org").on(table.organizationId),
+]);
 
 // Sales opportunities table for the CRM pipeline
 export const salesOpportunities = pgTable("sales_opportunities", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   title: varchar("title").notNull(),
   description: text("description"),
   companyId: varchar("company_id").references(() => companies.id),
@@ -447,11 +566,14 @@ export const salesOpportunities = pgTable("sales_opportunities", {
   lastActivityDate: timestamp("last_activity_date"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_sales_opportunities_org").on(table.organizationId),
+]);
 
 // Opportunity next steps table
 export const opportunityNextSteps = pgTable("opportunity_next_steps", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   opportunityId: varchar("opportunity_id").references(() => salesOpportunities.id, { onDelete: "cascade" }),
   title: varchar("title").notNull(),
   description: text("description"),
@@ -464,11 +586,14 @@ export const opportunityNextSteps = pgTable("opportunity_next_steps", {
   createdBy: varchar("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_opportunity_next_steps_org").on(table.organizationId),
+]);
 
 // Opportunity communications table
 export const opportunityCommunications = pgTable("opportunity_communications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   opportunityId: varchar("opportunity_id").references(() => salesOpportunities.id, { onDelete: "cascade" }),
   type: varchar("type").notNull(), // call, email, meeting, demo, proposal, contract
   subject: varchar("subject"),
@@ -482,11 +607,14 @@ export const opportunityCommunications = pgTable("opportunity_communications", {
   communicationDate: timestamp("communication_date"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_opportunity_communications_org").on(table.organizationId),
+]);
 
 // Opportunity stakeholders table
 export const opportunityStakeholders = pgTable("opportunity_stakeholders", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   opportunityId: varchar("opportunity_id").references(() => salesOpportunities.id, { onDelete: "cascade" }),
   name: varchar("name").notNull(),
   role: varchar("role"), // decision_maker, influencer, user, blocker, champion
@@ -498,11 +626,14 @@ export const opportunityStakeholders = pgTable("opportunity_stakeholders", {
   createdBy: varchar("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_opportunity_stakeholders_org").on(table.organizationId),
+]);
 
 // Opportunity activity history table
 export const opportunityActivityHistory = pgTable("opportunity_activity_history", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   opportunityId: varchar("opportunity_id").references(() => salesOpportunities.id, { onDelete: "cascade" }),
   action: varchar("action").notNull(), // e.g., "stage_changed", "next_step_added", "communication_logged"
   details: text("details"), // Human-readable description of what happened
@@ -511,11 +642,14 @@ export const opportunityActivityHistory = pgTable("opportunity_activity_history"
   performedBy: varchar("performed_by").references(() => users.id),
   performedAt: timestamp("performed_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_opportunity_activity_history_org").on(table.organizationId),
+]);
 
 // Project templates table
 export const projectTemplates = pgTable("project_templates", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   name: varchar("name").notNull(),
   description: text("description"),
   industry: varchar("industry").$type<Industry>(),
@@ -528,11 +662,14 @@ export const projectTemplates = pgTable("project_templates", {
   createdBy: varchar("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_project_templates_org").on(table.organizationId),
+]);
 
 // Task templates for project templates
 export const taskTemplates = pgTable("task_templates", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   projectTemplateId: varchar("project_template_id").references(() => projectTemplates.id, { onDelete: "cascade" }),
   title: varchar("title").notNull(),
   description: text("description"),
@@ -543,21 +680,27 @@ export const taskTemplates = pgTable("task_templates", {
   dependsOnPhase: varchar("depends_on_phase"), // previous phase dependency
   tags: text("tags").array(),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_task_templates_org").on(table.organizationId),
+]);
 
 // Task dependencies table
 export const taskDependencies = pgTable("task_dependencies", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   taskId: varchar("task_id").references(() => tasks.id, { onDelete: "cascade" }),
   dependsOnTaskId: varchar("depends_on_task_id").references(() => tasks.id, { onDelete: "cascade" }),
   dependencyType: varchar("dependency_type").default("finish_to_start"), // finish_to_start, start_to_start, finish_to_finish, start_to_finish
   lag: integer("lag").default(0), // lag time in days
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_task_dependencies_org").on(table.organizationId),
+]);
 
 // Project comments and activity feed
 export const projectComments = pgTable("project_comments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   projectId: varchar("project_id").references(() => projects.id, { onDelete: "cascade" }),
   userId: varchar("user_id").references(() => users.id),
   content: text("content").notNull(),
@@ -566,11 +709,14 @@ export const projectComments = pgTable("project_comments", {
   attachments: jsonb("attachments"), // file references
   editedAt: timestamp("edited_at"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_project_comments_org").on(table.organizationId),
+]);
 
 // Task comments for task-specific discussions
 export const taskComments = pgTable("task_comments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   taskId: varchar("task_id").references(() => tasks.id, { onDelete: "cascade" }),
   userId: varchar("user_id").references(() => users.id),
   content: text("content").notNull(),
@@ -579,11 +725,14 @@ export const taskComments = pgTable("task_comments", {
   attachments: jsonb("attachments"), // file references
   editedAt: timestamp("edited_at"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_task_comments_org").on(table.organizationId),
+]);
 
 // Project activity log for automatic system updates
 export const projectActivity = pgTable("project_activity", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   projectId: varchar("project_id").references(() => projects.id, { onDelete: "cascade" }),
   userId: varchar("user_id").references(() => users.id),
   action: varchar("action").notNull(), // created, updated, task_added, file_uploaded, etc.
@@ -591,11 +740,14 @@ export const projectActivity = pgTable("project_activity", {
   entityId: varchar("entity_id"),
   details: jsonb("details"), // structured data about the change
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_project_activity_org").on(table.organizationId),
+]);
 
 // User capacity and availability tracking
 export const userCapacity = pgTable("user_capacity", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   userId: varchar("user_id").references(() => users.id),
   hoursPerDay: decimal("hours_per_day", { precision: 4, scale: 2 }).default("8.00"), // Standard working hours per day
   hoursPerWeek: decimal("hours_per_week", { precision: 4, scale: 2 }).default("40.00"), // Standard working hours per week
@@ -604,11 +756,14 @@ export const userCapacity = pgTable("user_capacity", {
   effectiveTo: timestamp("effective_to"), // null means current
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_user_capacity_org").on(table.organizationId),
+]);
 
 // User availability periods (vacations, holidays, sick days, etc.)
 export const userAvailability = pgTable("user_availability", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   userId: varchar("user_id").references(() => users.id),
   type: varchar("type").notNull(), // vacation, sick, holiday, training, partial_day
   status: varchar("status").default("approved"), // pending, approved, denied
@@ -620,11 +775,14 @@ export const userAvailability = pgTable("user_availability", {
   approvedAt: timestamp("approved_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_user_availability_org").on(table.organizationId),
+]);
 
 // User skills and competencies for resource allocation
 export const userSkills = pgTable("user_skills", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   userId: varchar("user_id").references(() => users.id),
   skillName: varchar("skill_name").notNull(),
   category: varchar("category"), // technical, soft_skills, domain_knowledge, tools
@@ -635,11 +793,14 @@ export const userSkills = pgTable("user_skills", {
   lastUsed: timestamp("last_used"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_user_skills_org").on(table.organizationId),
+]);
 
 // Resource allocations for projects and tasks
 export const resourceAllocations = pgTable("resource_allocations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   userId: varchar("user_id").references(() => users.id),
   projectId: varchar("project_id").references(() => projects.id),
   taskId: varchar("task_id").references(() => tasks.id), // optional - can be project-level
@@ -655,21 +816,27 @@ export const resourceAllocations = pgTable("resource_allocations", {
   createdBy: varchar("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_resource_allocations_org").on(table.organizationId),
+]);
 
 // Budget categories for more granular budget tracking
 export const budgetCategories = pgTable("budget_categories", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   name: varchar("name").notNull(),
   description: text("description"),
   categoryType: varchar("category_type").notNull(), // labor, materials, software, travel, overhead
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_budget_categories_org").on(table.organizationId),
+]);
 
 // Project budget breakdown by category
 export const projectBudgets = pgTable("project_budgets", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   projectId: varchar("project_id").references(() => projects.id),
   categoryId: varchar("category_id").references(() => budgetCategories.id),
   budgetedAmount: decimal("budgeted_amount", { precision: 10, scale: 2 }).notNull(),
@@ -679,11 +846,14 @@ export const projectBudgets = pgTable("project_budgets", {
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_project_budgets_org").on(table.organizationId),
+]);
 
 // Enhanced time entry approval workflow
 export const timeEntryApprovals = pgTable("time_entry_approvals", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   timeEntryId: varchar("time_entry_id").references(() => timeEntries.id, { onDelete: "cascade" }),
   status: varchar("status").default("pending"), // pending, approved, rejected, needs_revision
   approvedBy: varchar("approved_by").references(() => users.id),
@@ -692,11 +862,14 @@ export const timeEntryApprovals = pgTable("time_entry_approvals", {
   approverNotes: text("approver_notes"),
   submittedAt: timestamp("submitted_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_time_entry_approvals_org").on(table.organizationId),
+]);
 
 // Workload snapshots for historical tracking and reporting
 export const workloadSnapshots = pgTable("workload_snapshots", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   userId: varchar("user_id").references(() => users.id),
   snapshotDate: timestamp("snapshot_date").notNull(),
   totalAllocatedHours: decimal("total_allocated_hours", { precision: 6, scale: 2 }).notNull(),
@@ -707,11 +880,14 @@ export const workloadSnapshots = pgTable("workload_snapshots", {
   activeProjectsCount: integer("active_projects_count").default(0),
   activeTasksCount: integer("active_tasks_count").default(0),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_workload_snapshots_org").on(table.organizationId),
+]);
 
 // Notifications table for real-time notifications
 export const notifications = pgTable("notifications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   userId: varchar("user_id").references(() => users.id).notNull(),
   type: varchar("type").notNull(), // task_created, task_updated, task_completed, project_updated, comment_added, dependency_changed
   title: varchar("title").notNull(),
@@ -720,7 +896,9 @@ export const notifications = pgTable("notifications", {
   read: boolean("read").default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_notifications_org").on(table.organizationId),
+]);
 
 // ====================================
 // PHASE 2: ENHANCED SECURITY & RBAC TABLES
@@ -729,6 +907,7 @@ export const notifications = pgTable("notifications", {
 // Role definitions and permissions
 export const roles = pgTable("roles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   name: varchar("name").notNull().unique(),
   displayName: varchar("display_name").notNull(),
   description: text("description"),
@@ -740,11 +919,14 @@ export const roles = pgTable("roles", {
   createdBy: varchar("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_roles_org").on(table.organizationId),
+]);
 
 // User role assignments (many-to-many with additional context)
 export const userRoleAssignments = pgTable("user_role_assignments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
   roleId: varchar("role_id").references(() => roles.id, { onDelete: "cascade" }).notNull(),
   assignedBy: varchar("assigned_by").references(() => users.id).notNull(),
@@ -753,11 +935,14 @@ export const userRoleAssignments = pgTable("user_role_assignments", {
   isActive: boolean("is_active").default(true),
   reason: text("reason"), // Why this role was assigned
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_user_role_assignments_org").on(table.organizationId),
+]);
 
 // User sessions for enhanced session management
 export const userSessions = pgTable("user_sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
   sessionId: varchar("session_id").notNull().unique(), // Links to sessions table
   deviceInfo: jsonb("device_info"), // Browser, OS, etc.
@@ -768,11 +953,14 @@ export const userSessions = pgTable("user_sessions", {
   lastActivity: timestamp("last_activity").defaultNow(),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_user_sessions_org").on(table.organizationId),
+]);
 
 // Comprehensive audit log
 export const auditLogs = pgTable("audit_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   userId: varchar("user_id").references(() => users.id), // Can be null for system actions
   sessionId: varchar("session_id"), // Link to user session
   action: varchar("action").notNull(), // create, read, update, delete, login, logout, etc.
@@ -804,11 +992,14 @@ export const auditLogs = pgTable("audit_logs", {
 
   timestamp: timestamp("timestamp").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_audit_logs_org").on(table.organizationId),
+]);
 
 // Security events for monitoring
 export const securityEvents = pgTable("security_events", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   userId: varchar("user_id").references(() => users.id),
   eventType: varchar("event_type").notNull(), // login_failed, login_success, mfa_enabled, password_changed, etc.
   severity: varchar("severity").notNull().default("info"), // low, medium, high, critical
@@ -837,11 +1028,14 @@ export const securityEvents = pgTable("security_events", {
 
   timestamp: timestamp("timestamp").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_security_events_org").on(table.organizationId),
+]);
 
 // Data access logs for sensitive resources
 export const dataAccessLogs = pgTable("data_access_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   userId: varchar("user_id").references(() => users.id).notNull(),
   resource: varchar("resource").notNull().$type<PermissionResource>(),
   resourceId: varchar("resource_id").notNull(),
@@ -864,11 +1058,14 @@ export const dataAccessLogs = pgTable("data_access_logs", {
 
   timestamp: timestamp("timestamp").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_data_access_logs_org").on(table.organizationId),
+]);
 
 // Permission exceptions and temporary access
 export const permissionExceptions = pgTable("permission_exceptions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   userId: varchar("user_id").references(() => users.id).notNull(),
   resource: varchar("resource").notNull().$type<PermissionResource>(),
   action: varchar("action").notNull().$type<PermissionAction>(),
@@ -888,11 +1085,14 @@ export const permissionExceptions = pgTable("permission_exceptions", {
   lastUsedAt: timestamp("last_used_at"),
 
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_permission_exceptions_org").on(table.organizationId),
+]);
 
 // Multi-Factor Authentication tokens
 export const mfaTokens = pgTable("mfa_tokens", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   userId: varchar("user_id").references(() => users.id).notNull(),
 
   // Token details
@@ -911,7 +1111,9 @@ export const mfaTokens = pgTable("mfa_tokens", {
   lastUsedAt: timestamp("last_used_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_mfa_tokens_org").on(table.organizationId),
+]);
 
 // ====================================
 // ACCESS CONTROL TABLES
@@ -920,36 +1122,42 @@ export const mfaTokens = pgTable("mfa_tokens", {
 // System settings for access control
 export const systemSettings = pgTable("system_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   key: varchar("key").notNull().unique(),
   value: jsonb("value"),
   description: text("description"),
   updatedBy: varchar("updated_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_system_settings_org").on(table.organizationId),
+]);
 
 // User invitations for controlled access
 export const userInvitations = pgTable("user_invitations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   token: varchar("token").notNull().unique(),
   email: varchar("email").notNull(),
   role: varchar("role").default("employee").$type<UserRole>(),
   invitedBy: varchar("invited_by").references(() => users.id).notNull(),
-  
+
   // Status tracking
   status: varchar("status").default("pending"), // pending, accepted, expired, revoked
   acceptedAt: timestamp("accepted_at"),
   acceptedByUserId: varchar("accepted_by_user_id").references(() => users.id),
-  
+
   // Expiration
   expiresAt: timestamp("expires_at").notNull(),
-  
+
   // Metadata
   notes: text("notes"),
-  
+
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_user_invitations_org").on(table.organizationId),
+]);
 
 // Relations
 export const userRelations = relations(users, ({ many }) => ({
