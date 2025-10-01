@@ -1591,6 +1591,19 @@ export const insertUserInvitationSchema = createInsertSchema(userInvitations).om
 
 export const updateUserInvitationSchema = insertUserInvitationSchema.partial();
 
+// API request schemas for access control
+export const accessControlDomainsSchema = z.object({
+  domains: z.array(z.string().min(1)).default([]),
+  requireDomain: z.boolean().default(false),
+});
+
+export const createInvitationSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  role: z.enum(['admin', 'manager', 'employee', 'client']).default('employee'),
+  expiresInDays: z.number().int().positive().max(90).optional(),
+  notes: z.string().max(500).optional(),
+});
+
 // Enhanced user schema with security fields
 export const insertEnhancedUserSchema = createInsertSchema(users).omit({
   id: true,

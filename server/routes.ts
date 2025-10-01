@@ -90,6 +90,9 @@ import {
   // Notifications
   notifications,
   insertNotificationSchema,
+  // Access control schemas
+  accessControlDomainsSchema,
+  createInvitationSchema,
 } from "@shared/schema";
 import {
   calculateUserWorkload,
@@ -106,6 +109,7 @@ import { healthCheckService } from "./monitoring/healthCheck.js";
 import { sentryService } from "./monitoring/sentryService.js";
 import { dataExporter } from "./export/dataExporter.js";
 import { createBackupScheduler } from "./backup/backupScheduler.js";
+import { accessControlService } from "./security/accessControlService.js";
 import passport from "passport";
 
 // Initialize backup scheduler
@@ -5386,6 +5390,161 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: 'SMTP connection test failed', 
         error: error instanceof Error ? error.message : String(error)
       });
+    }
+  });
+
+  // Access Control Management (admin only)
+  
+  // Get current access control settings
+  app.get('/api/admin/access-control/settings', requireRole('admin'), async (req, res) => {
+    try {
+      const settings = await accessControlService.getAllowedDomains();
+      res.json(settings);
+    } catch (error) {
+      sentryService.captureException(error as Error, {
+        feature: 'access_control_get_settings',
+        userId: req.user?.id
+      });
+      res.status(500).json({ message: 'Failed to retrieve access control settings' });
+    }
+  });
+
+  // Update allowed domains
+  app.post('/api/admin/access-control/domains', requireRole('admin'), async (req, res) => {
+    try {
+      // Validate request body with Zod
+      const validation = accessControlDomainsSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          message: 'Invalid request data', 
+          errors: validation.error.errors 
+        });
+      }
+
+      const { domains, requireDomain } = validation.data;
+      
+      // Normalize domains: lowercase, trim, deduplicate
+      const normalizedDomains = [...new Set(
+        domains.map(d => d.toLowerCase().trim()).filter(d => d.length > 0)
+      )];
+
+      const success = await accessControlService.setAllowedDomains(
+        normalizedDomains,
+        requireDomain
+      );
+
+      if (success) {
+        res.json({ 
+          message: 'Access control settings updated successfully', 
+          domains: normalizedDomains, 
+          requireDomain 
+        });
+      } else {
+        res.status(500).json({ message: 'Failed to update access control settings' });
+      }
+    } catch (error) {
+      sentryService.captureException(error as Error, {
+        feature: 'access_control_update_domains',
+        userId: req.user?.id
+      });
+      res.status(500).json({ message: 'Failed to update access control settings' });
+    }
+  });
+
+  // Get all invitations
+  app.get('/api/admin/invitations', requireRole('admin'), async (req, res) => {
+    try {
+      const invitations = await accessControlService.getAllInvitations();
+      res.json(invitations);
+    } catch (error) {
+      sentryService.captureException(error as Error, {
+        feature: 'access_control_get_invitations',
+        userId: req.user?.id
+      });
+      res.status(500).json({ message: 'Failed to retrieve invitations' });
+    }
+  });
+
+  // Create new invitation
+  app.post('/api/admin/invitations', requireRole('admin'), async (req, res) => {
+    try {
+      // Validate request body with Zod
+      const validation = createInvitationSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          message: 'Invalid request data', 
+          errors: validation.error.errors 
+        });
+      }
+
+      const { email, role, expiresInDays, notes } = validation.data;
+
+      // Additional security: only allow admin invitations if user is admin
+      // (This is redundant since we already have requireRole('admin'), but explicit is better)
+      if (role === 'admin' && req.user?.role !== 'admin') {
+        return res.status(403).json({ 
+          message: 'Only administrators can create admin invitations' 
+        });
+      }
+
+      const result = await accessControlService.createInvitation({
+        email: email.toLowerCase().trim(),
+        role,
+        invitedBy: req.user?.id || '',
+        expiresInDays,
+        notes
+      });
+
+      res.status(201).json({
+        message: 'Invitation created successfully',
+        token: result.token,
+        expiresAt: result.expiresAt,
+        inviteUrl: `${req.protocol}://${req.get('host')}/api/login?invite=${result.token}`
+      });
+    } catch (error) {
+      sentryService.captureException(error as Error, {
+        feature: 'access_control_create_invitation',
+        userId: req.user?.id
+      });
+      res.status(500).json({ 
+        message: error instanceof Error ? error.message : 'Failed to create invitation' 
+      });
+    }
+  });
+
+  // Revoke invitation
+  app.delete('/api/admin/invitations/:token', requireRole('admin'), async (req, res) => {
+    try {
+      const { token } = req.params;
+
+      if (!token) {
+        return res.status(400).json({ message: 'Token is required' });
+      }
+
+      await accessControlService.revokeInvitation(token);
+      res.json({ message: 'Invitation revoked successfully' });
+    } catch (error) {
+      sentryService.captureException(error as Error, {
+        feature: 'access_control_revoke_invitation',
+        userId: req.user?.id
+      });
+      res.status(500).json({ 
+        message: error instanceof Error ? error.message : 'Failed to revoke invitation' 
+      });
+    }
+  });
+
+  // Cleanup expired invitations
+  app.post('/api/admin/invitations/cleanup', requireRole('admin'), async (req, res) => {
+    try {
+      const cleaned = await accessControlService.cleanupExpiredInvitations();
+      res.json({ message: `Cleaned up ${cleaned} expired invitation(s)`, count: cleaned });
+    } catch (error) {
+      sentryService.captureException(error as Error, {
+        feature: 'access_control_cleanup_invitations',
+        userId: req.user?.id
+      });
+      res.status(500).json({ message: 'Failed to cleanup expired invitations' });
     }
   });
 

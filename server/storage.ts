@@ -69,6 +69,12 @@ import {
   type SystemVariable,
   type TimeEntry,
   type ClientInteraction,
+  systemSettings,
+  type InsertSystemSetting,
+  type SystemSetting,
+  userInvitations,
+  type InsertUserInvitation,
+  type UserInvitation,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, like, sql, count, gte, lte } from "drizzle-orm";
@@ -212,6 +218,18 @@ export interface IStorage {
   createSystemVariable(variable: InsertSystemVariable): Promise<SystemVariable>;
   updateSystemVariable(key: string, variable: UpdateSystemVariable): Promise<SystemVariable>;
   deleteSystemVariable(key: string): Promise<void>;
+
+  // System settings operations (access control, domains, etc.)
+  getSystemSetting(key: string): Promise<SystemSetting | undefined>;
+  upsertSystemSetting(key: string, value: Record<string, any>): Promise<SystemSetting>;
+  getAllSystemSettings(): Promise<SystemSetting[]>;
+
+  // User invitation operations
+  getUserInvitations(): Promise<UserInvitation[]>;
+  getUserInvitation(token: string): Promise<UserInvitation | undefined>;
+  createUserInvitation(invitation: Omit<UserInvitation, 'id' | 'createdAt' | 'updatedAt'>): Promise<UserInvitation>;
+  updateUserInvitation(token: string, data: Partial<Omit<UserInvitation, 'id' | 'token' | 'createdAt' | 'updatedAt'>>): Promise<UserInvitation>;
+  deleteUserInvitation(token: string): Promise<void>;
 
   // Dashboard analytics
   getDashboardKPIs(): Promise<{
@@ -1656,6 +1674,71 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSystemVariable(key: string): Promise<void> {
     await db.delete(systemVariables).where(eq(systemVariables.key, key));
+  }
+
+  // System settings operations (access control, domains, etc.)
+  async getSystemSetting(key: string): Promise<SystemSetting | undefined> {
+    const [setting] = await db
+      .select()
+      .from(systemSettings)
+      .where(eq(systemSettings.key, key));
+    return setting;
+  }
+
+  async upsertSystemSetting(key: string, value: Record<string, any>): Promise<SystemSetting> {
+    const [setting] = await db
+      .insert(systemSettings)
+      .values({ key, value })
+      .onConflictDoUpdate({
+        target: systemSettings.key,
+        set: { value, updatedAt: new Date() },
+      })
+      .returning();
+    return setting;
+  }
+
+  async getAllSystemSettings(): Promise<SystemSetting[]> {
+    return await db
+      .select()
+      .from(systemSettings)
+      .orderBy(systemSettings.key);
+  }
+
+  // User invitation operations
+  async getUserInvitations(): Promise<UserInvitation[]> {
+    return await db
+      .select()
+      .from(userInvitations)
+      .orderBy(desc(userInvitations.createdAt));
+  }
+
+  async getUserInvitation(token: string): Promise<UserInvitation | undefined> {
+    const [invitation] = await db
+      .select()
+      .from(userInvitations)
+      .where(eq(userInvitations.token, token));
+    return invitation;
+  }
+
+  async createUserInvitation(invitationData: Omit<UserInvitation, 'id' | 'createdAt' | 'updatedAt'>): Promise<UserInvitation> {
+    const [invitation] = await db
+      .insert(userInvitations)
+      .values(invitationData)
+      .returning();
+    return invitation;
+  }
+
+  async updateUserInvitation(token: string, data: Partial<Omit<UserInvitation, 'id' | 'token' | 'createdAt' | 'updatedAt'>>): Promise<UserInvitation> {
+    const [invitation] = await db
+      .update(userInvitations)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(userInvitations.token, token))
+      .returning();
+    return invitation;
+  }
+
+  async deleteUserInvitation(token: string): Promise<void> {
+    await db.delete(userInvitations).where(eq(userInvitations.token, token));
   }
 
   // Dashboard analytics
