@@ -288,11 +288,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       '/mfa/verify',
     ];
     
+    // Debug logging to understand path structure
+    console.log('🔒 Auth middleware check:', {
+      originalUrl: req.originalUrl,
+      baseUrl: req.baseUrl,
+      path: req.path,
+      method: req.method
+    });
+    
     // Skip authentication for public routes
     if (publicRoutes.some(route => req.path.startsWith(route))) {
+      console.log('✅ Public route - skipping auth');
       return next();
     }
     
+    console.log('🔐 Protected route - applying auth');
     // Apply authentication and tenant middleware for all other API routes
     isAuthenticated(req, res, (err) => {
       if (err) return next(err);
