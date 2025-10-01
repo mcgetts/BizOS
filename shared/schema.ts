@@ -913,6 +913,44 @@ export const mfaTokens = pgTable("mfa_tokens", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// ====================================
+// ACCESS CONTROL TABLES
+// ====================================
+
+// System settings for access control
+export const systemSettings = pgTable("system_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  key: varchar("key").notNull().unique(),
+  value: jsonb("value"),
+  description: text("description"),
+  updatedBy: varchar("updated_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// User invitations for controlled access
+export const userInvitations = pgTable("user_invitations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  token: varchar("token").notNull().unique(),
+  email: varchar("email").notNull(),
+  role: varchar("role").default("employee").$type<UserRole>(),
+  invitedBy: varchar("invited_by").references(() => users.id).notNull(),
+  
+  // Status tracking
+  status: varchar("status").default("pending"), // pending, accepted, expired, revoked
+  acceptedAt: timestamp("accepted_at"),
+  acceptedByUserId: varchar("accepted_by_user_id").references(() => users.id),
+  
+  // Expiration
+  expiresAt: timestamp("expires_at").notNull(),
+  
+  // Metadata
+  notes: text("notes"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Relations
 export const userRelations = relations(users, ({ many }) => ({
   managedProjects: many(projects, { relationName: "manager" }),
@@ -1530,6 +1568,29 @@ export const insertMfaTokenSchema = createInsertSchema(mfaTokens).omit({
   updatedAt: true,
 });
 
+// ====================================
+// ACCESS CONTROL SCHEMAS
+// ====================================
+
+export const insertSystemSettingSchema = createInsertSchema(systemSettings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const updateSystemSettingSchema = insertSystemSettingSchema.partial();
+
+export const insertUserInvitationSchema = createInsertSchema(userInvitations).omit({
+  id: true,
+  token: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  email: z.string().email("Invalid email address"),
+});
+
+export const updateUserInvitationSchema = insertUserInvitationSchema.partial();
+
 // Enhanced user schema with security fields
 export const insertEnhancedUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -2028,6 +2089,21 @@ export type InsertMfaToken = z.infer<typeof insertMfaTokenSchema>;
 export type MfaToken = typeof mfaTokens.$inferSelect;
 export type InsertEnhancedUser = z.infer<typeof insertEnhancedUserSchema>;
 export type UpdateEnhancedUser = z.infer<typeof updateEnhancedUserSchema>;
+
+// ====================================
+// ACCESS CONTROL TYPES
+// ====================================
+
+export type InsertSystemSetting = z.infer<typeof insertSystemSettingSchema>;
+export type UpdateSystemSetting = z.infer<typeof updateSystemSettingSchema>;
+export type SystemSetting = typeof systemSettings.$inferSelect;
+export type InsertUserInvitation = z.infer<typeof insertUserInvitationSchema>;
+export type UpdateUserInvitation = z.infer<typeof updateUserInvitationSchema>;
+export type UserInvitation = typeof userInvitations.$inferSelect;
+
+export type UserInvitationWithInviter = UserInvitation & {
+  inviter: User;
+};
 
 // Enhanced user types with security information
 export type UserWithSecurity = User & {

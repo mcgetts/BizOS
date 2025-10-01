@@ -14,6 +14,7 @@ import { PasswordUtils, AuthRateLimiter } from "./utils/authUtils";
 import { db } from "./db";
 import { users } from "../shared/schema";
 import { eq, and } from "drizzle-orm";
+import { accessControlService } from "./security/accessControlService";
 
 if (!process.env.REPLIT_DOMAINS) {
   throw new Error("Environment variable REPLIT_DOMAINS not provided");
@@ -90,6 +91,7 @@ function updateUserSession(
 
 async function upsertUser(
   claims: any,
+  invitationToken?: string,
 ) {
   const TEAM_SIZE_LIMIT = BUSINESS_LIMITS.MAX_TEAM_MEMBERS;
 
@@ -107,6 +109,19 @@ async function upsertUser(
     return;
   }
 
+  // New user - check access control (domain restrictions or invitation)
+  const accessCheck = await accessControlService.canUserRegister(
+    claims["email"],
+    invitationToken
+  );
+
+  if (!accessCheck.allowed) {
+    throw new Error(
+      accessCheck.reason || 
+      'Access restricted. Please contact your administrator or request an invitation.'
+    );
+  }
+
   // New user - check team size limit
   const currentUsers = await storage.getUsers();
   if (currentUsers.length >= TEAM_SIZE_LIMIT) {
@@ -121,6 +136,11 @@ async function upsertUser(
     profileImageUrl: claims["profile_image_url"],
   });
 
+  // If invitation was used, mark it as accepted
+  if (invitationToken && accessCheck.invitation) {
+    await accessControlService.acceptInvitation(invitationToken, claims["sub"]);
+  }
+
   // Ensure the first user gets admin privileges
   await ensureFirstUserIsAdmin(claims["sub"]);
 }
@@ -131,14 +151,30 @@ export async function setupAuth(app: Express) {
   app.use(passport.initialize());
   app.use(passport.session());
 
-  const verify: VerifyFunction = async (
+  const verify = async (
+    req: any,
     tokens: client.TokenEndpointResponse & client.TokenEndpointResponseHelpers,
     verified: passport.AuthenticateCallback
   ) => {
     const user = {};
     updateUserSession(user, tokens);
-    await upsertUser(tokens.claims());
-    verified(null, user);
+    
+    // Retrieve invitation token from session if present
+    const invitationToken = req.session?.invitationToken;
+    
+    try {
+      await upsertUser(tokens.claims(), invitationToken);
+      
+      // Clear invitation token from session after use
+      if (invitationToken) {
+        delete req.session.invitationToken;
+      }
+      
+      verified(null, user);
+    } catch (error) {
+      // Pass error to passport
+      verified(error as Error);
+    }
   };
 
   // Helper function to register or update strategy with current config
@@ -160,8 +196,9 @@ export async function setupAuth(app: Express) {
         config,
         scope: "openid email profile offline_access",
         callbackURL: `${protocol}://${domain}/api/callback`,
+        passReqToCallback: true,
       },
-      verify,
+      verify as any,
     );
     passport.use(strategy);
   };
@@ -259,6 +296,11 @@ export async function setupAuth(app: Express) {
   app.get("/api/login", async (req, res, next) => {
     const currentDomain = req.hostname;
     const strategyName = `replitauth:${currentDomain}`;
+    
+    // Store invitation token in session if provided
+    if (req.query.invite && typeof req.query.invite === 'string') {
+      (req.session as any).invitationToken = req.query.invite;
+    }
     
     // Security check: only allow configured domains or reasonable dynamic registration
     if (!configuredDomains.includes(currentDomain)) {
