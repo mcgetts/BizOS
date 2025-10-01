@@ -239,6 +239,8 @@ export async function setupAuth(app: Express) {
           firstName: user.firstName,
           lastName: user.lastName,
           role: user.role,
+          enhancedRole: user.enhancedRole, // Critical: Include enhancedRole for UI role display
+          department: user.department,
           authProvider: user.authProvider,
           isLocal: true
         };
