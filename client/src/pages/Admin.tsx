@@ -218,6 +218,76 @@ export default function Admin() {
     },
   });
 
+  const createInvitationMutation = useMutation({
+    mutationFn: async (data: typeof newInvitation) => {
+      const response = await fetch('/api/admin/invitations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to create invitation');
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/invitations"] });
+      toast({ 
+        title: "Success", 
+        description: `Invitation created! Share invite URL with user.`,
+        duration: 10000
+      });
+      setNewInvitation({ email: '', role: 'employee', expiresInDays: 7, notes: '' });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to create invitation", 
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const revokeInvitationMutation = useMutation({
+    mutationFn: async (token: string) => {
+      const response = await fetch(`/api/admin/invitations/${token}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error('Failed to revoke invitation');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/invitations"] });
+      toast({ title: "Success", description: "Invitation revoked successfully" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to revoke invitation", variant: "destructive" });
+    },
+  });
+
+  const cleanupInvitationsMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch('/api/admin/invitations/cleanup', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error('Failed to cleanup invitations');
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/invitations"] });
+      toast({ 
+        title: "Success", 
+        description: `Cleaned up ${data.count} expired invitation(s)` 
+      });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to cleanup invitations", variant: "destructive" });
+    },
+  });
 
   // Access Control handlers
   const handleAddDomain = () => {
