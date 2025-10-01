@@ -9,7 +9,7 @@ import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
 import { storage } from "./storage";
 import { BUSINESS_LIMITS } from "./config/constants";
-import { ensureFirstUserIsAdmin } from "./seed";
+import { ensureFirstUserIsAdmin, ensureUserInDefaultOrganization } from "./seed";
 import { PasswordUtils, AuthRateLimiter } from "./utils/authUtils";
 import { db } from "./db";
 import { users } from "../shared/schema";
@@ -135,6 +135,9 @@ async function upsertUser(
     lastName: claims["last_name"],
     profileImageUrl: claims["profile_image_url"],
   });
+
+  // Assign new user to default organization
+  await ensureUserInDefaultOrganization(claims["sub"]);
 
   // If invitation was used, mark it as accepted
   if (invitationToken && accessCheck.invitation) {

@@ -35,6 +35,8 @@ Preferred communication style: Simple, everyday language.
 - **Session Storage**: PostgreSQL-backed sessions with configurable TTL
 - **Role System**: Multi-tier access control (Admin, Manager, Employee, Client roles)
 - **Security**: HTTP-only cookies, CSRF protection, and secure session configuration
+- **Multi-Tenant Integration**: New OAuth users are automatically assigned to default organization (slug='default') with member role upon first login
+- **Middleware Architecture**: Public auth routes (`/api/login`, `/api/callback`, `/api/auth/register`, etc.) bypass authentication middleware while all other `/api/*` routes require authentication and tenant context
 
 ### Development Architecture
 - **Build System**: Vite with React plugin for frontend, esbuild for backend bundling

@@ -110,15 +110,15 @@ async function ensureDefaultOrganization(): Promise<void> {
   try {
     console.log('🏢 Checking for default organization...');
 
-    // Check if default organization exists
+    // Check if default organization exists (by slug which is more reliable)
     const [existingOrg] = await db
       .select()
       .from(organizations)
-      .where(eq(organizations.subdomain, 'default'))
+      .where(eq(organizations.slug, 'default'))
       .limit(1);
 
     if (existingOrg) {
-      console.log(`✅ Default organization already exists: ${existingOrg.name} (${existingOrg.subdomain})`);
+      console.log(`✅ Default organization already exists: ${existingOrg.name} (slug: ${existingOrg.slug})`);
       return;
     }
 
@@ -128,10 +128,10 @@ async function ensureDefaultOrganization(): Promise<void> {
       .values({
         name: 'Default Organization',
         subdomain: 'default',
+        slug: 'default', // URL-safe identifier required by schema
         status: 'active',
-        plan: 'enterprise', // Give default org full features
+        planTier: 'enterprise', // Give default org full features
         maxUsers: 1000,
-        maxProjects: 10000,
       })
       .returning();
 
@@ -161,13 +161,13 @@ async function ensureDefaultOrganization(): Promise<void> {
 /**
  * Ensures a user is a member of the default organization
  */
-async function ensureUserInDefaultOrganization(userId: string): Promise<void> {
+export async function ensureUserInDefaultOrganization(userId: string): Promise<void> {
   try {
-    // Get default organization
+    // Get default organization (by slug which is more reliable)
     const [defaultOrg] = await db
       .select()
       .from(organizations)
-      .where(eq(organizations.subdomain, 'default'))
+      .where(eq(organizations.slug, 'default'))
       .limit(1);
 
     if (!defaultOrg) {

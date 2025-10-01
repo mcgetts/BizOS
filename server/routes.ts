@@ -270,9 +270,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/auth', authMfaRoutes);
   app.use('/api/sessions', sessionRoutes);
 
-  // Apply tenant middleware to all authenticated API routes
+  // Apply authentication and tenant middleware to API routes
+  // EXCEPT public auth routes (login, register, callback need to be accessible before auth)
   // This must come AFTER auth setup and BEFORE route definitions
-  app.use('/api/*', isAuthenticated, resolveTenant);
+  app.use('/api/*', (req, res, next) => {
+    // List of public routes that don't require authentication
+    // Note: req.path inside app.use('/api/*') is relative, so we check without /api/ prefix
+    const publicRoutes = [
+      '/login',
+      '/callback',
+      '/auth/register',
+      '/auth/login',
+      '/auth/verify-email',
+      '/auth/forgot-password',
+      '/auth/reset-password',
+      '/mfa/setup',
+      '/mfa/verify',
+    ];
+    
+    // Skip authentication for public routes
+    if (publicRoutes.some(route => req.path.startsWith(route))) {
+      return next();
+    }
+    
+    // Apply authentication and tenant middleware for all other API routes
+    isAuthenticated(req, res, (err) => {
+      if (err) return next(err);
+      resolveTenant(req, res, next);
+    });
+  });
 
   // Initialize integration manager for third-party notifications
   const integrationManager = new IntegrationManager(defaultIntegrationConfig);
