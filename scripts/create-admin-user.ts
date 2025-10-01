@@ -3,6 +3,7 @@ import { neon } from '@neondatabase/serverless';
 import { users, organizations } from '../shared/schema';
 import { eq } from 'drizzle-orm';
 import * as readline from 'readline';
+import bcrypt from 'bcryptjs';
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -73,6 +74,7 @@ async function createAdminUser() {
       defaultOrg = await db.insert(organizations).values({
         name: 'Default Organization',
         subdomain: 'default',
+        slug: 'default',
         settings: {},
       }).returning();
     }
@@ -80,18 +82,17 @@ async function createAdminUser() {
     const orgId = defaultOrg[0].id;
 
     // Hash password using bcrypt
-    const bcrypt = require('bcryptjs');
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Create admin user
     const newUser = await db.insert(users).values({
       email: email.toLowerCase().trim(),
-      password: hashedPassword,
+      passwordHash: hashedPassword,
       firstName,
       lastName,
       role: 'admin',
       emailVerified: true,
-      organizationId: orgId,
+      defaultOrganizationId: orgId,
     }).returning();
 
     console.log('\n✅ Admin user created successfully!');
