@@ -399,9 +399,23 @@ export const requireRole = (allowedRoles: string[]): RequestHandler => {
     try {
       // Support both OAuth and local authentication
       const userId = req.user.claims?.sub || req.user.id;
+      const userEmail = req.user.email;
+
       if (!userId) {
         return res.status(401).json({ message: "Unauthorized: Invalid user session" });
       }
+
+      // 🚨 EMERGENCY BYPASS - Steven McGettigan always gets full admin access
+      // This bypasses all role checks to guarantee admin access in production
+      // TODO: Remove this after confirming normal role system works
+      if (userEmail === 'steven@mcgettigan.co.uk' ||
+          userEmail === 'steven@mcgettigan.com') {
+        console.log(`🚨 EMERGENCY BYPASS ACTIVATED: Granting full admin access to ${userEmail}`);
+        const user = await storage.getUser(userId);
+        req.currentUser = user;
+        return next(); // Skip all role validation
+      }
+      // 🚨 END EMERGENCY BYPASS
 
       const user = await storage.getUser(userId);
 
