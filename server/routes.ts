@@ -275,34 +275,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // This must come AFTER auth setup and BEFORE route definitions
   app.use('/api/*', (req, res, next) => {
     // List of public routes that don't require authentication
-    // Note: req.path inside app.use('/api/*') is relative, so we check without /api/ prefix
     const publicRoutes = [
-      '/login',
-      '/callback',
-      '/auth/register',
-      '/auth/login',
-      '/auth/verify-email',
-      '/auth/forgot-password',
-      '/auth/reset-password',
-      '/mfa/setup',
-      '/mfa/verify',
+      '/api/login',
+      '/api/callback',
+      '/api/auth/register',
+      '/api/auth/login',
+      '/api/auth/verify-email',
+      '/api/auth/forgot-password',
+      '/api/auth/reset-password',
+      '/api/mfa/setup',
+      '/api/mfa/verify',
     ];
     
-    // Debug logging to understand path structure
-    console.log('🔒 Auth middleware check:', {
-      originalUrl: req.originalUrl,
-      baseUrl: req.baseUrl,
-      path: req.path,
-      method: req.method
-    });
-    
-    // Skip authentication for public routes
-    if (publicRoutes.some(route => req.path.startsWith(route))) {
-      console.log('✅ Public route - skipping auth');
+    // Check using originalUrl which contains the full path
+    if (publicRoutes.some(route => req.originalUrl.startsWith(route))) {
       return next();
     }
     
-    console.log('🔐 Protected route - applying auth');
     // Apply authentication and tenant middleware for all other API routes
     isAuthenticated(req, res, (err) => {
       if (err) return next(err);
