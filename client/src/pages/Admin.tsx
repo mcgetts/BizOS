@@ -77,6 +77,136 @@ export default function Admin() {
   const [formValues, setFormValues] = useState<Record<string, string>>({});
   const queryClient = useQueryClient();
 
+  // User management state
+  const [viewUserDialogOpen, setViewUserDialogOpen] = useState(false);
+  const [editUserDialogOpen, setEditUserDialogOpen] = useState(false);
+  const [deleteUserDialogOpen, setDeleteUserDialogOpen] = useState(false);
+  const [addUserDialogOpen, setAddUserDialogOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+
+  // User management mutations - MUST be before any conditional returns
+  const updateUserMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<User> }) => {
+      const response = await fetch(`/api/users/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) throw new Error('Failed to update user');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      toast({ title: "Success", description: "User updated successfully" });
+      setEditUserDialogOpen(false);
+      setSelectedUser(null);
+      // Refresh users list
+      fetch('/api/users', { credentials: 'include' })
+        .then(res => res.json())
+        .then(setSystemUsers);
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update user", variant: "destructive" });
+    },
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const response = await fetch(`/api/users/${userId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to delete user');
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      toast({ title: "Success", description: "User deleted successfully" });
+      setDeleteUserDialogOpen(false);
+      setSelectedUser(null);
+      // Refresh users list
+      fetch('/api/users', { credentials: 'include' })
+        .then(res => res.json())
+        .then(setSystemUsers);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to delete user", variant: "destructive" });
+    },
+  });
+
+  const createUserMutation = useMutation({
+    mutationFn: async (userData: any) => {
+      const response = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(userData),
+      });
+      if (!response.ok) throw new Error('Failed to create user');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      toast({ title: "Success", description: "User created successfully" });
+      setAddUserDialogOpen(false);
+      // Refresh users list
+      fetch('/api/users', { credentials: 'include' })
+        .then(res => res.json())
+        .then(setSystemUsers);
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to create user", variant: "destructive" });
+    },
+  });
+
+  // User action handlers
+  const handleViewUser = (user: User) => {
+    setSelectedUser(user);
+    setViewUserDialogOpen(true);
+  };
+
+  const handleEditUser = (user: User) => {
+    setSelectedUser(user);
+    setEditUserDialogOpen(true);
+  };
+
+  const handleDeleteUser = (user: User) => {
+    setSelectedUser(user);
+    setDeleteUserDialogOpen(true);
+  };
+
+  const handleResetPassword = async () => {
+    if (!selectedUser) return;
+
+    setIsResettingPassword(true);
+    try {
+      const response = await fetch(`/api/users/${selectedUser.id}/reset-password`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+
+      if (!response.ok) throw new Error('Failed to send password reset');
+
+      const data = await response.json();
+      toast({
+        title: "Password Reset Sent",
+        description: `Reset email sent to ${data.email}`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to send password reset email",
+        variant: "destructive",
+      });
+    } finally {
+      setIsResettingPassword(false);
+    }
+  };
+
   // Fetch real data from API
   useEffect(() => {
     const fetchData = async () => {
@@ -455,7 +585,7 @@ export default function Admin() {
                         data-testid="input-search-users"
                       />
                     </div>
-                    <Button data-testid="button-add-user">
+                    <Button onClick={() => setAddUserDialogOpen(true)} data-testid="button-add-user">
                       <UserPlus className="w-4 h-4 mr-2" />
                       Add User
                     </Button>
@@ -485,7 +615,10 @@ export default function Admin() {
                                 </span>
                               </div>
                               <div>
-                                <div className="font-medium text-foreground">
+                                <div
+                                  className="font-medium text-foreground cursor-pointer hover:text-primary transition-colors"
+                                  onClick={() => handleViewUser(user)}
+                                >
                                   {user.firstName} {user.lastName}
                                 </div>
                                 <div className="text-sm text-muted-foreground">{user.email}</div>
@@ -509,13 +642,31 @@ export default function Admin() {
                           </td>
                           <td className="py-4">
                             <div className="flex items-center space-x-2">
-                              <Button variant="ghost" size="sm" data-testid={`button-view-${index}`}>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleViewUser(user)}
+                                data-testid={`button-view-${index}`}
+                                title="View user details"
+                              >
                                 <Eye className="w-4 h-4" />
                               </Button>
-                              <Button variant="ghost" size="sm" data-testid={`button-edit-${index}`}>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleEditUser(user)}
+                                data-testid={`button-edit-${index}`}
+                                title="Edit user"
+                              >
                                 <Edit className="w-4 h-4" />
                               </Button>
-                              <Button variant="ghost" size="sm" data-testid={`button-delete-${index}`}>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteUser(user)}
+                                data-testid={`button-delete-${index}`}
+                                title="Delete user"
+                              >
                                 <Trash2 className="w-4 h-4" />
                               </Button>
                             </div>
@@ -1360,6 +1511,422 @@ export default function Admin() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* User Management Dialogs */}
+        {/* View User Dialog */}
+        <Dialog open={viewUserDialogOpen} onOpenChange={setViewUserDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>User Details</DialogTitle>
+            </DialogHeader>
+            {selectedUser && (
+              <div className="space-y-4">
+                <div className="flex items-center space-x-4 pb-4 border-b">
+                  <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+                    <span className="text-2xl font-medium text-primary">
+                      {selectedUser.firstName?.[0]}{selectedUser.lastName?.[0]}
+                    </span>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold">
+                      {selectedUser.firstName} {selectedUser.lastName}
+                    </h3>
+                    <p className="text-sm text-muted-foreground">{selectedUser.email}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-muted-foreground">Role</Label>
+                    <p className="font-medium">{selectedUser.role}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Enhanced Role</Label>
+                    <p className="font-medium">{selectedUser.enhancedRole || selectedUser.role}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Department</Label>
+                    <p className="font-medium">{selectedUser.department || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Position</Label>
+                    <p className="font-medium">{selectedUser.position || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Phone</Label>
+                    <p className="font-medium">{selectedUser.phone || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Status</Label>
+                    <Badge variant={selectedUser.isActive ? "default" : "secondary"}>
+                      {selectedUser.isActive ? "Active" : "Inactive"}
+                    </Badge>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Last Login</Label>
+                    <p className="font-medium">
+                      {selectedUser.lastLoginAt
+                        ? new Date(selectedUser.lastLoginAt).toLocaleString()
+                        : 'Never'}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Created</Label>
+                    <p className="font-medium">
+                      {selectedUser.createdAt
+                        ? new Date(selectedUser.createdAt).toLocaleDateString()
+                        : 'N/A'}
+                    </p>
+                  </div>
+                </div>
+
+                {selectedUser.address && (
+                  <div>
+                    <Label className="text-muted-foreground">Address</Label>
+                    <p className="font-medium">{selectedUser.address}</p>
+                  </div>
+                )}
+
+                {selectedUser.skills && selectedUser.skills.length > 0 && (
+                  <div>
+                    <Label className="text-muted-foreground">Skills</Label>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {selectedUser.skills.map((skill) => (
+                        <Badge key={skill} variant="secondary">{skill}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setViewUserDialogOpen(false)}>
+                    Close
+                  </Button>
+                  <Button onClick={() => {
+                    setViewUserDialogOpen(false);
+                    handleEditUser(selectedUser);
+                  }}>
+                    Edit User
+                  </Button>
+                </DialogFooter>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit User Dialog */}
+        <Dialog open={editUserDialogOpen} onOpenChange={setEditUserDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Edit User</DialogTitle>
+            </DialogHeader>
+            {selectedUser && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>First Name *</Label>
+                    <Input
+                      defaultValue={selectedUser.firstName || ''}
+                      id="edit-firstName"
+                    />
+                  </div>
+                  <div>
+                    <Label>Last Name *</Label>
+                    <Input
+                      defaultValue={selectedUser.lastName || ''}
+                      id="edit-lastName"
+                    />
+                  </div>
+                  <div>
+                    <Label>Email *</Label>
+                    <Input
+                      type="email"
+                      defaultValue={selectedUser.email || ''}
+                      id="edit-email"
+                    />
+                  </div>
+                  <div>
+                    <Label>Phone</Label>
+                    <Input
+                      defaultValue={selectedUser.phone || ''}
+                      id="edit-phone"
+                    />
+                  </div>
+                  <div>
+                    <Label>Role *</Label>
+                    <Select defaultValue={selectedUser.role || 'employee'} onValueChange={(value) => {
+                      (document.getElementById('edit-role') as any).value = value;
+                    }}>
+                      <SelectTrigger id="edit-role">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="admin">Admin</SelectItem>
+                        <SelectItem value="manager">Manager</SelectItem>
+                        <SelectItem value="employee">Employee</SelectItem>
+                        <SelectItem value="contractor">Contractor</SelectItem>
+                        <SelectItem value="client">Client</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Enhanced Role</Label>
+                    <Select defaultValue={selectedUser.enhancedRole || selectedUser.role || 'employee'} onValueChange={(value) => {
+                      (document.getElementById('edit-enhancedRole') as any).value = value;
+                    }}>
+                      <SelectTrigger id="edit-enhancedRole">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="super_admin">Super Admin</SelectItem>
+                        <SelectItem value="admin">Admin</SelectItem>
+                        <SelectItem value="manager">Manager</SelectItem>
+                        <SelectItem value="employee">Employee</SelectItem>
+                        <SelectItem value="contractor">Contractor</SelectItem>
+                        <SelectItem value="viewer">Viewer</SelectItem>
+                        <SelectItem value="client">Client</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Department</Label>
+                    <Input
+                      defaultValue={selectedUser.department || ''}
+                      id="edit-department"
+                    />
+                  </div>
+                  <div>
+                    <Label>Position</Label>
+                    <Input
+                      defaultValue={selectedUser.position || ''}
+                      id="edit-position"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label>Address</Label>
+                  <Textarea
+                    defaultValue={selectedUser.address || ''}
+                    id="edit-address"
+                    rows={2}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/50">
+                  <div>
+                    <Label className="text-base">Active Status</Label>
+                    <p className="text-sm text-muted-foreground">User can access the system</p>
+                  </div>
+                  <Switch
+                    defaultChecked={selectedUser.isActive}
+                    id="edit-isActive"
+                  />
+                </div>
+
+                <div className="p-4 border rounded-lg bg-warning/10 border-warning/50">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-base">Password Reset</Label>
+                      <p className="text-sm text-muted-foreground">Send password reset email to user</p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={handleResetPassword}
+                      disabled={isResettingPassword}
+                    >
+                      {isResettingPassword ? "Sending..." : "Reset Password"}
+                    </Button>
+                  </div>
+                </div>
+
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setEditUserDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      const firstName = (document.getElementById('edit-firstName') as HTMLInputElement).value;
+                      const lastName = (document.getElementById('edit-lastName') as HTMLInputElement).value;
+                      const email = (document.getElementById('edit-email') as HTMLInputElement).value;
+                      const phone = (document.getElementById('edit-phone') as HTMLInputElement).value;
+                      const role = (document.getElementById('edit-role') as any).value;
+                      const enhancedRole = (document.getElementById('edit-enhancedRole') as any).value;
+                      const department = (document.getElementById('edit-department') as HTMLInputElement).value;
+                      const position = (document.getElementById('edit-position') as HTMLInputElement).value;
+                      const address = (document.getElementById('edit-address') as HTMLTextAreaElement).value;
+                      const isActive = (document.getElementById('edit-isActive') as HTMLInputElement).checked;
+
+                      updateUserMutation.mutate({
+                        id: selectedUser.id,
+                        data: {
+                          firstName,
+                          lastName,
+                          email,
+                          phone,
+                          role,
+                          enhancedRole,
+                          department,
+                          position,
+                          address,
+                          isActive
+                        }
+                      });
+                    }}
+                    disabled={updateUserMutation.isPending}
+                  >
+                    {updateUserMutation.isPending ? "Saving..." : "Save Changes"}
+                  </Button>
+                </DialogFooter>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete User Dialog */}
+        <Dialog open={deleteUserDialogOpen} onOpenChange={setDeleteUserDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete User</DialogTitle>
+            </DialogHeader>
+            {selectedUser && (
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Are you sure you want to delete <strong>{selectedUser.firstName} {selectedUser.lastName}</strong>?
+                </p>
+                <div className="p-4 border rounded-lg bg-destructive/10 border-destructive/50">
+                  <p className="text-sm font-medium text-destructive">Warning: This action cannot be undone</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    All data associated with this user will be permanently deleted.
+                  </p>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setDeleteUserDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={() => deleteUserMutation.mutate(selectedUser.id)}
+                    disabled={deleteUserMutation.isPending}
+                  >
+                    {deleteUserMutation.isPending ? "Deleting..." : "Delete User"}
+                  </Button>
+                </DialogFooter>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Add User Dialog */}
+        <Dialog open={addUserDialogOpen} onOpenChange={setAddUserDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Add New User</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>First Name *</Label>
+                  <Input placeholder="John" id="new-firstName" />
+                </div>
+                <div>
+                  <Label>Last Name *</Label>
+                  <Input placeholder="Doe" id="new-lastName" />
+                </div>
+                <div>
+                  <Label>Email *</Label>
+                  <Input type="email" placeholder="john.doe@example.com" id="new-email" />
+                </div>
+                <div>
+                  <Label>Phone</Label>
+                  <Input placeholder="+44 20 1234 5678" id="new-phone" />
+                </div>
+                <div>
+                  <Label>Password *</Label>
+                  <Input type="password" placeholder="Min. 8 characters" id="new-password" />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Must contain uppercase, lowercase, and number
+                  </p>
+                </div>
+                <div>
+                  <Label>Role *</Label>
+                  <Select defaultValue="employee" onValueChange={(value) => {
+                    (document.getElementById('new-role') as any).value = value;
+                  }}>
+                    <SelectTrigger id="new-role">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="manager">Manager</SelectItem>
+                      <SelectItem value="employee">Employee</SelectItem>
+                      <SelectItem value="contractor">Contractor</SelectItem>
+                      <SelectItem value="client">Client</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Department</Label>
+                  <Input placeholder="IT" id="new-department" />
+                </div>
+                <div>
+                  <Label>Position</Label>
+                  <Input placeholder="Software Developer" id="new-position" />
+                </div>
+              </div>
+
+              <div className="p-4 border rounded-lg bg-primary/5">
+                <p className="text-sm font-medium">Note:</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  An email will be sent to the user with their login credentials and initial setup instructions.
+                </p>
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setAddUserDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    const firstName = (document.getElementById('new-firstName') as HTMLInputElement).value;
+                    const lastName = (document.getElementById('new-lastName') as HTMLInputElement).value;
+                    const email = (document.getElementById('new-email') as HTMLInputElement).value;
+                    const phone = (document.getElementById('new-phone') as HTMLInputElement).value;
+                    const password = (document.getElementById('new-password') as HTMLInputElement).value;
+                    const role = (document.getElementById('new-role') as any).value;
+                    const department = (document.getElementById('new-department') as HTMLInputElement).value;
+                    const position = (document.getElementById('new-position') as HTMLInputElement).value;
+
+                    if (!firstName || !lastName || !email || !password) {
+                      toast({
+                        title: "Validation Error",
+                        description: "Please fill in all required fields",
+                        variant: "destructive"
+                      });
+                      return;
+                    }
+
+                    createUserMutation.mutate({
+                      firstName,
+                      lastName,
+                      email,
+                      phone,
+                      password,
+                      role,
+                      enhancedRole: role,
+                      department,
+                      position,
+                      isActive: true
+                    });
+                  }}
+                  disabled={createUserMutation.isPending}
+                >
+                  {createUserMutation.isPending ? "Creating..." : "Create User"}
+                </Button>
+              </DialogFooter>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   );

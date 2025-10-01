@@ -23,6 +23,7 @@ async function updateStevenRole() {
       firstName: 'Steven',
       lastName: 'McGettigan',
       role: 'admin' as const,
+      enhancedRole: 'admin' as const, // UI reads from enhancedRole field
       department: 'Management',
       position: 'Technical Director',
       profileImageUrl: null,
@@ -45,10 +46,11 @@ async function updateStevenRole() {
       return steven[0];
     }
 
-    // Update Steven's role to Admin
+    // Update Steven's role to Admin (both role fields for UI compatibility)
     const updatedSteven = await db.update(users)
       .set({
         role: 'admin',
+        enhancedRole: 'admin', // UI reads from enhancedRole field
         updatedAt: new Date()
       })
       .where(eq(users.id, steven[0].id))

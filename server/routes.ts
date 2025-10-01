@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
 import { storage } from "./storage";
 import { db } from "./db";
 import { eq, desc, and, sql, asc } from "drizzle-orm";
@@ -861,6 +862,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error deleting user:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to delete user";
       res.status(400).json({ message: errorMessage });
+    }
+  });
+
+  // Admin-triggered password reset
+  app.post('/api/users/:id/reset-password', isAuthenticated, requireRole(['admin']), async (req: any, res) => {
+    try {
+      const userId = req.params.id;
+      const targetUser = await storage.getUser(userId);
+
+      if (!targetUser) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      if (!targetUser.email) {
+        return res.status(400).json({ message: 'User has no email address' });
+      }
+
+      // Generate password reset token
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      const resetExpires = new Date(Date.now() + 3600000); // 1 hour
+
+      // Update user with reset token
+      await db.update(users)
+        .set({
+          passwordResetToken: resetToken,
+          passwordResetExpires: resetExpires,
+          updatedAt: new Date()
+        })
+        .where(eq(users.id, userId));
+
+      // Send password reset email
+      const resetLink = `${process.env.VITE_API_URL || 'http://localhost:5000'}/reset-password?token=${resetToken}`;
+
+      try {
+        await emailService.sendEmail({
+          to: targetUser.email,
+          subject: 'Password Reset Request - BizOS',
+          text: `A password reset has been requested for your account by an administrator.\n\nClick here to reset your password: ${resetLink}\n\nThis link will expire in 1 hour.\n\nIf you didn't request this, please contact your administrator.`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #333;">Password Reset Request</h2>
+              <p>A password reset has been requested for your account by an administrator.</p>
+              <p><a href="${resetLink}" style="background: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Reset Password</a></p>
+              <p style="color: #666; font-size: 14px;">This link will expire in 1 hour.</p>
+              <p style="color: #666; font-size: 14px;">If you didn't request this, please contact your administrator.</p>
+            </div>
+          `
+        });
+      } catch (emailError) {
+        console.error('Failed to send password reset email:', emailError);
+      }
+
+      res.json({
+        message: 'Password reset email sent successfully',
+        email: targetUser.email
+      });
+    } catch (error) {
+      console.error("Error triggering password reset:", error);
+      res.status(500).json({ message: "Failed to trigger password reset" });
     }
   });
 
