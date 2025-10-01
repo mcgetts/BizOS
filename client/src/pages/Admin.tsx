@@ -163,6 +163,91 @@ export default function Admin() {
     },
   });
 
+  // Access Control state
+  const [accessControlSettings, setAccessControlSettings] = useState<{
+    domains: string[];
+    requireDomain: boolean;
+  }>({ domains: [], requireDomain: false });
+  const [newDomain, setNewDomain] = useState('');
+  const [newInvitation, setNewInvitation] = useState({
+    email: '',
+    role: 'employee' as 'admin' | 'manager' | 'employee' | 'client',
+    expiresInDays: 7,
+    notes: ''
+  });
+
+  // Access Control queries
+  const { data: accessControlData, refetch: refetchAccessControl } = useQuery({
+    queryKey: ["/api/admin/access-control/settings"],
+    enabled: isAuthenticated && user?.role === 'admin',
+  });
+
+  // Update state when access control data changes
+  useEffect(() => {
+    if (accessControlData) {
+      setAccessControlSettings({
+        domains: (accessControlData as any).domains || [],
+        requireDomain: (accessControlData as any).requireDomain || false
+      });
+    }
+  }, [accessControlData]);
+
+  const { data: invitations = [], refetch: refetchInvitations } = useQuery<any[]>({
+    queryKey: ["/api/admin/invitations"],
+    enabled: isAuthenticated && user?.role === 'admin',
+  });
+
+  // Access Control mutations
+  const updateDomainsMutation = useMutation({
+    mutationFn: async (data: { domains: string[]; requireDomain: boolean }) => {
+      const response = await fetch('/api/admin/access-control/domains', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) throw new Error('Failed to update domains');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/access-control/settings"] });
+      toast({ title: "Success", description: "Access control settings updated" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update access control settings", variant: "destructive" });
+    },
+  });
+
+
+  // Access Control handlers
+  const handleAddDomain = () => {
+    if (!newDomain.trim()) return;
+    const updatedDomains = [...accessControlSettings.domains, newDomain.trim()];
+    setAccessControlSettings(prev => ({ ...prev, domains: updatedDomains }));
+    updateDomainsMutation.mutate({ 
+      domains: updatedDomains, 
+      requireDomain: accessControlSettings.requireDomain 
+    });
+    setNewDomain('');
+  };
+
+  const handleRemoveDomain = (domain: string) => {
+    const updatedDomains = accessControlSettings.domains.filter(d => d !== domain);
+    setAccessControlSettings(prev => ({ ...prev, domains: updatedDomains }));
+    updateDomainsMutation.mutate({ 
+      domains: updatedDomains, 
+      requireDomain: accessControlSettings.requireDomain 
+    });
+  };
+
+  const handleToggleRequireDomain = (checked: boolean) => {
+    setAccessControlSettings(prev => ({ ...prev, requireDomain: checked }));
+    updateDomainsMutation.mutate({ 
+      domains: accessControlSettings.domains, 
+      requireDomain: checked 
+    });
+  };
+
   // User action handlers
   const handleViewUser = (user: User) => {
     setSelectedUser(user);
@@ -740,55 +825,222 @@ export default function Admin() {
 
           <TabsContent value="security" className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Access Control Settings */}
               <Card className="glassmorphism">
                 <CardHeader>
-                  <CardTitle>Security Settings</CardTitle>
+                  <CardTitle>Access Control</CardTitle>
+                  <p className="text-sm text-muted-foreground">Manage signup restrictions and allowed domains</p>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium">Two-Factor Authentication</p>
-                      <p className="text-xs text-muted-foreground">Require 2FA for all admin accounts</p>
+                      <p className="text-sm font-medium">Require Domain Restriction</p>
+                      <p className="text-xs text-muted-foreground">Only allow signups from specified domains</p>
                     </div>
-                    <Switch />
+                    <Switch 
+                      checked={accessControlSettings.requireDomain}
+                      onCheckedChange={handleToggleRequireDomain}
+                      data-testid="switch-require-domain"
+                    />
                   </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium">IP Allowlist</p>
-                      <p className="text-xs text-muted-foreground">Restrict admin access to specific IPs</p>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="new-domain">Allowed Domains</Label>
+                    <div className="flex space-x-2">
+                      <Input
+                        id="new-domain"
+                        placeholder="example.com"
+                        value={newDomain}
+                        onChange={(e) => setNewDomain(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && handleAddDomain()}
+                        data-testid="input-new-domain"
+                      />
+                      <Button 
+                        onClick={handleAddDomain}
+                        size="sm"
+                        data-testid="button-add-domain"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </Button>
                     </div>
-                    <Switch />
                   </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium">Session Timeout</p>
-                      <p className="text-xs text-muted-foreground">Auto-logout after inactivity</p>
+
+                  {accessControlSettings.domains.length > 0 ? (
+                    <div className="space-y-2">
+                      {accessControlSettings.domains.map((domain, index) => (
+                        <div 
+                          key={domain} 
+                          className="flex items-center justify-between p-2 rounded-md bg-muted"
+                          data-testid={`domain-item-${index}`}
+                        >
+                          <span className="text-sm">{domain}</span>
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => handleRemoveDomain(domain)}
+                            data-testid={`button-remove-domain-${index}`}
+                          >
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          </Button>
+                        </div>
+                      ))}
                     </div>
-                    <Switch defaultChecked />
-                  </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No domains configured. Open signup enabled.</p>
+                  )}
                 </CardContent>
               </Card>
 
+              {/* Create Invitation */}
               <Card className="glassmorphism">
                 <CardHeader>
-                  <CardTitle>API Security</CardTitle>
+                  <CardTitle>Create Invitation</CardTitle>
+                  <p className="text-sm text-muted-foreground">Generate invitation tokens for new users</p>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Active API Keys</span>
-                    <span className="text-sm text-foreground">12</span>
+                  <div>
+                    <Label htmlFor="invite-email">Email</Label>
+                    <Input
+                      id="invite-email"
+                      type="email"
+                      placeholder="user@example.com"
+                      value={newInvitation.email}
+                      onChange={(e) => setNewInvitation(prev => ({ ...prev, email: e.target.value }))}
+                      data-testid="input-invite-email"
+                    />
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Rate Limit</span>
-                    <span className="text-sm text-foreground">1000/hour</span>
+
+                  <div>
+                    <Label htmlFor="invite-role">Role</Label>
+                    <Select 
+                      value={newInvitation.role}
+                      onValueChange={(value: any) => setNewInvitation(prev => ({ ...prev, role: value }))}
+                    >
+                      <SelectTrigger id="invite-role" data-testid="select-invite-role">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="employee">Employee</SelectItem>
+                        <SelectItem value="manager">Manager</SelectItem>
+                        <SelectItem value="admin">Admin</SelectItem>
+                        <SelectItem value="client">Client</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <Button variant="outline" className="w-full">
-                    <Key className="w-4 h-4 mr-2" />
-                    Manage API Keys
+
+                  <div>
+                    <Label htmlFor="invite-expires">Expires In (Days)</Label>
+                    <Input
+                      id="invite-expires"
+                      type="number"
+                      min="1"
+                      max="30"
+                      value={newInvitation.expiresInDays}
+                      onChange={(e) => setNewInvitation(prev => ({ ...prev, expiresInDays: parseInt(e.target.value) || 7 }))}
+                      data-testid="input-invite-expires"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="invite-notes">Notes (Optional)</Label>
+                    <Textarea
+                      id="invite-notes"
+                      placeholder="Additional notes..."
+                      value={newInvitation.notes}
+                      onChange={(e) => setNewInvitation(prev => ({ ...prev, notes: e.target.value }))}
+                      data-testid="textarea-invite-notes"
+                    />
+                  </div>
+
+                  <Button 
+                    onClick={() => createInvitationMutation.mutate(newInvitation)}
+                    disabled={!newInvitation.email || createInvitationMutation.isPending}
+                    className="w-full"
+                    data-testid="button-create-invitation"
+                  >
+                    <UserPlus className="w-4 h-4 mr-2" />
+                    {createInvitationMutation.isPending ? "Creating..." : "Create Invitation"}
                   </Button>
                 </CardContent>
               </Card>
             </div>
+
+            {/* Invitations List */}
+            <Card className="glassmorphism">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Active Invitations</CardTitle>
+                    <p className="text-sm text-muted-foreground">Manage pending invitations</p>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => cleanupInvitationsMutation.mutate()}
+                    disabled={cleanupInvitationsMutation.isPending}
+                    data-testid="button-cleanup-invitations"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Cleanup Expired
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {invitations.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full" data-testid="table-invitations">
+                      <thead>
+                        <tr className="border-b border-border">
+                          <th className="text-left text-sm font-medium text-muted-foreground py-3">Email</th>
+                          <th className="text-left text-sm font-medium text-muted-foreground py-3">Role</th>
+                          <th className="text-left text-sm font-medium text-muted-foreground py-3">Status</th>
+                          <th className="text-left text-sm font-medium text-muted-foreground py-3">Expires</th>
+                          <th className="text-left text-sm font-medium text-muted-foreground py-3">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {invitations.map((invitation, index) => (
+                          <tr key={invitation.token} data-testid={`row-invitation-${index}`}>
+                            <td className="py-3 text-sm">{invitation.email}</td>
+                            <td className="py-3">
+                              <Badge variant="outline">{invitation.role}</Badge>
+                            </td>
+                            <td className="py-3">
+                              <Badge variant={
+                                invitation.status === 'pending' ? 'default' :
+                                invitation.status === 'used' ? 'secondary' : 'destructive'
+                              }>
+                                {invitation.status}
+                              </Badge>
+                            </td>
+                            <td className="py-3 text-sm text-muted-foreground">
+                              {new Date(invitation.expiresAt).toLocaleDateString()}
+                            </td>
+                            <td className="py-3">
+                              {invitation.status === 'pending' && (
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  onClick={() => revokeInvitationMutation.mutate(invitation.token)}
+                                  disabled={revokeInvitationMutation.isPending}
+                                  data-testid={`button-revoke-${index}`}
+                                >
+                                  <Trash2 className="w-4 h-4 text-destructive" />
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-8">
+                    No active invitations. Create one above to invite users.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="analytics" className="space-y-4">
