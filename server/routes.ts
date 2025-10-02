@@ -2538,12 +2538,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "User ID not found" });
       }
 
+      // Get organizationId from tenant context (set by tenant middleware)
+      const organizationId = req.tenant?.organizationId;
+      if (!organizationId) {
+        return res.status(400).json({ message: "Organization context required" });
+      }
+
       const validatedData = insertOpportunityNextStepSchema.parse({
         ...req.body,
         opportunityId: req.params.opportunityId,
         createdBy: userId,
       });
-      const nextStep = await storage.createOpportunityNextStep(validatedData);
+
+      // Pass organizationId explicitly to storage
+      const nextStep = await storage.createOpportunityNextStep({
+        ...validatedData,
+        organizationId
+      });
 
       // Log activity history
       await logActivityHistory(
@@ -2672,12 +2683,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "User ID not found" });
       }
 
+      // Get organizationId from tenant context (set by tenant middleware)
+      const organizationId = req.tenant?.organizationId;
+      if (!organizationId) {
+        return res.status(400).json({ message: "Organization context required" });
+      }
+
       const validatedData = insertOpportunityCommunicationSchema.parse({
         ...req.body,
         opportunityId: req.params.opportunityId,
         recordedBy: userId,
       });
-      const communication = await storage.createOpportunityCommunication(validatedData);
+
+      // Pass organizationId explicitly to storage
+      const communication = await storage.createOpportunityCommunication({
+        ...validatedData,
+        organizationId
+      });
 
       // Log activity history
       await logActivityHistory(
@@ -2987,12 +3009,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "User ID not found" });
       }
 
+      // Get organizationId from tenant context (set by tenant middleware)
+      const organizationId = req.tenant?.organizationId;
+      if (!organizationId) {
+        return res.status(400).json({ message: "Organization context required" });
+      }
+
       const validatedData = insertOpportunityStakeholderSchema.parse({
         ...req.body,
         opportunityId: req.params.opportunityId,
         createdBy: userId,
       });
-      const stakeholder = await storage.createOpportunityStakeholder(validatedData);
+
+      // Pass organizationId explicitly to storage
+      const stakeholder = await storage.createOpportunityStakeholder({
+        ...validatedData,
+        organizationId
+      });
 
       // Log activity history
       await logActivityHistory(

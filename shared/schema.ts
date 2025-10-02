@@ -1560,6 +1560,7 @@ export const insertSalesOpportunitySchema = createInsertSchema(salesOpportunitie
 // New table schemas
 export const insertOpportunityNextStepSchema = createInsertSchema(opportunityNextSteps).omit({
   id: true,
+  organizationId: true, // Added by storage layer
   createdAt: true,
   updatedAt: true,
   completedAt: true,
@@ -1569,6 +1570,7 @@ export const insertOpportunityNextStepSchema = createInsertSchema(opportunityNex
 
 export const insertOpportunityCommunicationSchema = createInsertSchema(opportunityCommunications).omit({
   id: true,
+  organizationId: true, // Added by storage layer
   createdAt: true,
   updatedAt: true,
 }).extend({
@@ -1583,6 +1585,7 @@ export const insertOpportunityCommunicationSchema = createInsertSchema(opportuni
 
 export const insertOpportunityStakeholderSchema = createInsertSchema(opportunityStakeholders).omit({
   id: true,
+  organizationId: true, // Added by storage layer
   createdAt: true,
   updatedAt: true,
 });

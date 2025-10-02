@@ -882,14 +882,10 @@ export class DatabaseStorage implements IStorage {
     return nextStep;
   }
 
-  async createOpportunityNextStep(nextStep: InsertOpportunityNextStep): Promise<OpportunityNextStep> {
-    const tenantDb = getTenantDb();
-    const organizationId = tenantDb.getOrganizationId();
+  async createOpportunityNextStep(nextStep: InsertOpportunityNextStep & { organizationId: string }): Promise<OpportunityNextStep> {
+    const organizationId = nextStep.organizationId;
     return await db.transaction(async (tx) => {
-      const [result] = await tx.insert(opportunityNextSteps).values({
-        ...nextStep,
-        organizationId
-      }).returning();
+      const [result] = await tx.insert(opportunityNextSteps).values(nextStep).returning();
 
       // Update parent opportunity's last activity date to the step creation time
       if (nextStep.opportunityId) {
@@ -1005,14 +1001,10 @@ export class DatabaseStorage implements IStorage {
     return communication;
   }
 
-  async createOpportunityCommunication(communication: InsertOpportunityCommunication): Promise<OpportunityCommunication> {
-    const tenantDb = getTenantDb();
-    const organizationId = tenantDb.getOrganizationId();
+  async createOpportunityCommunication(communication: InsertOpportunityCommunication & { organizationId: string }): Promise<OpportunityCommunication> {
+    const organizationId = communication.organizationId;
     return await db.transaction(async (tx) => {
-      const [result] = await tx.insert(opportunityCommunications).values({
-        ...communication,
-        organizationId
-      }).returning();
+      const [result] = await tx.insert(opportunityCommunications).values(communication).returning();
 
       // Update parent opportunity's last activity date to the communication date
       if (communication.opportunityId) {
@@ -1126,14 +1118,10 @@ export class DatabaseStorage implements IStorage {
     return stakeholder;
   }
 
-  async createOpportunityStakeholder(stakeholder: InsertOpportunityStakeholder): Promise<OpportunityStakeholder> {
-    const tenantDb = getTenantDb();
-    const organizationId = tenantDb.getOrganizationId();
+  async createOpportunityStakeholder(stakeholder: InsertOpportunityStakeholder & { organizationId: string }): Promise<OpportunityStakeholder> {
+    const organizationId = stakeholder.organizationId;
     return await db.transaction(async (tx) => {
-      const [result] = await tx.insert(opportunityStakeholders).values({
-        ...stakeholder,
-        organizationId
-      }).returning();
+      const [result] = await tx.insert(opportunityStakeholders).values(stakeholder).returning();
 
       // Update parent opportunity's last activity date
       if (stakeholder.opportunityId) {
