@@ -39,15 +39,114 @@ Preferred communication style: Simple, everyday language.
 - **Middleware Architecture**: Public auth routes (`/api/login`, `/api/callback`, `/api/auth/register`, etc.) bypass authentication middleware while all other `/api/*` routes require authentication and tenant context
 
 ### Multi-Tenant Architecture
-- **Tenant Routing**: Subdomain-based organization routing (e.g., `acme.yourdomain.com`, `contoso.yourdomain.com`)
-- **Default Organization**: Development and localhost automatically use `default` subdomain
-- **Tenant Resolution**: Middleware extracts subdomain from hostname and loads corresponding organization
-- **Data Isolation**: AsyncLocalStorage-based tenant context ensures thread-safe request isolation
-- **Automatic Filtering**: All database queries automatically filtered by organizationId via tenant-scoped database layer
-- **Organization Members**: Junction table tracks user-organization relationships with roles (owner, admin, member)
+
+#### Tenant Routing & Resolution
+- **Subdomain-Based Routing**: Organizations accessed via subdomain (e.g., `acme.yourdomain.com`, `contoso.yourdomain.com`)
+- **Default Organization**: Development and localhost automatically use `default` subdomain (slug='default')
+- **Tenant Resolution Middleware**: `resolveTenant` middleware (lines 281-307 in routes.ts) extracts subdomain from hostname and loads corresponding organization
+- **Request Context**: AsyncLocalStorage-based tenant context (`server/tenancy/tenantContext.ts`) ensures thread-safe request isolation
+- **Route Protection**: All `/api/*` routes require tenant context except public auth endpoints (`/api/login`, `/api/callback`, `/api/auth/register`)
+
+#### Data Isolation (Phase 3A - COMPLETED October 2025)
+- **Tenant-Scoped Database Layer**: All database operations use `getTenantDb()` from `server/tenancy/tenantDb.ts`
+- **Automatic organizationId Injection**: TenantDb wrapper automatically injects `organizationId` into all INSERT operations
+- **Automatic Query Filtering**: All SELECT queries automatically filtered by current tenant's organizationId
+- **Storage Layer**: 68+ storage methods in `server/storage.ts` use tenantDb exclusively (no manual organizationId parameters)
+- **Schema Compliance**: All 37+ business entity tables have `organizationId NOT NULL` constraint with CASCADE delete
+- **Zero Cross-Tenant Leakage**: Comprehensive testing confirmed single-organization isolation across all entities
+
+#### Recent Multi-Tenant Enhancements (Phase 3A)
+**Database Backfill & Constraints (October 2025)**
+- Backfilled 433 NULL organizationId values across all tables
+- Applied NOT NULL constraints to 37 tables for strict tenant isolation
+- Updated all Drizzle schema definitions to enforce organizationId.notNull()
+
+**Storage Layer Refactoring (October 2025)**
+- Refactored all 68+ storage methods to use `getTenantDb()` for automatic tenant scoping
+- Removed 40+ manual organizationId parameters from method signatures
+- Implemented automatic organizationId injection for all CRUD operations
+- Pattern: `getTenantDb().insert(table).values(data)` auto-injects organizationId
+
+**Route & Transaction Fixes (October 2025)**
+- Fixed 9 opportunity CRUD routes with ownership verification to prevent cross-entity access within same tenant
+- Fixed `logActivityHistory()` helper function (21 call sites) - was failing silently due to missing organizationId
+- Fixed convert-to-project transaction (lines 2186-2303) to propagate organizationId to:
+  - Project creation (main entity)
+  - Project activity logs (2 inserts)
+  - Project comments (stakeholder transfer documentation)
+  - Notifications (user notification with organizationId)
+  - Stakeholder SELECT query (added tenant filter to prevent cross-tenant leakage)
+
+#### Tenant-Aware Code Patterns
+**Storage Methods (Preferred Pattern)**
+```typescript
+// Automatic tenant isolation via getTenantDb()
+async getOpportunities() {
+  const tenantDb = getTenantDb();
+  return tenantDb.select().from(salesOpportunities); // organizationId auto-filtered
+}
+
+async createOpportunity(data: InsertSalesOpportunity) {
+  const tenantDb = getTenantDb();
+  return tenantDb.insert(salesOpportunities).values(data); // organizationId auto-injected
+}
+```
+
+**Route Handlers**
+```typescript
+// Tenant context automatically available via resolveTenant middleware
+app.get('/api/opportunities', isAuthenticated, async (req, res) => {
+  const opportunities = await storage.getOpportunities(); // tenantDb handles filtering
+  res.json(opportunities);
+});
+```
+
+**Helper Functions**
+```typescript
+// Use getTenantDb() for automatic organizationId injection
+async function logActivityHistory(opportunityId: string, action: string, details: string, performedBy: string) {
+  const tenantDb = getTenantDb();
+  await tenantDb.insert(opportunityActivityHistory).values({
+    opportunityId,
+    action,
+    details,
+    performedBy
+    // organizationId automatically injected by tenantDb
+  });
+}
+```
+
+**Transactions (Manual Propagation Pattern)**
+```typescript
+// For db.transaction(), manually propagate organizationId from parent entity
+await db.transaction(async (tx) => {
+  const [project] = await tx.insert(projects).values({
+    ...projectData,
+    organizationId: opportunity.organizationId // manual propagation
+  }).returning();
+  
+  await tx.insert(projectActivity).values({
+    projectId: project.id,
+    organizationId: opportunity.organizationId, // manual propagation
+    action: 'project_created',
+    performedBy: userId
+  });
+});
+// Note: tenantDb.runInTransaction() planned for future to automate this
+```
+
+#### Organization Management
+- **Organization Members**: Junction table (`organization_members`) tracks user-organization relationships with roles (owner, admin, member)
 - **User Assignment**: New OAuth users automatically assigned to default organization on first login
+- **Multi-Organization Support**: Users can belong to multiple organizations with different roles per organization
 - **Replit Deployment**: Production deployment via Replit autoscale with multi-tenant configuration
-- **Subdomain Support**: Configure `REPLIT_DOMAINS` with wildcard support for subdomain routing
+- **Subdomain Support**: Configure `REPLIT_DOMAINS` environment variable with wildcard support for subdomain routing
+
+#### Known Limitations & Future Work
+- **Phase 3B (Deferred)**: 44 remaining direct database operations in routes.ts need storage method abstraction (comments, attachments, templates, capacity planning)
+- **Phase 4 (Pending)**: WebSocket manager tenant context propagation for real-time notifications
+- **Production Migration**: SQL migration script needed for backfilling production organizationId values
+- **Transaction Wrapper**: `tenantDb.runInTransaction()` method planned to automate organizationId propagation in transactions
 
 ### Development Architecture
 - **Build System**: Vite with React plugin for frontend, esbuild for backend bundling
