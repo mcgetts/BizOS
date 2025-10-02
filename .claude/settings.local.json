@@ -66,7 +66,10 @@
       "Bash(cat:*)",
       "Bash(ps:*)",
       "Bash(timeout 5 curl -s \"http://localhost:3001/health\")",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(timeout 5 curl -s http://localhost:3001/health)",
+      "Bash(timeout 5 curl -s http://localhost:5000/health)",
+      "Bash(timeout 15 npm run dev)"
     ],
     "deny": [],
     "ask": []
