@@ -2493,17 +2493,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         opportunityId: req.params.opportunityId,
         createdBy: userId,
       });
-      const nextStep = await db.insert(opportunityNextSteps).values(validatedData).returning();
+      const nextStep = await storage.createOpportunityNextStep(validatedData);
 
       // Log activity history
       await logActivityHistory(
         req.params.opportunityId,
         'next_step_added',
-        `Added next step: "${nextStep[0].title}"`,
+        `Added next step: "${nextStep.title}"`,
         userId
       );
 
-      res.status(201).json(nextStep[0]);
+      res.status(201).json(nextStep);
     } catch (error) {
       console.error("Error creating next step:", error);
       res.status(400).json({ message: "Failed to create next step" });
@@ -2512,16 +2512,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put('/api/opportunities/:opportunityId/next-steps/:id', isAuthenticated, async (req, res) => {
     try {
-      const validatedData = updateOpportunityNextStepSchema.parse(req.body);
-      const nextStep = await db.update(opportunityNextSteps)
-        .set(validatedData)
-        .where(and(
-          eq(opportunityNextSteps.id, req.params.id),
-          eq(opportunityNextSteps.opportunityId, req.params.opportunityId)
-        ))
-        .returning();
+      // Get existing record to verify ownership
+      const existing = await storage.getOpportunityNextStep(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Next step not found" });
+      }
 
-      if (!nextStep.length) {
+      // Verify record belongs to the opportunity in URL (prevent cross-opportunity access)
+      if (existing.opportunityId !== req.params.opportunityId) {
+        return res.status(404).json({ message: "Next step not found" });
+      }
+
+      const validatedData = updateOpportunityNextStepSchema.parse(req.body);
+      const nextStep = await storage.updateOpportunityNextStep(req.params.id, validatedData);
+
+      if (!nextStep) {
         return res.status(404).json({ message: "Next step not found or does not belong to this opportunity" });
       }
 
@@ -2529,11 +2534,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await logActivityHistory(
         req.params.opportunityId,
         'next_step_updated',
-        `Updated next step: "${nextStep[0].title}"`,
+        `Updated next step: "${nextStep.title}"`,
         getUserId(req)
       );
 
-      res.json(nextStep[0]);
+      res.json(nextStep);
     } catch (error) {
       console.error("Error updating next step:", error);
       res.status(400).json({ message: "Failed to update next step" });
@@ -2542,22 +2547,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete('/api/opportunities/:opportunityId/next-steps/:id', isAuthenticated, async (req, res) => {
     try {
-      const result = await db.delete(opportunityNextSteps)
-        .where(and(
-          eq(opportunityNextSteps.id, req.params.id),
-          eq(opportunityNextSteps.opportunityId, req.params.opportunityId)
-        ))
-        .returning();
+      const nextStep = await storage.getOpportunityNextStep(req.params.id);
       
-      if (!result.length) {
-        return res.status(404).json({ message: "Next step not found or does not belong to this opportunity" });
+      if (!nextStep) {
+        return res.status(404).json({ message: "Next step not found" });
       }
+
+      // Verify record belongs to the opportunity in URL (prevent cross-opportunity access)
+      if (nextStep.opportunityId !== req.params.opportunityId) {
+        return res.status(404).json({ message: "Next step not found" });
+      }
+
+      await storage.deleteOpportunityNextStep(req.params.id);
 
       // Log activity history
       await logActivityHistory(
         req.params.opportunityId,
         'next_step_deleted',
-        `Deleted next step: "${result[0].title}"`,
+        `Deleted next step: "${nextStep.title}"`,
         getUserId(req)
       );
 
@@ -2614,17 +2621,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         opportunityId: req.params.opportunityId,
         recordedBy: userId,
       });
-      const communication = await db.insert(opportunityCommunications).values(validatedData).returning();
+      const communication = await storage.createOpportunityCommunication(validatedData);
 
       // Log activity history
       await logActivityHistory(
         req.params.opportunityId,
         'communication_logged',
-        `Logged ${communication[0].type}: "${communication[0].subject || 'Communication'}"`,
+        `Logged ${communication.type}: "${communication.subject || 'Communication'}"`,
         getUserId(req)
       );
 
-      res.status(201).json(communication[0]);
+      res.status(201).json(communication);
     } catch (error) {
       console.error("Error creating communication:", error);
       res.status(400).json({ message: "Failed to create communication" });
@@ -2633,16 +2640,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put('/api/opportunities/:opportunityId/communications/:id', isAuthenticated, async (req, res) => {
     try {
-      const validatedData = updateOpportunityCommunicationSchema.parse(req.body);
-      const communication = await db.update(opportunityCommunications)
-        .set(validatedData)
-        .where(and(
-          eq(opportunityCommunications.id, req.params.id),
-          eq(opportunityCommunications.opportunityId, req.params.opportunityId)
-        ))
-        .returning();
+      // Get existing record to verify ownership
+      const existing = await storage.getOpportunityCommunication(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Communication not found" });
+      }
 
-      if (!communication.length) {
+      // Verify record belongs to the opportunity in URL (prevent cross-opportunity access)
+      if (existing.opportunityId !== req.params.opportunityId) {
+        return res.status(404).json({ message: "Communication not found" });
+      }
+
+      const validatedData = updateOpportunityCommunicationSchema.parse(req.body);
+      const communication = await storage.updateOpportunityCommunication(req.params.id, validatedData);
+
+      if (!communication) {
         return res.status(404).json({ message: "Communication not found or does not belong to this opportunity" });
       }
 
@@ -2650,11 +2662,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await logActivityHistory(
         req.params.opportunityId,
         'communication_updated',
-        `Updated ${communication[0].type}: "${communication[0].subject || 'Communication'}"`,
+        `Updated ${communication.type}: "${communication.subject || 'Communication'}"`,
         getUserId(req)
       );
 
-      res.json(communication[0]);
+      res.json(communication);
     } catch (error) {
       console.error("Error updating communication:", error);
       res.status(400).json({ message: "Failed to update communication" });
@@ -2663,22 +2675,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete('/api/opportunities/:opportunityId/communications/:id', isAuthenticated, async (req, res) => {
     try {
-      const result = await db.delete(opportunityCommunications)
-        .where(and(
-          eq(opportunityCommunications.id, req.params.id),
-          eq(opportunityCommunications.opportunityId, req.params.opportunityId)
-        ))
-        .returning();
+      const communication = await storage.getOpportunityCommunication(req.params.id);
       
-      if (!result.length) {
-        return res.status(404).json({ message: "Communication not found or does not belong to this opportunity" });
+      if (!communication) {
+        return res.status(404).json({ message: "Communication not found" });
       }
+
+      // Verify record belongs to the opportunity in URL (prevent cross-opportunity access)
+      if (communication.opportunityId !== req.params.opportunityId) {
+        return res.status(404).json({ message: "Communication not found" });
+      }
+
+      await storage.deleteOpportunityCommunication(req.params.id);
 
       // Log activity history
       await logActivityHistory(
         req.params.opportunityId,
         'communication_deleted',
-        `Deleted ${result[0].type}: "${result[0].subject || 'Communication'}"`,
+        `Deleted ${communication.type}: "${communication.subject || 'Communication'}"`,
         getUserId(req)
       );
 
@@ -2923,17 +2937,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         opportunityId: req.params.opportunityId,
         createdBy: userId,
       });
-      const stakeholder = await db.insert(opportunityStakeholders).values(validatedData).returning();
+      const stakeholder = await storage.createOpportunityStakeholder(validatedData);
 
       // Log activity history
       await logActivityHistory(
         req.params.opportunityId,
         'stakeholder_added',
-        `Added stakeholder: "${stakeholder[0].name}" (${stakeholder[0].role || 'Unknown role'})`,
+        `Added stakeholder: "${stakeholder.name}" (${stakeholder.role || 'Unknown role'})`,
         getUserId(req)
       );
 
-      res.status(201).json(stakeholder[0]);
+      res.status(201).json(stakeholder);
     } catch (error) {
       console.error("Error creating stakeholder:", error);
       res.status(400).json({ message: "Failed to create stakeholder" });
@@ -2942,16 +2956,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put('/api/opportunities/:opportunityId/stakeholders/:id', isAuthenticated, async (req, res) => {
     try {
-      const validatedData = updateOpportunityStakeholderSchema.parse(req.body);
-      const stakeholder = await db.update(opportunityStakeholders)
-        .set(validatedData)
-        .where(and(
-          eq(opportunityStakeholders.id, req.params.id),
-          eq(opportunityStakeholders.opportunityId, req.params.opportunityId)
-        ))
-        .returning();
+      // Get existing record to verify ownership
+      const existing = await storage.getOpportunityStakeholder(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Stakeholder not found" });
+      }
 
-      if (!stakeholder.length) {
+      // Verify record belongs to the opportunity in URL (prevent cross-opportunity access)
+      if (existing.opportunityId !== req.params.opportunityId) {
+        return res.status(404).json({ message: "Stakeholder not found" });
+      }
+
+      const validatedData = updateOpportunityStakeholderSchema.parse(req.body);
+      const stakeholder = await storage.updateOpportunityStakeholder(req.params.id, validatedData);
+
+      if (!stakeholder) {
         return res.status(404).json({ message: "Stakeholder not found or does not belong to this opportunity" });
       }
 
@@ -2959,11 +2978,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await logActivityHistory(
         req.params.opportunityId,
         'stakeholder_updated',
-        `Updated stakeholder: "${stakeholder[0].name}" (${stakeholder[0].role || 'Unknown role'})`,
+        `Updated stakeholder: "${stakeholder.name}" (${stakeholder.role || 'Unknown role'})`,
         getUserId(req)
       );
 
-      res.json(stakeholder[0]);
+      res.json(stakeholder);
     } catch (error) {
       console.error("Error updating stakeholder:", error);
       res.status(400).json({ message: "Failed to update stakeholder" });
@@ -2972,22 +2991,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete('/api/opportunities/:opportunityId/stakeholders/:id', isAuthenticated, async (req, res) => {
     try {
-      const result = await db.delete(opportunityStakeholders)
-        .where(and(
-          eq(opportunityStakeholders.id, req.params.id),
-          eq(opportunityStakeholders.opportunityId, req.params.opportunityId)
-        ))
-        .returning();
+      const stakeholder = await storage.getOpportunityStakeholder(req.params.id);
 
-      if (!result.length) {
-        return res.status(404).json({ message: "Stakeholder not found or does not belong to this opportunity" });
+      if (!stakeholder) {
+        return res.status(404).json({ message: "Stakeholder not found" });
       }
+
+      // Verify record belongs to the opportunity in URL (prevent cross-opportunity access)
+      if (stakeholder.opportunityId !== req.params.opportunityId) {
+        return res.status(404).json({ message: "Stakeholder not found" });
+      }
+
+      await storage.deleteOpportunityStakeholder(req.params.id);
 
       // Log activity history
       await logActivityHistory(
         req.params.opportunityId,
         'stakeholder_deleted',
-        `Deleted stakeholder: "${result[0].name}" (${result[0].role || 'Unknown role'})`,
+        `Deleted stakeholder: "${stakeholder.name}" (${stakeholder.role || 'Unknown role'})`,
         getUserId(req)
       );
 
