@@ -318,12 +318,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       '/api/mfa/setup',
       '/api/mfa/verify',
     ];
-    
+
+    // Routes that need auth but can work without tenant context (user info endpoint)
+    const authOnlyRoutes = [
+      '/api/auth/user',
+    ];
+
     // Check using originalUrl which contains the full path
     if (publicRoutes.some(route => req.originalUrl.startsWith(route))) {
       return next();
     }
-    
+
+    // Auth-only routes: require authentication but not tenant context
+    if (authOnlyRoutes.some(route => req.originalUrl.startsWith(route))) {
+      return isAuthenticated(req, res, next);
+    }
+
     // Apply authentication first, then tenant middleware
     isAuthenticated(req, res, (authErr) => {
       if (authErr) return next(authErr);

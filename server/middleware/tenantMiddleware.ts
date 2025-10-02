@@ -94,8 +94,10 @@ export const resolveTenant: RequestHandler = async (req: any, res, next) => {
   try {
     // Extract subdomain from request
     const subdomain = extractSubdomain(req.hostname);
+    console.log(`🔍 Tenant middleware: hostname=${req.hostname}, extracted subdomain=${subdomain}`);
 
     if (!subdomain) {
+      console.log(`❌ Tenant middleware: No subdomain found for hostname ${req.hostname}`);
       return res.status(400).json({
         error: 'Invalid tenant',
         message: 'No subdomain specified. Use format: tenant.app.com',
@@ -104,6 +106,7 @@ export const resolveTenant: RequestHandler = async (req: any, res, next) => {
 
     // Find organization
     const org = await findOrganizationBySubdomain(subdomain);
+    console.log(`🔍 Tenant middleware: Looking for org with subdomain '${subdomain}', found:`, org ? `${org.name} (${org.id})` : 'NULL');
 
     if (!org) {
       // In development, provide helpful message about default organization
