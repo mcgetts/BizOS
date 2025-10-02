@@ -177,7 +177,13 @@ export const resolveTenant: RequestHandler = async (req: any, res, next) => {
     req.tenant = context;
 
     // Store context and continue - wrap the ENTIRE remaining request chain
-    tenantStorage.run(context, () => next());
+    // CRITICAL: Must use synchronous execution to maintain AsyncLocalStorage context
+    // through the entire async request/response cycle
+    console.log(`✅ Tenant middleware: Setting context for org ${context.organizationId}`);
+    tenantStorage.run(context, () => {
+      console.log(`✅ Tenant middleware: Inside tenantStorage.run, calling next()`);
+      next();
+    });
   } catch (error) {
     console.error('Tenant resolution error:', error);
     res.status(500).json({
