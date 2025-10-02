@@ -106,6 +106,10 @@ async function upsertUser(
       lastName: claims["last_name"],
       profileImageUrl: claims["profile_image_url"],
     });
+
+    // Ensure existing user is in default organization (multi-tenant fix)
+    await ensureUserInDefaultOrganization(claims["sub"]);
+
     return;
   }
 
@@ -288,6 +292,9 @@ export async function setupAuth(app: Express) {
           .update(users)
           .set({ lastLoginAt: new Date() })
           .where(eq(users.id, user.id));
+
+        // Ensure user is in default organization (multi-tenant fix)
+        await ensureUserInDefaultOrganization(user.id);
 
         // Create user session object
         const sessionUser = {
