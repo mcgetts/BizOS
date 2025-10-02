@@ -22,6 +22,7 @@ Preferred communication style: Simple, everyday language.
 - **Database**: PostgreSQL with Neon serverless hosting, Drizzle ORM for type-safe schema and migrations.
 - **Authentication**: OpenID Connect with Replit Auth (Passport.js), Express sessions with PostgreSQL store, and role-based route protection.
 - **Multi-Tenancy**: Subdomain-based routing, `resolveTenant` middleware, AsyncLocalStorage for tenant context, automatic `organizationId` injection and filtering for data isolation, and tenant-scoped database operations.
+- **WebSocket Security**: Server-side session validation on connection (via connect.sid cookie), organizationId extracted from validated session, tenant-scoped broadcasts using `broadcastToOrganization()` to prevent cross-tenant data leakage, no client-provided credentials trusted.
 - **Port Allocation**: Unified strategy: 5000 for Replit/Production, 3001 for local development.
 
 ### Feature Specifications
@@ -59,3 +60,11 @@ Preferred communication style: Simple, everyday language.
 
 ### Monitoring & Development
 - **Replit Dev Tools**: Development banner, cartographer, and error handling.
+
+## Security Architecture
+
+### WebSocket Tenant Isolation (Phase 4B)
+- **Authentication Flow**: WebSocket connections authenticate on connection by validating the session cookie (connect.sid) against PostgreSQL session store, deserializing passport user data, and extracting organizationId from the session.
+- **Broadcast Security**: All WebSocket broadcasts use `broadcastToOrganization(organizationId, ...)` to ensure notifications and real-time updates are only sent to users within the same organization. Replaced 17 unsafe broadcast methods (broadcastToAllUsers, broadcastDataChange).
+- **Client Simplification**: Client no longer sends authentication credentials after connection; server handles all authentication server-side via session validation.
+- **Verification**: Phase 4A integration tests confirm proper tenant isolation for comments, attachments, templates, allocations, budgets, and opportunity files. Phase 4B security audit confirmed no cross-tenant WebSocket leakage possible.
