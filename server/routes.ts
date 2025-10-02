@@ -13,6 +13,7 @@ import { mfaRoutes } from "./routes/mfaRoutes.js";
 import { authMfaRoutes } from "./routes/authMfaRoutes.js";
 import { sessionRoutes } from "./routes/sessionRoutes.js";
 import { resolveTenant, requireTenant } from "./middleware/tenantMiddleware";
+import { getTenantDb } from "./tenancy/tenantDb.js";
 import {
   insertUserSchema,
   registerUserSchema,
@@ -126,7 +127,8 @@ async function logActivityHistory(
   newValue?: string
 ) {
   try {
-    await db.insert(opportunityActivityHistory).values({
+    const tenantDb = getTenantDb();
+    await tenantDb.insert(opportunityActivityHistory).values({
       opportunityId,
       action,
       details,
