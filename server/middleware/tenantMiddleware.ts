@@ -25,6 +25,12 @@ function extractSubdomain(hostname: string): string | null {
     return 'default';
   }
 
+  // For Replit production URLs (*.repl.co), use 'default' subdomain
+  // This ensures consistency across dev and prod environments
+  if (host.endsWith('.repl.co')) {
+    return 'default';
+  }
+
   // Split by dots
   const parts = host.split('.');
 
