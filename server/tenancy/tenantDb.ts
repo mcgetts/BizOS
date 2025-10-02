@@ -135,6 +135,49 @@ export class TenantScopedDB {
   getOrganizationId() {
     return this.orgId;
   }
+
+  /**
+   * Execute a scoped query with full Drizzle API access
+   * Provides both db and organizationId to callback for complex queries with joins
+   * 
+   * Usage for complex queries with joins:
+   * ```
+   * const tenantDb = getTenantDb();
+   * return await tenantDb.query((db, orgId) =>
+   *   db.select({...})
+   *     .from(clients)
+   *     .leftJoin(companies, and(
+   *       eq(clients.companyId, companies.id),
+   *       eq(companies.organizationId, orgId)
+   *     ))
+   *     .where(eq(clients.organizationId, orgId))
+   * );
+   * ```
+   */
+  async query<T>(
+    callback: (db: typeof db, organizationId: string) => Promise<T>
+  ): Promise<T> {
+    return await callback(db, this.orgId);
+  }
+
+  /**
+   * Helper to build tenant-scoped join condition
+   * Automatically adds organizationId filter to join conditions
+   * 
+   * Usage:
+   * ```
+   * tenantDb.joinScoped(companies, eq(clients.companyId, companies.id))
+   * ```
+   */
+  joinScoped<T extends PgTable>(table: T, condition: SQL): SQL {
+    if (hasOrganizationId(table)) {
+      return and(
+        condition,
+        eq((table as any).organizationId, this.orgId)
+      );
+    }
+    return condition;
+  }
 }
 
 /**

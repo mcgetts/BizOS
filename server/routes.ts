@@ -1878,8 +1878,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/clients', isAuthenticated, async (req: any, res) => {
     try {
       const validatedData = insertClientSchema.parse(req.body);
-      const organizationId = req.tenant?.organizationId;
-      const client = await storage.createClient(validatedData, organizationId);
+      const client = await storage.createClient(validatedData);
 
       // Broadcast the creation to all connected clients
       await wsManager.broadcastToAllUsers('create', 'client', client);
@@ -1951,8 +1950,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/companies', isAuthenticated, async (req: any, res) => {
     try {
       const validatedData = insertCompanySchema.parse(req.body);
-      const organizationId = req.tenant?.organizationId;
-      const company = await storage.createCompany(validatedData, organizationId);
+      const company = await storage.createCompany(validatedData);
 
       // Broadcast the creation to all connected clients
       await wsManager.broadcastToAllUsers('create', 'company', company);
@@ -2040,10 +2038,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validatedData = insertSalesOpportunitySchema.parse(req.body);
       console.log('Validated data:', JSON.stringify(validatedData, null, 2));
 
-      const organizationId = req.tenant?.organizationId;
-      console.log('Extracted organizationId:', organizationId);
-
-      const opportunity = await storage.createSalesOpportunity(validatedData, organizationId);
+      const opportunity = await storage.createSalesOpportunity(validatedData);
       console.log('Created opportunity:', JSON.stringify(opportunity, null, 2));
 
       // Log activity history
@@ -3059,8 +3054,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/projects', isAuthenticated, async (req: any, res) => {
     try {
       const validatedData = insertProjectSchema.parse(req.body);
-      const organizationId = req.tenant?.organizationId;
-      const project = await storage.createProject(validatedData, organizationId);
+      const project = await storage.createProject(validatedData);
 
       // Broadcast the creation to all connected clients
       await wsManager.broadcastToAllUsers('create', 'project', project);
@@ -3215,8 +3209,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/tasks', isAuthenticated, async (req: any, res) => {
     try {
       const validatedData = insertTaskSchema.parse(req.body);
-      const organizationId = req.tenant?.organizationId;
-      const task = await storage.createTask(validatedData, organizationId);
+      const task = await storage.createTask(validatedData);
 
       // Broadcast the creation to all connected clients
       await wsManager.broadcastToAllUsers('create', 'task', task);

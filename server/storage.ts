@@ -80,6 +80,7 @@ import {
   type UserInvitation,
 } from "@shared/schema";
 import { db } from "./db";
+import { getTenantDb } from "./tenancy/tenantDb";
 import { eq, desc, and, or, like, sql, count, gte, lte } from "drizzle-orm";
 import { calculateSlaMetrics, calculateBusinessImpact, DEFAULT_SLA_CONFIGS } from "@shared/slaUtils";
 import { getOrganizationId } from "./tenancy/tenantContext";
@@ -350,9 +351,9 @@ export class DatabaseStorage implements IStorage {
 
   // Client operations
   async getClients(): Promise<ClientWithCompany[]> {
-    const organizationId = getOrganizationId();
-    return await db
-      .select({
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select({
         id: clients.id,
         name: clients.name,
         email: clients.email,
@@ -367,6 +368,7 @@ export class DatabaseStorage implements IStorage {
         notes: clients.notes,
         tags: clients.tags,
         isActive: clients.isActive,
+        organizationId: clients.organizationId,
         // Legacy fields
         company: {
           id: companies.id,
@@ -382,18 +384,16 @@ export class DatabaseStorage implements IStorage {
         updatedAt: clients.updatedAt,
       })
       .from(clients)
-      .leftJoin(companies, and(
-        eq(clients.companyId, companies.id),
-        eq(companies.organizationId, organizationId)
-      ))
+      .leftJoin(companies, tenantDb.joinScoped(companies, eq(clients.companyId, companies.id)))
       .where(eq(clients.organizationId, organizationId))
-      .orderBy(desc(clients.createdAt));
+      .orderBy(desc(clients.createdAt))
+    );
   }
 
   async getClient(id: string): Promise<ClientWithCompany | undefined> {
-    const organizationId = getOrganizationId();
-    const [client] = await db
-      .select({
+    const tenantDb = getTenantDb();
+    const [client] = await tenantDb.query((db, organizationId) =>
+      db.select({
         id: clients.id,
         name: clients.name,
         email: clients.email,
@@ -408,6 +408,7 @@ export class DatabaseStorage implements IStorage {
         notes: clients.notes,
         tags: clients.tags,
         isActive: clients.isActive,
+        organizationId: clients.organizationId,
         // Legacy fields
         company: {
           id: companies.id,
@@ -423,105 +424,89 @@ export class DatabaseStorage implements IStorage {
         updatedAt: clients.updatedAt,
       })
       .from(clients)
-      .leftJoin(companies, and(
-        eq(clients.companyId, companies.id),
-        eq(companies.organizationId, organizationId)
-      ))
+      .leftJoin(companies, tenantDb.joinScoped(companies, eq(clients.companyId, companies.id)))
       .where(and(
         eq(clients.id, id),
         eq(clients.organizationId, organizationId)
-      ));
+      ))
+    );
     return client;
   }
 
-  async createClient(client: InsertClient, organizationId?: string): Promise<Client> {
-    const orgId = organizationId || getOrganizationId();
-    const [newClient] = await db.insert(clients).values({
-      ...client,
-      organizationId: orgId
-    }).returning();
+  async createClient(client: InsertClient): Promise<Client> {
+    const tenantDb = getTenantDb();
+    const [newClient] = await tenantDb.insert(clients).values(client).returning();
     return newClient;
   }
 
   async updateClient(id: string, client: Partial<InsertClient>): Promise<Client> {
-    const organizationId = getOrganizationId();
-    const [updatedClient] = await db
+    const tenantDb = getTenantDb();
+    const [updatedClient] = await tenantDb
       .update(clients)
       .set({ ...client, updatedAt: new Date() })
-      .where(and(
-        eq(clients.id, id),
-        eq(clients.organizationId, organizationId)
-      ))
+      .where(eq(clients.id, id))
       .returning();
     return updatedClient;
   }
 
   async deleteClient(id: string): Promise<void> {
-    const organizationId = getOrganizationId();
-    await db.delete(clients).where(and(
-      eq(clients.id, id),
-      eq(clients.organizationId, organizationId)
-    ));
+    const tenantDb = getTenantDb();
+    await tenantDb.delete(clients).where(eq(clients.id, id));
   }
 
   // Company operations
   async getCompanies(): Promise<Company[]> {
-    const organizationId = getOrganizationId();
-    return await db.select().from(companies)
-      .where(and(
-        eq(companies.isActive, true),
-        eq(companies.organizationId, organizationId)
-      ))
-      .orderBy(desc(companies.createdAt));
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select().from(companies)
+        .where(and(
+          eq(companies.isActive, true),
+          eq(companies.organizationId, organizationId)
+        ))
+        .orderBy(desc(companies.createdAt))
+    );
   }
 
   async getCompany(id: string): Promise<Company | undefined> {
-    const organizationId = getOrganizationId();
-    const [company] = await db.select().from(companies)
-      .where(and(
-        eq(companies.id, id),
-        eq(companies.organizationId, organizationId)
-      ));
+    const tenantDb = getTenantDb();
+    const [company] = await tenantDb.query((db, organizationId) =>
+      db.select().from(companies)
+        .where(and(
+          eq(companies.id, id),
+          eq(companies.organizationId, organizationId)
+        ))
+    );
     return company;
   }
 
-  async createCompany(company: InsertCompany, organizationId?: string): Promise<Company> {
-    const orgId = organizationId || getOrganizationId();
-    const [newCompany] = await db.insert(companies).values({
-      ...company,
-      organizationId: orgId
-    }).returning();
+  async createCompany(company: InsertCompany): Promise<Company> {
+    const tenantDb = getTenantDb();
+    const [newCompany] = await tenantDb.insert(companies).values(company).returning();
     return newCompany;
   }
 
   async updateCompany(id: string, company: Partial<InsertCompany>): Promise<Company> {
-    const organizationId = getOrganizationId();
-    const [updatedCompany] = await db
+    const tenantDb = getTenantDb();
+    const [updatedCompany] = await tenantDb
       .update(companies)
       .set({ ...company, updatedAt: new Date() })
-      .where(and(
-        eq(companies.id, id),
-        eq(companies.organizationId, organizationId)
-      ))
+      .where(eq(companies.id, id))
       .returning();
     return updatedCompany;
   }
 
   async deleteCompany(id: string): Promise<void> {
-    const organizationId = getOrganizationId();
-    await db.update(companies)
+    const tenantDb = getTenantDb();
+    await tenantDb.update(companies)
       .set({ isActive: false })
-      .where(and(
-        eq(companies.id, id),
-        eq(companies.organizationId, organizationId)
-      ));
+      .where(eq(companies.id, id));
   }
 
   // Sales opportunity operations
   async getSalesOpportunities(): Promise<SalesOpportunityWithRelations[]> {
-    const organizationId = getOrganizationId();
-    return await db
-      .select({
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select({
         id: salesOpportunities.id,
         title: salesOpportunities.title,
         description: salesOpportunities.description,
@@ -544,6 +529,7 @@ export class DatabaseStorage implements IStorage {
         budgetStatus: salesOpportunities.budgetStatus,
         competitorInfo: salesOpportunities.competitorInfo,
         lastActivityDate: salesOpportunities.lastActivityDate,
+        organizationId: salesOpportunities.organizationId,
         createdAt: salesOpportunities.createdAt,
         updatedAt: salesOpportunities.updatedAt,
         company: {
@@ -566,22 +552,18 @@ export class DatabaseStorage implements IStorage {
         }
       })
       .from(salesOpportunities)
-      .leftJoin(companies, and(
-        eq(salesOpportunities.companyId, companies.id),
-        eq(companies.organizationId, organizationId)
-      ))
-      .leftJoin(clients, and(
-        eq(salesOpportunities.contactId, clients.id),
-        eq(clients.organizationId, organizationId)
-      ))
+      .leftJoin(companies, tenantDb.joinScoped(companies, eq(salesOpportunities.companyId, companies.id)))
+      .leftJoin(clients, tenantDb.joinScoped(clients, eq(salesOpportunities.contactId, clients.id)))
       .leftJoin(users, eq(salesOpportunities.assignedTo, users.id))
       .where(eq(salesOpportunities.organizationId, organizationId))
-      .orderBy(desc(salesOpportunities.lastActivityDate));
+      .orderBy(desc(salesOpportunities.lastActivityDate))
+    );
   }
 
   async getSalesOpportunity(id: string): Promise<SalesOpportunityWithRelations | undefined> {
-    const [opportunity] = await db
-      .select({
+    const tenantDb = getTenantDb();
+    const [opportunity] = await tenantDb.query((db, organizationId) =>
+      db.select({
         id: salesOpportunities.id,
         title: salesOpportunities.title,
         description: salesOpportunities.description,
@@ -604,6 +586,7 @@ export class DatabaseStorage implements IStorage {
         budgetStatus: salesOpportunities.budgetStatus,
         competitorInfo: salesOpportunities.competitorInfo,
         lastActivityDate: salesOpportunities.lastActivityDate,
+        organizationId: salesOpportunities.organizationId,
         createdAt: salesOpportunities.createdAt,
         updatedAt: salesOpportunities.updatedAt,
         company: {
@@ -626,26 +609,21 @@ export class DatabaseStorage implements IStorage {
         }
       })
       .from(salesOpportunities)
-      .leftJoin(companies, and(
-        eq(salesOpportunities.companyId, companies.id),
-        eq(companies.organizationId, getOrganizationId())
-      ))
-      .leftJoin(clients, and(
-        eq(salesOpportunities.contactId, clients.id),
-        eq(clients.organizationId, getOrganizationId())
-      ))
+      .leftJoin(companies, tenantDb.joinScoped(companies, eq(salesOpportunities.companyId, companies.id)))
+      .leftJoin(clients, tenantDb.joinScoped(clients, eq(salesOpportunities.contactId, clients.id)))
       .leftJoin(users, eq(salesOpportunities.assignedTo, users.id))
       .where(and(
         eq(salesOpportunities.id, id),
-        eq(salesOpportunities.organizationId, getOrganizationId())
-      ));
+        eq(salesOpportunities.organizationId, organizationId)
+      ))
+    );
     return opportunity;
   }
 
   async getSalesOpportunitiesByStage(stage: string): Promise<SalesOpportunityWithRelations[]> {
-    const organizationId = getOrganizationId();
-    return await db
-      .select({
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select({
         id: salesOpportunities.id,
         title: salesOpportunities.title,
         description: salesOpportunities.description,
@@ -668,6 +646,7 @@ export class DatabaseStorage implements IStorage {
         budgetStatus: salesOpportunities.budgetStatus,
         competitorInfo: salesOpportunities.competitorInfo,
         lastActivityDate: salesOpportunities.lastActivityDate,
+        organizationId: salesOpportunities.organizationId,
         createdAt: salesOpportunities.createdAt,
         updatedAt: salesOpportunities.updatedAt,
         company: {
@@ -690,45 +669,36 @@ export class DatabaseStorage implements IStorage {
         }
       })
       .from(salesOpportunities)
-      .leftJoin(companies, and(
-        eq(salesOpportunities.companyId, companies.id),
-        eq(companies.organizationId, organizationId)
-      ))
-      .leftJoin(clients, and(
-        eq(salesOpportunities.contactId, clients.id),
-        eq(clients.organizationId, organizationId)
-      ))
+      .leftJoin(companies, tenantDb.joinScoped(companies, eq(salesOpportunities.companyId, companies.id)))
+      .leftJoin(clients, tenantDb.joinScoped(clients, eq(salesOpportunities.contactId, clients.id)))
       .leftJoin(users, eq(salesOpportunities.assignedTo, users.id))
       .where(and(
         eq(salesOpportunities.stage, stage),
         eq(salesOpportunities.organizationId, organizationId)
       ))
-      .orderBy(desc(salesOpportunities.lastActivityDate));
+      .orderBy(desc(salesOpportunities.lastActivityDate))
+    );
   }
 
-  async createSalesOpportunity(opportunity: InsertSalesOpportunity, organizationId?: string): Promise<SalesOpportunity> {
-    const orgId = organizationId || getOrganizationId();
-    const [newOpportunity] = await db.insert(salesOpportunities).values({
+  async createSalesOpportunity(opportunity: InsertSalesOpportunity): Promise<SalesOpportunity> {
+    const tenantDb = getTenantDb();
+    const [newOpportunity] = await tenantDb.insert(salesOpportunities).values({
       ...opportunity,
-      organizationId: orgId,
       lastActivityDate: new Date(),
     }).returning();
     return newOpportunity;
   }
 
   async updateSalesOpportunity(id: string, opportunity: Partial<InsertSalesOpportunity>): Promise<SalesOpportunity> {
-    const organizationId = getOrganizationId();
-    const [updatedOpportunity] = await db
+    const tenantDb = getTenantDb();
+    const [updatedOpportunity] = await tenantDb
       .update(salesOpportunities)
       .set({
         ...opportunity,
         updatedAt: new Date(),
         lastActivityDate: new Date(),
       })
-      .where(and(
-        eq(salesOpportunities.id, id),
-        eq(salesOpportunities.organizationId, organizationId)
-      ))
+      .where(eq(salesOpportunities.id, id))
       .returning();
     return updatedOpportunity;
   }
@@ -758,7 +728,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteSalesOpportunity(id: string): Promise<void> {
-    const organizationId = getOrganizationId();
+    const tenantDb = getTenantDb();
+    const organizationId = tenantDb.getOrganizationId();
     // Transactionally delete all related records first to maintain referential integrity
     await db.transaction(async (tx) => {
       // Delete related next steps
@@ -789,9 +760,9 @@ export class DatabaseStorage implements IStorage {
 
   // Opportunity next steps operations
   async getOpportunityNextSteps(opportunityId: string): Promise<OpportunityNextStep[]> {
-    const organizationId = getOrganizationId();
-    return await db
-      .select({
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select({
         id: opportunityNextSteps.id,
         opportunityId: opportunityNextSteps.opportunityId,
         title: opportunityNextSteps.title,
@@ -802,6 +773,7 @@ export class DatabaseStorage implements IStorage {
         status: opportunityNextSteps.status,
         completedAt: opportunityNextSteps.completedAt,
         completedBy: opportunityNextSteps.completedBy,
+        organizationId: opportunityNextSteps.organizationId,
         createdBy: opportunityNextSteps.createdBy,
         createdAt: opportunityNextSteps.createdAt,
         updatedAt: opportunityNextSteps.updatedAt,
@@ -817,23 +789,26 @@ export class DatabaseStorage implements IStorage {
         eq(opportunityNextSteps.opportunityId, opportunityId),
         eq(opportunityNextSteps.organizationId, organizationId)
       ))
-      .orderBy(desc(opportunityNextSteps.createdAt));
+      .orderBy(desc(opportunityNextSteps.createdAt))
+    );
   }
 
   async getOpportunityNextStep(id: string): Promise<OpportunityNextStep | undefined> {
-    const organizationId = getOrganizationId();
-    const [nextStep] = await db
-      .select()
-      .from(opportunityNextSteps)
-      .where(and(
-        eq(opportunityNextSteps.id, id),
-        eq(opportunityNextSteps.organizationId, organizationId)
-      ));
+    const tenantDb = getTenantDb();
+    const [nextStep] = await tenantDb.query((db, organizationId) =>
+      db.select()
+        .from(opportunityNextSteps)
+        .where(and(
+          eq(opportunityNextSteps.id, id),
+          eq(opportunityNextSteps.organizationId, organizationId)
+        ))
+    );
     return nextStep;
   }
 
   async createOpportunityNextStep(nextStep: InsertOpportunityNextStep): Promise<OpportunityNextStep> {
-    const organizationId = getOrganizationId();
+    const tenantDb = getTenantDb();
+    const organizationId = tenantDb.getOrganizationId();
     return await db.transaction(async (tx) => {
       const [result] = await tx.insert(opportunityNextSteps).values({
         ...nextStep,
@@ -855,7 +830,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateOpportunityNextStep(id: string, nextStep: Partial<InsertOpportunityNextStep>): Promise<OpportunityNextStep> {
-    const organizationId = getOrganizationId();
+    const tenantDb = getTenantDb();
+    const organizationId = tenantDb.getOrganizationId();
     return await db.transaction(async (tx) => {
       const [result] = await tx
         .update(opportunityNextSteps)
@@ -881,7 +857,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteOpportunityNextStep(id: string): Promise<void> {
-    const organizationId = getOrganizationId();
+    const tenantDb = getTenantDb();
+    const organizationId = tenantDb.getOrganizationId();
     await db.transaction(async (tx) => {
       // Get the opportunity ID before deleting the next step
       const [nextStep] = await tx.select({ opportunityId: opportunityNextSteps.opportunityId })
@@ -905,9 +882,9 @@ export class DatabaseStorage implements IStorage {
 
   // Opportunity communications operations
   async getOpportunityCommunications(opportunityId: string): Promise<OpportunityCommunication[]> {
-    const organizationId = getOrganizationId();
-    return await db
-      .select({
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select({
         id: opportunityCommunications.id,
         opportunityId: opportunityCommunications.opportunityId,
         type: opportunityCommunications.type,
@@ -918,6 +895,7 @@ export class DatabaseStorage implements IStorage {
         followUpRequired: opportunityCommunications.followUpRequired,
         followUpDate: opportunityCommunications.followUpDate,
         attachments: opportunityCommunications.attachments,
+        organizationId: opportunityCommunications.organizationId,
         recordedBy: opportunityCommunications.recordedBy,
         communicationDate: opportunityCommunications.communicationDate,
         createdAt: opportunityCommunications.createdAt,
@@ -934,23 +912,26 @@ export class DatabaseStorage implements IStorage {
         eq(opportunityCommunications.opportunityId, opportunityId),
         eq(opportunityCommunications.organizationId, organizationId)
       ))
-      .orderBy(desc(opportunityCommunications.communicationDate));
+      .orderBy(desc(opportunityCommunications.communicationDate))
+    );
   }
 
   async getOpportunityCommunication(id: string): Promise<OpportunityCommunication | undefined> {
-    const organizationId = getOrganizationId();
-    const [communication] = await db
-      .select()
-      .from(opportunityCommunications)
-      .where(and(
-        eq(opportunityCommunications.id, id),
-        eq(opportunityCommunications.organizationId, organizationId)
-      ));
+    const tenantDb = getTenantDb();
+    const [communication] = await tenantDb.query((db, organizationId) =>
+      db.select()
+        .from(opportunityCommunications)
+        .where(and(
+          eq(opportunityCommunications.id, id),
+          eq(opportunityCommunications.organizationId, organizationId)
+        ))
+    );
     return communication;
   }
 
   async createOpportunityCommunication(communication: InsertOpportunityCommunication): Promise<OpportunityCommunication> {
-    const organizationId = getOrganizationId();
+    const tenantDb = getTenantDb();
+    const organizationId = tenantDb.getOrganizationId();
     return await db.transaction(async (tx) => {
       const [result] = await tx.insert(opportunityCommunications).values({
         ...communication,
@@ -972,7 +953,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateOpportunityCommunication(id: string, communication: Partial<InsertOpportunityCommunication>): Promise<OpportunityCommunication> {
-    const organizationId = getOrganizationId();
+    const tenantDb = getTenantDb();
+    const organizationId = tenantDb.getOrganizationId();
     return await db.transaction(async (tx) => {
       const [result] = await tx
         .update(opportunityCommunications)
@@ -998,7 +980,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteOpportunityCommunication(id: string): Promise<void> {
-    const organizationId = getOrganizationId();
+    const tenantDb = getTenantDb();
+    const organizationId = tenantDb.getOrganizationId();
     await db.transaction(async (tx) => {
       // Get the opportunity ID before deleting the communication
       const [communication] = await tx.select({ opportunityId: opportunityCommunications.opportunityId })
@@ -1022,9 +1005,9 @@ export class DatabaseStorage implements IStorage {
 
   // Opportunity stakeholders operations
   async getOpportunityStakeholders(opportunityId: string): Promise<OpportunityStakeholder[]> {
-    const organizationId = getOrganizationId();
-    return await db
-      .select({
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select({
         id: opportunityStakeholders.id,
         opportunityId: opportunityStakeholders.opportunityId,
         name: opportunityStakeholders.name,
@@ -1034,6 +1017,7 @@ export class DatabaseStorage implements IStorage {
         influence: opportunityStakeholders.influence,
         relationshipStrength: opportunityStakeholders.relationshipStrength,
         notes: opportunityStakeholders.notes,
+        organizationId: opportunityStakeholders.organizationId,
         createdBy: opportunityStakeholders.createdBy,
         createdAt: opportunityStakeholders.createdAt,
         updatedAt: opportunityStakeholders.updatedAt,
@@ -1049,23 +1033,26 @@ export class DatabaseStorage implements IStorage {
         eq(opportunityStakeholders.opportunityId, opportunityId),
         eq(opportunityStakeholders.organizationId, organizationId)
       ))
-      .orderBy(opportunityStakeholders.name);
+      .orderBy(opportunityStakeholders.name)
+    );
   }
 
   async getOpportunityStakeholder(id: string): Promise<OpportunityStakeholder | undefined> {
-    const organizationId = getOrganizationId();
-    const [stakeholder] = await db
-      .select()
-      .from(opportunityStakeholders)
-      .where(and(
-        eq(opportunityStakeholders.id, id),
-        eq(opportunityStakeholders.organizationId, organizationId)
-      ));
+    const tenantDb = getTenantDb();
+    const [stakeholder] = await tenantDb.query((db, organizationId) =>
+      db.select()
+        .from(opportunityStakeholders)
+        .where(and(
+          eq(opportunityStakeholders.id, id),
+          eq(opportunityStakeholders.organizationId, organizationId)
+        ))
+    );
     return stakeholder;
   }
 
   async createOpportunityStakeholder(stakeholder: InsertOpportunityStakeholder): Promise<OpportunityStakeholder> {
-    const organizationId = getOrganizationId();
+    const tenantDb = getTenantDb();
+    const organizationId = tenantDb.getOrganizationId();
     return await db.transaction(async (tx) => {
       const [result] = await tx.insert(opportunityStakeholders).values({
         ...stakeholder,
@@ -1087,7 +1074,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateOpportunityStakeholder(id: string, stakeholder: Partial<InsertOpportunityStakeholder>): Promise<OpportunityStakeholder> {
-    const organizationId = getOrganizationId();
+    const tenantDb = getTenantDb();
+    const organizationId = tenantDb.getOrganizationId();
     return await db.transaction(async (tx) => {
       const [result] = await tx
         .update(opportunityStakeholders)
@@ -1113,7 +1101,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteOpportunityStakeholder(id: string): Promise<void> {
-    const organizationId = getOrganizationId();
+    const tenantDb = getTenantDb();
+    const organizationId = tenantDb.getOrganizationId();
     await db.transaction(async (tx) => {
       // Get the opportunity ID before deleting the stakeholder
       const [stakeholder] = await tx.select({ opportunityId: opportunityStakeholders.opportunityId })
@@ -1137,331 +1126,315 @@ export class DatabaseStorage implements IStorage {
 
   // Project operations
   async getProjects(): Promise<Project[]> {
-    const organizationId = getOrganizationId();
-    return await db.select().from(projects)
-      .where(eq(projects.organizationId, organizationId))
-      .orderBy(desc(projects.createdAt));
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select().from(projects)
+        .where(eq(projects.organizationId, organizationId))
+        .orderBy(desc(projects.createdAt))
+    );
   }
 
   async getProject(id: string): Promise<Project | undefined> {
-    const organizationId = getOrganizationId();
-    const [project] = await db.select().from(projects)
-      .where(and(
-        eq(projects.id, id),
-        eq(projects.organizationId, organizationId)
-      ));
+    const tenantDb = getTenantDb();
+    const [project] = await tenantDb.query((db, organizationId) =>
+      db.select().from(projects)
+        .where(and(
+          eq(projects.id, id),
+          eq(projects.organizationId, organizationId)
+        ))
+    );
     return project;
   }
 
   async getProjectsByClient(clientId: string): Promise<Project[]> {
-    const organizationId = getOrganizationId();
-    return await db.select().from(projects)
-      .where(and(
-        eq(projects.clientId, clientId),
-        eq(projects.organizationId, organizationId)
-      ));
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select().from(projects)
+        .where(and(
+          eq(projects.clientId, clientId),
+          eq(projects.organizationId, organizationId)
+        ))
+    );
   }
 
-  async createProject(project: InsertProject, organizationId?: string): Promise<Project> {
-    const orgId = organizationId || getOrganizationId();
-    const [newProject] = await db.insert(projects).values({
-      ...project,
-      organizationId: orgId
-    }).returning();
+  async createProject(project: InsertProject): Promise<Project> {
+    const tenantDb = getTenantDb();
+    const [newProject] = await tenantDb.insert(projects).values(project).returning();
     return newProject;
   }
 
   async updateProject(id: string, project: Partial<InsertProject>): Promise<Project> {
-    const organizationId = getOrganizationId();
-    const [updatedProject] = await db
+    const tenantDb = getTenantDb();
+    const [updatedProject] = await tenantDb
       .update(projects)
       .set({ ...project, updatedAt: new Date() })
-      .where(and(
-        eq(projects.id, id),
-        eq(projects.organizationId, organizationId)
-      ))
+      .where(eq(projects.id, id))
       .returning();
     return updatedProject;
   }
 
   async deleteProject(id: string): Promise<void> {
-    const organizationId = getOrganizationId();
-    await db.delete(projects).where(and(
-      eq(projects.id, id),
-      eq(projects.organizationId, organizationId)
-    ));
+    const tenantDb = getTenantDb();
+    await tenantDb.delete(projects).where(eq(projects.id, id));
   }
 
   // Task operations
   async getTasks(): Promise<Task[]> {
-    const organizationId = getOrganizationId();
-    return await db.select().from(tasks)
-      .where(eq(tasks.organizationId, organizationId))
-      .orderBy(desc(tasks.createdAt));
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select().from(tasks)
+        .where(eq(tasks.organizationId, organizationId))
+        .orderBy(desc(tasks.createdAt))
+    );
   }
 
   async getTask(id: string): Promise<Task | undefined> {
-    const organizationId = getOrganizationId();
-    const [task] = await db.select().from(tasks)
-      .where(and(
-        eq(tasks.id, id),
-        eq(tasks.organizationId, organizationId)
-      ));
+    const tenantDb = getTenantDb();
+    const [task] = await tenantDb.query((db, organizationId) =>
+      db.select().from(tasks)
+        .where(and(
+          eq(tasks.id, id),
+          eq(tasks.organizationId, organizationId)
+        ))
+    );
     return task;
   }
 
   async getTasksByProject(projectId: string): Promise<Task[]> {
-    const organizationId = getOrganizationId();
-    return await db.select().from(tasks)
-      .where(and(
-        eq(tasks.projectId, projectId),
-        eq(tasks.organizationId, organizationId)
-      ));
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select().from(tasks)
+        .where(and(
+          eq(tasks.projectId, projectId),
+          eq(tasks.organizationId, organizationId)
+        ))
+    );
   }
 
   async getTasksByUser(userId: string): Promise<Task[]> {
-    const organizationId = getOrganizationId();
-    return await db.select().from(tasks)
-      .where(and(
-        eq(tasks.assignedTo, userId),
-        eq(tasks.organizationId, organizationId)
-      ));
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select().from(tasks)
+        .where(and(
+          eq(tasks.assignedTo, userId),
+          eq(tasks.organizationId, organizationId)
+        ))
+    );
   }
 
-  async createTask(task: InsertTask, organizationId?: string): Promise<Task> {
-    const orgId = organizationId || getOrganizationId();
-    const [newTask] = await db.insert(tasks).values({
-      ...task,
-      organizationId: orgId
-    }).returning();
+  async createTask(task: InsertTask): Promise<Task> {
+    const tenantDb = getTenantDb();
+    const [newTask] = await tenantDb.insert(tasks).values(task).returning();
     return newTask;
   }
 
   async updateTask(id: string, task: Partial<InsertTask>): Promise<Task> {
-    const organizationId = getOrganizationId();
-    const [updatedTask] = await db
+    const tenantDb = getTenantDb();
+    const [updatedTask] = await tenantDb
       .update(tasks)
       .set({ ...task, updatedAt: new Date() })
-      .where(and(
-        eq(tasks.id, id),
-        eq(tasks.organizationId, organizationId)
-      ))
+      .where(eq(tasks.id, id))
       .returning();
     return updatedTask;
   }
 
   async deleteTask(id: string): Promise<void> {
-    const organizationId = getOrganizationId();
-    await db.delete(tasks).where(and(
-      eq(tasks.id, id),
-      eq(tasks.organizationId, organizationId)
-    ));
+    const tenantDb = getTenantDb();
+    await tenantDb.delete(tasks).where(eq(tasks.id, id));
   }
 
   // Financial operations
   async getInvoices(): Promise<Invoice[]> {
-    const organizationId = getOrganizationId();
-    return await db.select().from(invoices)
-      .where(eq(invoices.organizationId, organizationId))
-      .orderBy(desc(invoices.createdAt));
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select().from(invoices)
+        .where(eq(invoices.organizationId, organizationId))
+        .orderBy(desc(invoices.createdAt))
+    );
   }
 
   async getInvoice(id: string): Promise<Invoice | undefined> {
-    const organizationId = getOrganizationId();
-    const [invoice] = await db.select().from(invoices)
-      .where(and(
-        eq(invoices.id, id),
-        eq(invoices.organizationId, organizationId)
-      ));
+    const tenantDb = getTenantDb();
+    const [invoice] = await tenantDb.query((db, organizationId) =>
+      db.select().from(invoices)
+        .where(and(
+          eq(invoices.id, id),
+          eq(invoices.organizationId, organizationId)
+        ))
+    );
     return invoice;
   }
 
   async createInvoice(invoice: InsertInvoice): Promise<Invoice> {
-    const organizationId = getOrganizationId();
-    const [newInvoice] = await db.insert(invoices).values({
-      ...invoice,
-      organizationId
-    }).returning();
+    const tenantDb = getTenantDb();
+    const [newInvoice] = await tenantDb.insert(invoices).values(invoice).returning();
     return newInvoice;
   }
 
   async updateInvoice(id: string, invoice: Partial<InsertInvoice>): Promise<Invoice> {
-    const organizationId = getOrganizationId();
-    const [updatedInvoice] = await db
+    const tenantDb = getTenantDb();
+    const [updatedInvoice] = await tenantDb
       .update(invoices)
       .set({ ...invoice, updatedAt: new Date() })
-      .where(and(
-        eq(invoices.id, id),
-        eq(invoices.organizationId, organizationId)
-      ))
+      .where(eq(invoices.id, id))
       .returning();
     return updatedInvoice;
   }
 
   async getExpenses(): Promise<Expense[]> {
-    const organizationId = getOrganizationId();
-    return await db.select().from(expenses)
-      .where(eq(expenses.organizationId, organizationId))
-      .orderBy(desc(expenses.createdAt));
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select().from(expenses)
+        .where(eq(expenses.organizationId, organizationId))
+        .orderBy(desc(expenses.createdAt))
+    );
   }
 
   async createExpense(expense: InsertExpense): Promise<Expense> {
-    const organizationId = getOrganizationId();
-    const [newExpense] = await db.insert(expenses).values({
-      ...expense,
-      organizationId
-    }).returning();
+    const tenantDb = getTenantDb();
+    const [newExpense] = await tenantDb.insert(expenses).values(expense).returning();
     return newExpense;
   }
 
   async getExpense(id: string): Promise<Expense | undefined> {
-    const organizationId = getOrganizationId();
-    const [expense] = await db.select().from(expenses)
-      .where(and(
-        eq(expenses.id, id),
-        eq(expenses.organizationId, organizationId)
-      ));
+    const tenantDb = getTenantDb();
+    const [expense] = await tenantDb.query((db, organizationId) =>
+      db.select().from(expenses)
+        .where(and(
+          eq(expenses.id, id),
+          eq(expenses.organizationId, organizationId)
+        ))
+    );
     return expense;
   }
 
   async updateExpense(id: string, expense: Partial<InsertExpense>): Promise<Expense> {
-    const organizationId = getOrganizationId();
-    const [updatedExpense] = await db
+    const tenantDb = getTenantDb();
+    const [updatedExpense] = await tenantDb
       .update(expenses)
       .set(expense)
-      .where(and(
-        eq(expenses.id, id),
-        eq(expenses.organizationId, organizationId)
-      ))
+      .where(eq(expenses.id, id))
       .returning();
     return updatedExpense;
   }
 
   async deleteExpense(id: string): Promise<void> {
-    const organizationId = getOrganizationId();
-    await db.delete(expenses).where(and(
-      eq(expenses.id, id),
-      eq(expenses.organizationId, organizationId)
-    ));
+    const tenantDb = getTenantDb();
+    await tenantDb.delete(expenses).where(eq(expenses.id, id));
   }
 
   async deleteInvoice(id: string): Promise<void> {
-    const organizationId = getOrganizationId();
-    await db.delete(invoices).where(and(
-      eq(invoices.id, id),
-      eq(invoices.organizationId, organizationId)
-    ));
+    const tenantDb = getTenantDb();
+    await tenantDb.delete(invoices).where(eq(invoices.id, id));
   }
 
   // Knowledge operations
   async getKnowledgeArticles(): Promise<KnowledgeArticle[]> {
-    const organizationId = getOrganizationId();
-    return await db.select().from(knowledgeArticles)
-      .where(eq(knowledgeArticles.organizationId, organizationId))
-      .orderBy(desc(knowledgeArticles.createdAt));
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select().from(knowledgeArticles)
+        .where(eq(knowledgeArticles.organizationId, organizationId))
+        .orderBy(desc(knowledgeArticles.createdAt))
+    );
   }
 
   async getKnowledgeArticle(id: string): Promise<KnowledgeArticle | undefined> {
-    const organizationId = getOrganizationId();
-    const [article] = await db.select().from(knowledgeArticles)
-      .where(and(
-        eq(knowledgeArticles.id, id),
-        eq(knowledgeArticles.organizationId, organizationId)
-      ));
+    const tenantDb = getTenantDb();
+    const [article] = await tenantDb.query((db, organizationId) =>
+      db.select().from(knowledgeArticles)
+        .where(and(
+          eq(knowledgeArticles.id, id),
+          eq(knowledgeArticles.organizationId, organizationId)
+        ))
+    );
     return article;
   }
 
   async createKnowledgeArticle(article: InsertKnowledgeArticle): Promise<KnowledgeArticle> {
-    const organizationId = getOrganizationId();
-    const [newArticle] = await db.insert(knowledgeArticles).values({
-      ...article,
-      organizationId
-    }).returning();
+    const tenantDb = getTenantDb();
+    const [newArticle] = await tenantDb.insert(knowledgeArticles).values(article).returning();
     return newArticle;
   }
 
   async updateKnowledgeArticle(id: string, article: Partial<InsertKnowledgeArticle>): Promise<KnowledgeArticle> {
-    const organizationId = getOrganizationId();
-    const [updatedArticle] = await db
+    const tenantDb = getTenantDb();
+    const [updatedArticle] = await tenantDb
       .update(knowledgeArticles)
       .set({ ...article, updatedAt: new Date() })
-      .where(and(
-        eq(knowledgeArticles.id, id),
-        eq(knowledgeArticles.organizationId, organizationId)
-      ))
+      .where(eq(knowledgeArticles.id, id))
       .returning();
     return updatedArticle;
   }
 
   async deleteKnowledgeArticle(id: string): Promise<void> {
-    const organizationId = getOrganizationId();
-    await db.delete(knowledgeArticles).where(and(
-      eq(knowledgeArticles.id, id),
-      eq(knowledgeArticles.organizationId, organizationId)
-    ));
+    const tenantDb = getTenantDb();
+    await tenantDb.delete(knowledgeArticles).where(eq(knowledgeArticles.id, id));
   }
 
   // Marketing operations
   async getMarketingCampaigns(): Promise<MarketingCampaign[]> {
-    const organizationId = getOrganizationId();
-    return await db.select().from(marketingCampaigns)
-      .where(eq(marketingCampaigns.organizationId, organizationId))
-      .orderBy(desc(marketingCampaigns.createdAt));
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select().from(marketingCampaigns)
+        .where(eq(marketingCampaigns.organizationId, organizationId))
+        .orderBy(desc(marketingCampaigns.createdAt))
+    );
   }
 
   async getMarketingCampaign(id: string): Promise<MarketingCampaign | undefined> {
-    const organizationId = getOrganizationId();
-    const [campaign] = await db.select().from(marketingCampaigns)
-      .where(and(
-        eq(marketingCampaigns.id, id),
-        eq(marketingCampaigns.organizationId, organizationId)
-      ));
+    const tenantDb = getTenantDb();
+    const [campaign] = await tenantDb.query((db, organizationId) =>
+      db.select().from(marketingCampaigns)
+        .where(and(
+          eq(marketingCampaigns.id, id),
+          eq(marketingCampaigns.organizationId, organizationId)
+        ))
+    );
     return campaign;
   }
 
   async createMarketingCampaign(campaign: InsertMarketingCampaign): Promise<MarketingCampaign> {
-    const organizationId = getOrganizationId();
-    const [newCampaign] = await db.insert(marketingCampaigns).values({
-      ...campaign,
-      organizationId
-    }).returning();
+    const tenantDb = getTenantDb();
+    const [newCampaign] = await tenantDb.insert(marketingCampaigns).values(campaign).returning();
     return newCampaign;
   }
 
   async updateMarketingCampaign(id: string, campaign: Partial<InsertMarketingCampaign>): Promise<MarketingCampaign> {
-    const organizationId = getOrganizationId();
-    const [updatedCampaign] = await db
+    const tenantDb = getTenantDb();
+    const [updatedCampaign] = await tenantDb
       .update(marketingCampaigns)
       .set({ ...campaign, updatedAt: new Date() })
-      .where(and(
-        eq(marketingCampaigns.id, id),
-        eq(marketingCampaigns.organizationId, organizationId)
-      ))
+      .where(eq(marketingCampaigns.id, id))
       .returning();
     return updatedCampaign;
   }
 
   // Support operations
   async getSupportTickets(): Promise<SupportTicket[]> {
-    const organizationId = getOrganizationId();
-    return await db.select().from(supportTickets)
-      .where(eq(supportTickets.organizationId, organizationId))
-      .orderBy(desc(supportTickets.createdAt));
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select().from(supportTickets)
+        .where(eq(supportTickets.organizationId, organizationId))
+        .orderBy(desc(supportTickets.createdAt))
+    );
   }
 
   async getSupportTicket(id: string): Promise<SupportTicket | undefined> {
-    const organizationId = getOrganizationId();
-    const [ticket] = await db.select().from(supportTickets)
-      .where(and(
-        eq(supportTickets.id, id),
-        eq(supportTickets.organizationId, organizationId)
-      ));
+    const tenantDb = getTenantDb();
+    const [ticket] = await tenantDb.query((db, organizationId) =>
+      db.select().from(supportTickets)
+        .where(and(
+          eq(supportTickets.id, id),
+          eq(supportTickets.organizationId, organizationId)
+        ))
+    );
     return ticket;
   }
 
   // Generate unique ticket number atomically with retry logic
   private async generateUniqueTicketNumber(): Promise<string> {
-    const organizationId = getOrganizationId();
+    const tenantDb = getTenantDb();
+    const organizationId = tenantDb.getOrganizationId();
     const maxRetries = 10;
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -1496,7 +1469,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createSupportTicket(ticket: InsertSupportTicket): Promise<SupportTicket> {
-    const organizationId = getOrganizationId();
+    const tenantDb = getTenantDb();
+    const organizationId = tenantDb.getOrganizationId();
     // Server-side ticket number generation (never trust client)
     const ticketNumber = await this.generateUniqueTicketNumber();
 
@@ -1520,7 +1494,6 @@ export class DatabaseStorage implements IStorage {
     const ticketData = {
       ...ticket,
       ticketNumber,
-      organizationId,
       businessImpact,
       responseTimeHours,
       resolutionTimeHours,
@@ -1533,18 +1506,20 @@ export class DatabaseStorage implements IStorage {
       updatedAt: now,
     };
 
-    const [newTicket] = await db.insert(supportTickets).values(ticketData).returning();
+    const [newTicket] = await tenantDb.insert(supportTickets).values(ticketData).returning();
     return newTicket;
   }
 
   async updateSupportTicket(id: string, ticket: Partial<InsertSupportTicket>): Promise<SupportTicket> {
-    const organizationId = getOrganizationId();
+    const tenantDb = getTenantDb();
     // Get current ticket to check status transitions
-    const [currentTicket] = await db.select().from(supportTickets)
-      .where(and(
-        eq(supportTickets.id, id),
-        eq(supportTickets.organizationId, organizationId)
-      ));
+    const [currentTicket] = await tenantDb.query((db, organizationId) =>
+      db.select().from(supportTickets)
+        .where(and(
+          eq(supportTickets.id, id),
+          eq(supportTickets.organizationId, organizationId)
+        ))
+    ).then(results => results[0] ? [results[0]] : []);
     if (!currentTicket) {
       throw new Error('Ticket not found');
     }
@@ -1575,46 +1550,40 @@ export class DatabaseStorage implements IStorage {
     delete updateData.ticketNumber;
     delete updateData.createdAt;
 
-    const [updatedTicket] = await db
+    const [updatedTicket] = await tenantDb
       .update(supportTickets)
       .set(updateData)
-      .where(and(
-        eq(supportTickets.id, id),
-        eq(supportTickets.organizationId, organizationId)
-      ))
+      .where(eq(supportTickets.id, id))
       .returning();
 
     return updatedTicket;
   }
 
   async deleteSupportTicket(id: string): Promise<void> {
-    const organizationId = getOrganizationId();
-    await db.delete(supportTickets).where(and(
-      eq(supportTickets.id, id),
-      eq(supportTickets.organizationId, organizationId)
-    ));
+    const tenantDb = getTenantDb();
+    await tenantDb.delete(supportTickets).where(eq(supportTickets.id, id));
   }
 
   // Support ticket comments operations
   async getSupportTicketComments(ticketId: string): Promise<SupportTicketComment[]> {
-    const organizationId = getOrganizationId();
-    return await db
-      .select()
-      .from(supportTicketComments)
-      .where(and(
-        eq(supportTicketComments.ticketId, ticketId),
-        eq(supportTicketComments.organizationId, organizationId)
-      ))
-      .orderBy(supportTicketComments.createdAt);
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select()
+        .from(supportTicketComments)
+        .where(and(
+          eq(supportTicketComments.ticketId, ticketId),
+          eq(supportTicketComments.organizationId, organizationId)
+        ))
+        .orderBy(supportTicketComments.createdAt)
+    );
   }
 
   async createSupportTicketComment(comment: InsertSupportTicketComment): Promise<SupportTicketComment> {
-    const organizationId = getOrganizationId();
-    const [newComment] = await db
+    const tenantDb = getTenantDb();
+    const [newComment] = await tenantDb
       .insert(supportTicketComments)
       .values({
         ...comment,
-        organizationId,
         createdAt: new Date(),
         updatedAt: new Date(),
       })
@@ -1623,61 +1592,56 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateSupportTicketComment(id: string, comment: UpdateSupportTicketComment): Promise<SupportTicketComment> {
-    const organizationId = getOrganizationId();
-    const [updatedComment] = await db
+    const tenantDb = getTenantDb();
+    const [updatedComment] = await tenantDb
       .update(supportTicketComments)
       .set({
         ...comment,
         updatedAt: new Date(),
       })
-      .where(and(
-        eq(supportTicketComments.id, id),
-        eq(supportTicketComments.organizationId, organizationId)
-      ))
+      .where(eq(supportTicketComments.id, id))
       .returning();
     return updatedComment;
   }
 
   async deleteSupportTicketComment(id: string): Promise<void> {
-    const organizationId = getOrganizationId();
-    await db.delete(supportTicketComments).where(and(
-      eq(supportTicketComments.id, id),
-      eq(supportTicketComments.organizationId, organizationId)
-    ));
+    const tenantDb = getTenantDb();
+    await tenantDb.delete(supportTicketComments).where(eq(supportTicketComments.id, id));
   }
 
   // SLA configuration operations
   async getSlaConfigurations(): Promise<SlaConfiguration[]> {
-    const organizationId = getOrganizationId();
-    return await db
-      .select()
-      .from(slaConfigurations)
-      .where(and(
-        eq(slaConfigurations.isActive, true),
-        eq(slaConfigurations.organizationId, organizationId)
-      ))
-      .orderBy(slaConfigurations.priority, slaConfigurations.name);
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select()
+        .from(slaConfigurations)
+        .where(and(
+          eq(slaConfigurations.isActive, true),
+          eq(slaConfigurations.organizationId, organizationId)
+        ))
+        .orderBy(slaConfigurations.priority, slaConfigurations.name)
+    );
   }
 
   async getSlaConfiguration(id: string): Promise<SlaConfiguration | undefined> {
-    const organizationId = getOrganizationId();
-    const [config] = await db
-      .select()
-      .from(slaConfigurations)
-      .where(and(
-        eq(slaConfigurations.id, id),
-        eq(slaConfigurations.organizationId, organizationId)
-      ));
+    const tenantDb = getTenantDb();
+    const [config] = await tenantDb.query((db, organizationId) =>
+      db.select()
+        .from(slaConfigurations)
+        .where(and(
+          eq(slaConfigurations.id, id),
+          eq(slaConfigurations.organizationId, organizationId)
+        ))
+    );
     return config;
   }
 
   async createSlaConfiguration(config: InsertSlaConfiguration): Promise<SlaConfiguration> {
-    const organizationId = getOrganizationId();
-    const [newConfig] = await db
+    const tenantDb = getTenantDb();
+    const [newConfig] = await tenantDb
       .insert(slaConfigurations)
       .values({
         ...config,
-        organizationId,
         createdAt: new Date(),
         updatedAt: new Date(),
       })
@@ -1686,51 +1650,45 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateSlaConfiguration(id: string, config: UpdateSlaConfiguration): Promise<SlaConfiguration> {
-    const organizationId = getOrganizationId();
-    const [updatedConfig] = await db
+    const tenantDb = getTenantDb();
+    const [updatedConfig] = await tenantDb
       .update(slaConfigurations)
       .set({
         ...config,
         updatedAt: new Date(),
       })
-      .where(and(
-        eq(slaConfigurations.id, id),
-        eq(slaConfigurations.organizationId, organizationId)
-      ))
+      .where(eq(slaConfigurations.id, id))
       .returning();
     return updatedConfig;
   }
 
   async deleteSlaConfiguration(id: string): Promise<void> {
-    const organizationId = getOrganizationId();
-    await db.update(slaConfigurations)
+    const tenantDb = getTenantDb();
+    await tenantDb.update(slaConfigurations)
       .set({ isActive: false })
-      .where(and(
-        eq(slaConfigurations.id, id),
-        eq(slaConfigurations.organizationId, organizationId)
-      ));
+      .where(eq(slaConfigurations.id, id));
   }
 
   // Ticket escalation operations
   async getTicketEscalations(ticketId: string): Promise<TicketEscalation[]> {
-    const organizationId = getOrganizationId();
-    return await db
-      .select()
-      .from(ticketEscalations)
-      .where(and(
-        eq(ticketEscalations.ticketId, ticketId),
-        eq(ticketEscalations.organizationId, organizationId)
-      ))
-      .orderBy(ticketEscalations.createdAt);
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select()
+        .from(ticketEscalations)
+        .where(and(
+          eq(ticketEscalations.ticketId, ticketId),
+          eq(ticketEscalations.organizationId, organizationId)
+        ))
+        .orderBy(ticketEscalations.createdAt)
+    );
   }
 
   async createTicketEscalation(escalation: InsertTicketEscalation): Promise<TicketEscalation> {
-    const organizationId = getOrganizationId();
-    const [newEscalation] = await db
+    const tenantDb = getTenantDb();
+    const [newEscalation] = await tenantDb
       .insert(ticketEscalations)
       .values({
         ...escalation,
-        organizationId,
         createdAt: new Date(),
       })
       .returning();
@@ -1739,93 +1697,93 @@ export class DatabaseStorage implements IStorage {
 
   // Enhanced support operations
   async updateTicketSlaMetrics(ticketId: string, metrics: Partial<SupportTicket>): Promise<SupportTicket> {
-    const organizationId = getOrganizationId();
-    const [updatedTicket] = await db
+    const tenantDb = getTenantDb();
+    const [updatedTicket] = await tenantDb
       .update(supportTickets)
       .set({
         ...metrics,
         updatedAt: new Date(),
         lastActivityAt: new Date(),
       })
-      .where(and(
-        eq(supportTickets.id, ticketId),
-        eq(supportTickets.organizationId, organizationId)
-      ))
+      .where(eq(supportTickets.id, ticketId))
       .returning();
     return updatedTicket;
   }
 
   async getOverdueTickets(): Promise<SupportTicket[]> {
-    const organizationId = getOrganizationId();
+    const tenantDb = getTenantDb();
     const now = new Date();
-    return await db
-      .select()
-      .from(supportTickets)
-      .where(
-        and(
-          eq(supportTickets.organizationId, organizationId),
-          or(
-            eq(supportTickets.status, 'open'),
-            eq(supportTickets.status, 'in_progress')
-          ),
-          lte(supportTickets.slaBreachAt, now)
+    return await tenantDb.query((db, organizationId) =>
+      db.select()
+        .from(supportTickets)
+        .where(
+          and(
+            eq(supportTickets.organizationId, organizationId),
+            or(
+              eq(supportTickets.status, 'open'),
+              eq(supportTickets.status, 'in_progress')
+            ),
+            lte(supportTickets.slaBreachAt, now)
+          )
         )
-      )
-      .orderBy(supportTickets.slaBreachAt);
+        .orderBy(supportTickets.slaBreachAt)
+    );
   }
 
   async getTicketsNeedingEscalation(): Promise<SupportTicket[]> {
-    const organizationId = getOrganizationId();
+    const tenantDb = getTenantDb();
     const now = new Date();
-    // Get tickets that are open/in_progress and past their escalation time
-    return await db
-      .select()
-      .from(supportTickets)
-      .where(
-        and(
-          eq(supportTickets.organizationId, organizationId),
-          or(
-            eq(supportTickets.status, 'open'),
-            eq(supportTickets.status, 'in_progress')
-          ),
-          lte(supportTickets.escalatedAt, now)
+    return await tenantDb.query((db, organizationId) =>
+      db.select()
+        .from(supportTickets)
+        .where(
+          and(
+            eq(supportTickets.organizationId, organizationId),
+            or(
+              eq(supportTickets.status, 'open'),
+              eq(supportTickets.status, 'in_progress')
+            ),
+            lte(supportTickets.escalatedAt, now)
+          )
         )
-      )
-      .orderBy(supportTickets.createdAt);
+        .orderBy(supportTickets.createdAt)
+    );
   }
 
   // Support analytics operations
   async getSupportAnalytics(timeRange: { start: Date; end: Date }): Promise<any> {
-    const organizationId = getOrganizationId();
+    const tenantDb = getTenantDb();
     const { calculateSupportKPIs, calculateSupportTrends, generateSupportPredictions } = await import('@shared/supportAnalytics');
 
     // Get tickets in time range
-    const tickets = await db
-      .select()
-      .from(supportTickets)
-      .where(
-        and(
-          eq(supportTickets.organizationId, organizationId),
-          gte(supportTickets.createdAt, timeRange.start),
-          lte(supportTickets.createdAt, timeRange.end)
+    const tickets = await tenantDb.query((db, organizationId) =>
+      db.select()
+        .from(supportTickets)
+        .where(
+          and(
+            eq(supportTickets.organizationId, organizationId),
+            gte(supportTickets.createdAt, timeRange.start),
+            lte(supportTickets.createdAt, timeRange.end)
+          )
         )
-      );
+    );
 
     // Get previous period for comparison
     const periodLength = timeRange.end.getTime() - timeRange.start.getTime();
     const previousStart = new Date(timeRange.start.getTime() - periodLength);
     const previousEnd = timeRange.start;
 
-    const previousTickets = await db
-      .select()
-      .from(supportTickets)
-      .where(
-        and(
-          eq(supportTickets.organizationId, organizationId),
-          gte(supportTickets.createdAt, previousStart),
-          lte(supportTickets.createdAt, previousEnd)
+    const previousTickets = await tenantDb.query((db, organizationId) =>
+      db.select()
+        .from(supportTickets)
+        .where(
+          and(
+            eq(supportTickets.organizationId, organizationId),
+            gte(supportTickets.createdAt, previousStart),
+            lte(supportTickets.createdAt, previousEnd)
+          )
         )
-      );
+    );
 
     // Calculate KPIs and trends
     const kpis = calculateSupportKPIs(tickets, timeRange, previousTickets);
@@ -1842,20 +1800,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAgentPerformanceMetrics(timeRange: { start: Date; end: Date }): Promise<any[]> {
-    const organizationId = getOrganizationId();
+    const tenantDb = getTenantDb();
     const { calculateAgentPerformance } = await import('@shared/supportAnalytics');
 
     // Get tickets and users
-    const tickets = await db
-      .select()
-      .from(supportTickets)
-      .where(
-        and(
-          eq(supportTickets.organizationId, organizationId),
-          gte(supportTickets.createdAt, timeRange.start),
-          lte(supportTickets.createdAt, timeRange.end)
+    const tickets = await tenantDb.query((db, organizationId) =>
+      db.select()
+        .from(supportTickets)
+        .where(
+          and(
+            eq(supportTickets.organizationId, organizationId),
+            gte(supportTickets.createdAt, timeRange.start),
+            lte(supportTickets.createdAt, timeRange.end)
+          )
         )
-      );
+    );
 
     const allUsers = await db.select().from(users);
 
@@ -1863,27 +1822,28 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getSupportTrends(timeRange: { start: Date; end: Date }): Promise<any> {
-    const organizationId = getOrganizationId();
+    const tenantDb = getTenantDb();
     const { calculateSupportTrends } = await import('@shared/supportAnalytics');
 
-    const tickets = await db
-      .select()
-      .from(supportTickets)
-      .where(
-        and(
-          eq(supportTickets.organizationId, organizationId),
-          gte(supportTickets.createdAt, timeRange.start),
-          lte(supportTickets.createdAt, timeRange.end)
+    const tickets = await tenantDb.query((db, organizationId) =>
+      db.select()
+        .from(supportTickets)
+        .where(
+          and(
+            eq(supportTickets.organizationId, organizationId),
+            gte(supportTickets.createdAt, timeRange.start),
+            lte(supportTickets.createdAt, timeRange.end)
+          )
         )
-      );
+    );
 
     return calculateSupportTrends(tickets, timeRange);
   }
 
   async getTicketVolumeByCategory(timeRange: { start: Date; end: Date }): Promise<any[]> {
-    const organizationId = getOrganizationId();
-    const results = await db
-      .select({
+    const tenantDb = getTenantDb();
+    const results = await tenantDb.query((db, organizationId) =>
+      db.select({
         category: supportTickets.category,
         count: sql<number>`count(*)`,
         avgResolutionTime: sql<number>`avg(actual_resolution_minutes)`,
@@ -1898,7 +1858,8 @@ export class DatabaseStorage implements IStorage {
         )
       )
       .groupBy(supportTickets.category)
-      .orderBy(desc(sql`count(*)`));
+      .orderBy(desc(sql`count(*)`))
+    );
 
     return results.map(row => ({
       category: row.category || 'general',
@@ -1909,9 +1870,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getResponseTimeMetrics(timeRange: { start: Date; end: Date }): Promise<any> {
-    const organizationId = getOrganizationId();
-    const [result] = await db
-      .select({
+    const tenantDb = getTenantDb();
+    const [result] = await tenantDb.query((db, organizationId) =>
+      db.select({
         avgResponseTime: sql<number>`avg(actual_response_minutes)`,
         medianResponseTime: sql<number>`percentile_cont(0.5) within group (order by actual_response_minutes)`,
         p90ResponseTime: sql<number>`percentile_cont(0.9) within group (order by actual_response_minutes)`,
@@ -1929,7 +1890,8 @@ export class DatabaseStorage implements IStorage {
           gte(supportTickets.createdAt, timeRange.start),
           lte(supportTickets.createdAt, timeRange.end)
         )
-      );
+      )
+    );
 
     return {
       avgResponseTime: Number(result.avgResponseTime) || 0,
@@ -1944,9 +1906,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getSLAComplianceReport(timeRange: { start: Date; end: Date }): Promise<any> {
-    const organizationId = getOrganizationId();
-    const [overall] = await db
-      .select({
+    const tenantDb = getTenantDb();
+    const [overall] = await tenantDb.query((db, organizationId) =>
+      db.select({
         totalTickets: sql<number>`count(*)`,
         onTrack: sql<number>`count(case when sla_status = 'on_track' then 1 end)`,
         atRisk: sql<number>`count(case when sla_status = 'at_risk' then 1 end)`,
@@ -1960,10 +1922,11 @@ export class DatabaseStorage implements IStorage {
           gte(supportTickets.createdAt, timeRange.start),
           lte(supportTickets.createdAt, timeRange.end)
         )
-      );
+      )
+    );
 
-    const byPriority = await db
-      .select({
+    const byPriority = await tenantDb.query((db, organizationId) =>
+      db.select({
         priority: supportTickets.priority,
         totalTickets: sql<number>`count(*)`,
         onTrack: sql<number>`count(case when sla_status = 'on_track' then 1 end)`,
@@ -1978,10 +1941,11 @@ export class DatabaseStorage implements IStorage {
           lte(supportTickets.createdAt, timeRange.end)
         )
       )
-      .groupBy(supportTickets.priority);
+      .groupBy(supportTickets.priority)
+    );
 
-    const byCategory = await db
-      .select({
+    const byCategory = await tenantDb.query((db, organizationId) =>
+      db.select({
         category: supportTickets.category,
         totalTickets: sql<number>`count(*)`,
         complianceRate: sql<number>`count(case when sla_status = 'on_track' then 1 end) * 100.0 / count(*)`
@@ -1994,7 +1958,8 @@ export class DatabaseStorage implements IStorage {
           lte(supportTickets.createdAt, timeRange.end)
         )
       )
-      .groupBy(supportTickets.category);
+      .groupBy(supportTickets.category)
+    );
 
     return {
       overall: {
@@ -2022,28 +1987,31 @@ export class DatabaseStorage implements IStorage {
 
   // System variables operations
   async getSystemVariables(): Promise<SystemVariable[]> {
-    const organizationId = getOrganizationId();
-    return await db
-      .select()
-      .from(systemVariables)
-      .where(eq(systemVariables.organizationId, organizationId))
-      .orderBy(systemVariables.category, systemVariables.key);
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select()
+        .from(systemVariables)
+        .where(eq(systemVariables.organizationId, organizationId))
+        .orderBy(systemVariables.category, systemVariables.key)
+    );
   }
 
   async getSystemVariable(key: string): Promise<SystemVariable | undefined> {
-    const organizationId = getOrganizationId();
-    const [variable] = await db
-      .select()
-      .from(systemVariables)
-      .where(and(
-        eq(systemVariables.key, key),
-        eq(systemVariables.organizationId, organizationId)
-      ));
+    const tenantDb = getTenantDb();
+    const [variable] = await tenantDb.query((db, organizationId) =>
+      db.select()
+        .from(systemVariables)
+        .where(and(
+          eq(systemVariables.key, key),
+          eq(systemVariables.organizationId, organizationId)
+        ))
+    );
     return variable;
   }
 
   async createSystemVariable(variableData: InsertSystemVariable): Promise<SystemVariable> {
-    const organizationId = getOrganizationId();
+    const tenantDb = getTenantDb();
+    const organizationId = tenantDb.getOrganizationId();
     const [variable] = await db
       .insert(systemVariables)
       .values({
@@ -2055,7 +2023,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateSystemVariable(key: string, variableData: UpdateSystemVariable): Promise<SystemVariable> {
-    const organizationId = getOrganizationId();
+    const tenantDb = getTenantDb();
+    const organizationId = tenantDb.getOrganizationId();
     // First, check if the variable exists
     const existingVariable = await this.getSystemVariable(key);
 
@@ -2092,28 +2061,27 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteSystemVariable(key: string): Promise<void> {
-    const organizationId = getOrganizationId();
-    await db.delete(systemVariables).where(and(
-      eq(systemVariables.key, key),
-      eq(systemVariables.organizationId, organizationId)
-    ));
+    const tenantDb = getTenantDb();
+    await tenantDb.delete(systemVariables).where(eq(systemVariables.key, key));
   }
 
   // System settings operations (access control, domains, etc.)
   async getSystemSetting(key: string): Promise<SystemSetting | undefined> {
-    const organizationId = getOrganizationId();
-    const [setting] = await db
-      .select()
-      .from(systemSettings)
-      .where(and(
-        eq(systemSettings.key, key),
-        eq(systemSettings.organizationId, organizationId)
-      ));
+    const tenantDb = getTenantDb();
+    const [setting] = await tenantDb.query((db, organizationId) =>
+      db.select()
+        .from(systemSettings)
+        .where(and(
+          eq(systemSettings.key, key),
+          eq(systemSettings.organizationId, organizationId)
+        ))
+    );
     return setting;
   }
 
   async upsertSystemSetting(key: string, value: Record<string, any>): Promise<SystemSetting> {
-    const organizationId = getOrganizationId();
+    const tenantDb = getTenantDb();
+    const organizationId = tenantDb.getOrganizationId();
     const [setting] = await db
       .insert(systemSettings)
       .values({ key, value, organizationId })
@@ -2126,67 +2094,61 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllSystemSettings(): Promise<SystemSetting[]> {
-    const organizationId = getOrganizationId();
-    return await db
-      .select()
-      .from(systemSettings)
-      .where(eq(systemSettings.organizationId, organizationId))
-      .orderBy(systemSettings.key);
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select()
+        .from(systemSettings)
+        .where(eq(systemSettings.organizationId, organizationId))
+        .orderBy(systemSettings.key)
+    );
   }
 
   // User invitation operations
   async getUserInvitations(): Promise<UserInvitation[]> {
-    const organizationId = getOrganizationId();
-    return await db
-      .select()
-      .from(userInvitations)
-      .where(eq(userInvitations.organizationId, organizationId))
-      .orderBy(desc(userInvitations.createdAt));
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select()
+        .from(userInvitations)
+        .where(eq(userInvitations.organizationId, organizationId))
+        .orderBy(desc(userInvitations.createdAt))
+    );
   }
 
   async getUserInvitation(token: string): Promise<UserInvitation | undefined> {
-    const organizationId = getOrganizationId();
-    const [invitation] = await db
-      .select()
-      .from(userInvitations)
-      .where(and(
-        eq(userInvitations.token, token),
-        eq(userInvitations.organizationId, organizationId)
-      ));
+    const tenantDb = getTenantDb();
+    const [invitation] = await tenantDb.query((db, organizationId) =>
+      db.select()
+        .from(userInvitations)
+        .where(and(
+          eq(userInvitations.token, token),
+          eq(userInvitations.organizationId, organizationId)
+        ))
+    );
     return invitation;
   }
 
   async createUserInvitation(invitationData: Omit<UserInvitation, 'id' | 'createdAt' | 'updatedAt'>): Promise<UserInvitation> {
-    const organizationId = getOrganizationId();
-    const [invitation] = await db
+    const tenantDb = getTenantDb();
+    const [invitation] = await tenantDb
       .insert(userInvitations)
-      .values({
-        ...invitationData,
-        organizationId
-      })
+      .values(invitationData)
       .returning();
     return invitation;
   }
 
   async updateUserInvitation(token: string, data: Partial<Omit<UserInvitation, 'id' | 'token' | 'createdAt' | 'updatedAt'>>): Promise<UserInvitation> {
-    const organizationId = getOrganizationId();
-    const [invitation] = await db
+    const tenantDb = getTenantDb();
+    const [invitation] = await tenantDb
       .update(userInvitations)
       .set({ ...data, updatedAt: new Date() })
-      .where(and(
-        eq(userInvitations.token, token),
-        eq(userInvitations.organizationId, organizationId)
-      ))
+      .where(eq(userInvitations.token, token))
       .returning();
     return invitation;
   }
 
   async deleteUserInvitation(token: string): Promise<void> {
-    const organizationId = getOrganizationId();
-    await db.delete(userInvitations).where(and(
-      eq(userInvitations.token, token),
-      eq(userInvitations.organizationId, organizationId)
-    ));
+    const tenantDb = getTenantDb();
+    await tenantDb.delete(userInvitations).where(eq(userInvitations.token, token));
   }
 
   // Dashboard analytics
@@ -2196,20 +2158,21 @@ export class DatabaseStorage implements IStorage {
     projects: { current: number; target: number; growth: number };
     tickets: { current: number; target: number; growth: number };
   }> {
-    const organizationId = getOrganizationId();
+    const tenantDb = getTenantDb();
     const currentYear = new Date().getFullYear();
     const currentDate = new Date();
     const lastMonthDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
     const twoMonthsAgoDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 2, 1);
 
     // Get business targets from system variables
-    const businessTargets = await db
-      .select()
-      .from(systemVariables)
-      .where(and(
-        like(systemVariables.key, '%_target_%'),
-        eq(systemVariables.organizationId, organizationId)
-      ));
+    const businessTargets = await tenantDb.query((db, organizationId) =>
+      db.select()
+        .from(systemVariables)
+        .where(and(
+          like(systemVariables.key, '%_target_%'),
+          eq(systemVariables.organizationId, organizationId)
+        ))
+    );
 
     const getTarget = (targetKey: string, defaultTarget: number) => {
       const target = businessTargets.find(t => t.key === targetKey);
@@ -2217,132 +2180,144 @@ export class DatabaseStorage implements IStorage {
     };
 
     // Calculate revenue data with growth
-    const [currentRevenue] = await db
-      .select({ total: sql<number>`COALESCE(SUM(${invoices.total}), 0)` })
-      .from(invoices)
-      .where(and(
-        eq(invoices.status, 'paid'),
-        eq(invoices.organizationId, organizationId)
-      ));
+    const [currentRevenue] = await tenantDb.query((db, organizationId) =>
+      db.select({ total: sql<number>`COALESCE(SUM(${invoices.total}), 0)` })
+        .from(invoices)
+        .where(and(
+          eq(invoices.status, 'paid'),
+          eq(invoices.organizationId, organizationId)
+        ))
+    );
 
-    const [lastMonthRevenue] = await db
-      .select({ total: sql<number>`COALESCE(SUM(${invoices.total}), 0)` })
-      .from(invoices)
-      .where(and(
-        eq(invoices.status, 'paid'),
-        eq(invoices.organizationId, organizationId),
-        sql`${invoices.paidAt} >= ${lastMonthDate.toISOString()}`,
-        sql`${invoices.paidAt} < ${currentDate.toISOString()}`
-      ));
+    const [lastMonthRevenue] = await tenantDb.query((db, organizationId) =>
+      db.select({ total: sql<number>`COALESCE(SUM(${invoices.total}), 0)` })
+        .from(invoices)
+        .where(and(
+          eq(invoices.status, 'paid'),
+          eq(invoices.organizationId, organizationId),
+          sql`${invoices.paidAt} >= ${lastMonthDate.toISOString()}`,
+          sql`${invoices.paidAt} < ${currentDate.toISOString()}`
+        ))
+    );
 
-    const [twoMonthsAgoRevenue] = await db
-      .select({ total: sql<number>`COALESCE(SUM(${invoices.total}), 0)` })
-      .from(invoices)
-      .where(and(
-        eq(invoices.status, 'paid'),
-        eq(invoices.organizationId, organizationId),
-        sql`${invoices.paidAt} >= ${twoMonthsAgoDate.toISOString()}`,
-        sql`${invoices.paidAt} < ${lastMonthDate.toISOString()}`
-      ));
+    const [twoMonthsAgoRevenue] = await tenantDb.query((db, organizationId) =>
+      db.select({ total: sql<number>`COALESCE(SUM(${invoices.total}), 0)` })
+        .from(invoices)
+        .where(and(
+          eq(invoices.status, 'paid'),
+          eq(invoices.organizationId, organizationId),
+          sql`${invoices.paidAt} >= ${twoMonthsAgoDate.toISOString()}`,
+          sql`${invoices.paidAt} < ${lastMonthDate.toISOString()}`
+        ))
+    );
 
     const revenueGrowth = twoMonthsAgoRevenue.total > 0
       ? ((lastMonthRevenue.total - twoMonthsAgoRevenue.total) / twoMonthsAgoRevenue.total) * 100
       : 0;
 
     // Calculate pipeline value (pending/draft invoices)
-    const [currentPipeline] = await db
-      .select({ total: sql<number>`COALESCE(SUM(${invoices.total}), 0)` })
-      .from(invoices)
-      .where(and(
-        or(eq(invoices.status, 'pending'), eq(invoices.status, 'draft')),
-        eq(invoices.organizationId, organizationId)
-      ));
+    const [currentPipeline] = await tenantDb.query((db, organizationId) =>
+      db.select({ total: sql<number>`COALESCE(SUM(${invoices.total}), 0)` })
+        .from(invoices)
+        .where(and(
+          or(eq(invoices.status, 'pending'), eq(invoices.status, 'draft')),
+          eq(invoices.organizationId, organizationId)
+        ))
+    );
 
-    const [lastMonthPipeline] = await db
-      .select({ total: sql<number>`COALESCE(SUM(${invoices.total}), 0)` })
-      .from(invoices)
-      .where(and(
-        or(eq(invoices.status, 'pending'), eq(invoices.status, 'draft')),
-        eq(invoices.organizationId, organizationId),
-        sql`${invoices.createdAt} >= ${lastMonthDate.toISOString()}`,
-        sql`${invoices.createdAt} < ${currentDate.toISOString()}`
-      ));
+    const [lastMonthPipeline] = await tenantDb.query((db, organizationId) =>
+      db.select({ total: sql<number>`COALESCE(SUM(${invoices.total}), 0)` })
+        .from(invoices)
+        .where(and(
+          or(eq(invoices.status, 'pending'), eq(invoices.status, 'draft')),
+          eq(invoices.organizationId, organizationId),
+          sql`${invoices.createdAt} >= ${lastMonthDate.toISOString()}`,
+          sql`${invoices.createdAt} < ${currentDate.toISOString()}`
+        ))
+    );
 
-    const [twoMonthsAgoPipeline] = await db
-      .select({ total: sql<number>`COALESCE(SUM(${invoices.total}), 0)` })
-      .from(invoices)
-      .where(and(
-        or(eq(invoices.status, 'pending'), eq(invoices.status, 'draft')),
-        eq(invoices.organizationId, organizationId),
-        sql`${invoices.createdAt} >= ${twoMonthsAgoDate.toISOString()}`,
-        sql`${invoices.createdAt} < ${lastMonthDate.toISOString()}`
-      ));
+    const [twoMonthsAgoPipeline] = await tenantDb.query((db, organizationId) =>
+      db.select({ total: sql<number>`COALESCE(SUM(${invoices.total}), 0)` })
+        .from(invoices)
+        .where(and(
+          or(eq(invoices.status, 'pending'), eq(invoices.status, 'draft')),
+          eq(invoices.organizationId, organizationId),
+          sql`${invoices.createdAt} >= ${twoMonthsAgoDate.toISOString()}`,
+          sql`${invoices.createdAt} < ${lastMonthDate.toISOString()}`
+        ))
+    );
 
     const pipelineGrowth = twoMonthsAgoPipeline.total > 0
       ? ((lastMonthPipeline.total - twoMonthsAgoPipeline.total) / twoMonthsAgoPipeline.total) * 100
       : 0;
 
     // Calculate active projects with growth
-    const [currentProjects] = await db
-      .select({ count: count() })
-      .from(projects)
-      .where(and(
-        or(eq(projects.status, 'in_progress'), eq(projects.status, 'planning')),
-        eq(projects.organizationId, organizationId)
-      ));
+    const [currentProjects] = await tenantDb.query((db, organizationId) =>
+      db.select({ count: count() })
+        .from(projects)
+        .where(and(
+          or(eq(projects.status, 'in_progress'), eq(projects.status, 'planning')),
+          eq(projects.organizationId, organizationId)
+        ))
+    );
 
-    const [lastMonthProjects] = await db
-      .select({ count: count() })
-      .from(projects)
-      .where(and(
-        or(eq(projects.status, 'in_progress'), eq(projects.status, 'planning')),
-        eq(projects.organizationId, organizationId),
-        sql`${projects.createdAt} >= ${lastMonthDate.toISOString()}`,
-        sql`${projects.createdAt} < ${currentDate.toISOString()}`
-      ));
+    const [lastMonthProjects] = await tenantDb.query((db, organizationId) =>
+      db.select({ count: count() })
+        .from(projects)
+        .where(and(
+          or(eq(projects.status, 'in_progress'), eq(projects.status, 'planning')),
+          eq(projects.organizationId, organizationId),
+          sql`${projects.createdAt} >= ${lastMonthDate.toISOString()}`,
+          sql`${projects.createdAt} < ${currentDate.toISOString()}`
+        ))
+    );
 
-    const [twoMonthsAgoProjects] = await db
-      .select({ count: count() })
-      .from(projects)
-      .where(and(
-        or(eq(projects.status, 'in_progress'), eq(projects.status, 'planning')),
-        eq(projects.organizationId, organizationId),
-        sql`${projects.createdAt} >= ${twoMonthsAgoDate.toISOString()}`,
-        sql`${projects.createdAt} < ${lastMonthDate.toISOString()}`
-      ));
+    const [twoMonthsAgoProjects] = await tenantDb.query((db, organizationId) =>
+      db.select({ count: count() })
+        .from(projects)
+        .where(and(
+          or(eq(projects.status, 'in_progress'), eq(projects.status, 'planning')),
+          eq(projects.organizationId, organizationId),
+          sql`${projects.createdAt} >= ${twoMonthsAgoDate.toISOString()}`,
+          sql`${projects.createdAt} < ${lastMonthDate.toISOString()}`
+        ))
+    );
 
     const projectsGrowth = twoMonthsAgoProjects.count > 0
       ? ((lastMonthProjects.count - twoMonthsAgoProjects.count) / twoMonthsAgoProjects.count) * 100
       : 0;
 
     // Calculate open tickets with growth
-    const [currentTickets] = await db
-      .select({ count: count() })
-      .from(supportTickets)
-      .where(and(
-        or(eq(supportTickets.status, 'open'), eq(supportTickets.status, 'in_progress')),
-        eq(supportTickets.organizationId, organizationId)
-      ));
+    const [currentTickets] = await tenantDb.query((db, organizationId) =>
+      db.select({ count: count() })
+        .from(supportTickets)
+        .where(and(
+          or(eq(supportTickets.status, 'open'), eq(supportTickets.status, 'in_progress')),
+          eq(supportTickets.organizationId, organizationId)
+        ))
+    );
 
-    const [lastMonthTickets] = await db
-      .select({ count: count() })
-      .from(supportTickets)
-      .where(and(
-        or(eq(supportTickets.status, 'open'), eq(supportTickets.status, 'in_progress')),
-        eq(supportTickets.organizationId, organizationId),
-        sql`${supportTickets.createdAt} >= ${lastMonthDate.toISOString()}`,
-        sql`${supportTickets.createdAt} < ${currentDate.toISOString()}`
-      ));
+    const [lastMonthTickets] = await tenantDb.query((db, organizationId) =>
+      db.select({ count: count() })
+        .from(supportTickets)
+        .where(and(
+          or(eq(supportTickets.status, 'open'), eq(supportTickets.status, 'in_progress')),
+          eq(supportTickets.organizationId, organizationId),
+          sql`${supportTickets.createdAt} >= ${lastMonthDate.toISOString()}`,
+          sql`${supportTickets.createdAt} < ${currentDate.toISOString()}`
+        ))
+    );
 
-    const [twoMonthsAgoTickets] = await db
-      .select({ count: count() })
-      .from(supportTickets)
-      .where(and(
-        or(eq(supportTickets.status, 'open'), eq(supportTickets.status, 'in_progress')),
-        eq(supportTickets.organizationId, organizationId),
-        sql`${supportTickets.createdAt} >= ${twoMonthsAgoDate.toISOString()}`,
-        sql`${supportTickets.createdAt} < ${lastMonthDate.toISOString()}`
-      ));
+    const [twoMonthsAgoTickets] = await tenantDb.query((db, organizationId) =>
+      db.select({ count: count() })
+        .from(supportTickets)
+        .where(and(
+          or(eq(supportTickets.status, 'open'), eq(supportTickets.status, 'in_progress')),
+          eq(supportTickets.organizationId, organizationId),
+          sql`${supportTickets.createdAt} >= ${twoMonthsAgoDate.toISOString()}`,
+          sql`${supportTickets.createdAt} < ${lastMonthDate.toISOString()}`
+        ))
+    );
 
     const ticketsGrowth = twoMonthsAgoTickets.count > 0
       ? ((lastMonthTickets.count - twoMonthsAgoTickets.count) / twoMonthsAgoTickets.count) * 100
@@ -2378,10 +2353,10 @@ export class DatabaseStorage implements IStorage {
     revenue: number;
     invoiceCount: number;
   }>> {
-    const organizationId = getOrganizationId();
+    const tenantDb = getTenantDb();
     // Get revenue trends by grouping paid invoices by month
-    const result = await db
-      .select({
+    const result = await tenantDb.query((db, organizationId) =>
+      db.select({
         month: sql<string>`TO_CHAR(${invoices.paidAt}, 'Mon')`,
         year: sql<number>`EXTRACT(YEAR FROM ${invoices.paidAt})::int`,
         monthNum: sql<number>`EXTRACT(MONTH FROM ${invoices.paidAt})::int`,
@@ -2404,7 +2379,8 @@ export class DatabaseStorage implements IStorage {
       .orderBy(
         sql`EXTRACT(YEAR FROM ${invoices.paidAt})`,
         sql`EXTRACT(MONTH FROM ${invoices.paidAt})`
-      );
+      )
+    );
 
     // Fill in missing months with zero revenue
     const now = new Date();
@@ -2442,30 +2418,32 @@ export class DatabaseStorage implements IStorage {
     userId?: string;
   } = {}) {
     try {
-      const organizationId = getOrganizationId();
-      let query = db.select().from(timeEntries);
-      const conditions = [eq(timeEntries.organizationId, organizationId)];
+      const tenantDb = getTenantDb();
+      return await tenantDb.query((db, organizationId) => {
+        let query = db.select().from(timeEntries);
+        const conditions = [eq(timeEntries.organizationId, organizationId)];
 
-      if (options.startDate && options.endDate) {
-        conditions.push(and(
-          gte(timeEntries.date, new Date(options.startDate)),
-          lte(timeEntries.date, new Date(options.endDate))
-        ));
-      }
+        if (options.startDate && options.endDate) {
+          conditions.push(and(
+            gte(timeEntries.date, new Date(options.startDate)),
+            lte(timeEntries.date, new Date(options.endDate))
+          ));
+        }
 
-      if (options.projectId) {
-        conditions.push(eq(timeEntries.projectId, options.projectId));
-      }
+        if (options.projectId) {
+          conditions.push(eq(timeEntries.projectId, options.projectId));
+        }
 
-      if (options.userId) {
-        conditions.push(eq(timeEntries.userId, options.userId));
-      }
+        if (options.userId) {
+          conditions.push(eq(timeEntries.userId, options.userId));
+        }
 
-      if (conditions.length > 0) {
-        query = query.where(and(...conditions));
-      }
+        if (conditions.length > 0) {
+          query = query.where(and(...conditions));
+        }
 
-      return await query.orderBy(desc(timeEntries.date));
+        return query.orderBy(desc(timeEntries.date));
+      });
     } catch (error) {
       console.error("Error fetching time entries:", error);
       throw error;
@@ -2483,8 +2461,8 @@ export class DatabaseStorage implements IStorage {
     rate?: number;
   }) {
     try {
-      const organizationId = getOrganizationId();
-      const [result] = await db.insert(timeEntries).values({
+      const tenantDb = getTenantDb();
+      const [result] = await tenantDb.insert(timeEntries).values({
         userId: data.userId,
         projectId: data.projectId,
         taskId: data.taskId,
@@ -2493,7 +2471,6 @@ export class DatabaseStorage implements IStorage {
         date: data.date,
         billable: data.billable ?? true,
         rate: data.rate?.toString(),
-        organizationId
       }).returning();
 
       return result;
@@ -2513,7 +2490,7 @@ export class DatabaseStorage implements IStorage {
     rate: number;
   }>) {
     try {
-      const organizationId = getOrganizationId();
+      const tenantDb = getTenantDb();
       const updateData: any = {};
 
       if (data.projectId) updateData.projectId = data.projectId;
@@ -2524,12 +2501,9 @@ export class DatabaseStorage implements IStorage {
       if (data.billable !== undefined) updateData.billable = data.billable;
       if (data.rate !== undefined) updateData.rate = data.rate.toString();
 
-      const [result] = await db.update(timeEntries)
+      const [result] = await tenantDb.update(timeEntries)
         .set(updateData)
-        .where(and(
-          eq(timeEntries.id, id),
-          eq(timeEntries.organizationId, organizationId)
-        ))
+        .where(eq(timeEntries.id, id))
         .returning();
 
       return result;
@@ -2541,11 +2515,8 @@ export class DatabaseStorage implements IStorage {
 
   async deleteTimeEntry(id: string) {
     try {
-      const organizationId = getOrganizationId();
-      await db.delete(timeEntries).where(and(
-        eq(timeEntries.id, id),
-        eq(timeEntries.organizationId, organizationId)
-      ));
+      const tenantDb = getTenantDb();
+      await tenantDb.delete(timeEntries).where(eq(timeEntries.id, id));
     } catch (error) {
       console.error("Error deleting time entry:", error);
       throw error;
@@ -2558,19 +2529,21 @@ export class DatabaseStorage implements IStorage {
     userId: string;
   }) {
     try {
-      const organizationId = getOrganizationId();
+      const tenantDb = getTenantDb();
       const startDate = options.startDate ? new Date(options.startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const endDate = options.endDate ? new Date(options.endDate) : new Date();
 
       // Get time entries for the period
-      const entries = await db.select()
-        .from(timeEntries)
-        .where(and(
-          eq(timeEntries.userId, options.userId),
-          eq(timeEntries.organizationId, organizationId),
-          gte(timeEntries.date, startDate),
-          lte(timeEntries.date, endDate)
-        ));
+      const entries = await tenantDb.query((db, organizationId) =>
+        db.select()
+          .from(timeEntries)
+          .where(and(
+            eq(timeEntries.userId, options.userId),
+            eq(timeEntries.organizationId, organizationId),
+            gte(timeEntries.date, startDate),
+            lte(timeEntries.date, endDate)
+          ))
+      );
 
       // Calculate analytics
       const totalHours = entries.reduce((sum, entry) => sum + parseFloat(entry.hours || "0"), 0);
