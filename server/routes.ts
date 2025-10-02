@@ -1883,7 +1883,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const client = await storage.createClient(validatedData);
 
       // Broadcast the creation to all connected clients
-      await wsManager.broadcastToAllUsers('create', 'client', client);
+      await wsManager.broadcastToOrganization(client.organizationId, 'create', 'client', client);
 
       res.status(201).json(client);
     } catch (error) {
@@ -1898,7 +1898,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const client = await storage.updateClient(req.params.id, validatedData);
 
       // Broadcast the update to all connected clients, excluding the current user
-      await wsManager.broadcastDataChange('update', 'client', client, req.user?.id);
+      await wsManager.broadcastToOrganization(client.organizationId, 'update', 'client', client, req.user?.id);
 
       res.json(client);
     } catch (error) {
@@ -1915,7 +1915,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Broadcast the deletion to all connected clients, excluding the current user
       if (client) {
-        await wsManager.broadcastDataChange('delete', 'client', { id: req.params.id, ...client }, req.user?.id);
+        await wsManager.broadcastToOrganization(client.organizationId, 'delete', 'client', { id: req.params.id, ...client }, req.user?.id);
       }
 
       res.status(204).send();
@@ -1955,7 +1955,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const company = await storage.createCompany(validatedData);
 
       // Broadcast the creation to all connected clients
-      await wsManager.broadcastToAllUsers('create', 'company', company);
+      await wsManager.broadcastToOrganization(company.organizationId, 'create', 'company', company);
 
       res.status(201).json(company);
     } catch (error) {
@@ -1970,7 +1970,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const company = await storage.updateCompany(req.params.id, validatedData);
 
       // Broadcast the update to all connected clients, excluding the current user
-      await wsManager.broadcastDataChange('update', 'company', company, req.user?.id);
+      await wsManager.broadcastToOrganization(company.organizationId, 'update', 'company', company, req.user?.id);
 
       res.json(company);
     } catch (error) {
@@ -1987,7 +1987,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Broadcast the deletion to all connected clients, excluding the current user
       if (company) {
-        await wsManager.broadcastDataChange('delete', 'company', { id: req.params.id, ...company }, req.user?.id);
+        await wsManager.broadcastToOrganization(company.organizationId, 'delete', 'company', { id: req.params.id, ...company }, req.user?.id);
       }
 
       res.status(204).send();
@@ -2310,7 +2310,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 if (createdProject && notificationData) {
                   try {
                     await wsManager.broadcastNotification(notificationData.userId, notificationData);
-                    await wsManager.broadcastToAllUsers('create', 'project', createdProject);
+                    await wsManager.broadcastToOrganization(createdProject.organizationId, 'create', 'project', createdProject);
                     console.log(`📢 Sent project creation notification to user ${notificationData.userId}`);
                   } catch (wsError) {
                     console.error(`⚠️ Error broadcasting notifications (non-critical):`, wsError);
@@ -3080,7 +3080,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const project = await storage.createProject(validatedData);
 
       // Broadcast the creation to all connected clients
-      await wsManager.broadcastToAllUsers('create', 'project', project);
+      await wsManager.broadcastToOrganization(project.organizationId, 'create', 'project', project);
 
       res.status(201).json(project);
     } catch (error) {
@@ -3102,7 +3102,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("PUT /api/projects/:id - Updated project:", project);
 
       // Broadcast the update to all connected clients, excluding the current user
-      await wsManager.broadcastDataChange('update', 'project', project, req.user?.id);
+      await wsManager.broadcastToOrganization(project.organizationId, 'update', 'project', project, req.user?.id);
 
       res.json(project);
     } catch (error) {
@@ -3189,7 +3189,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("DELETE /api/projects/:id - Project deleted successfully");
 
       // Broadcast the deletion to all connected clients, excluding the current user
-      await wsManager.broadcastDataChange('delete', 'project', { id: req.params.id, ...project }, req.user?.id);
+      await wsManager.broadcastToOrganization(project.organizationId, 'delete', 'project', { id: req.params.id, ...project }, req.user?.id);
 
       res.status(204).send();
     } catch (error) {
@@ -3235,7 +3235,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const task = await storage.createTask(validatedData);
 
       // Broadcast the creation to all connected clients
-      await wsManager.broadcastToAllUsers('create', 'task', task);
+      await wsManager.broadcastToOrganization(task.organizationId, 'create', 'task', task);
 
       // Send notifications for new task creation
       const currentUser = req.user;
@@ -3295,7 +3295,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const task = await storage.updateTask(req.params.id, validatedData);
 
       // Broadcast the update to all connected clients, excluding the current user
-      await wsManager.broadcastDataChange('update', 'task', task, req.user?.id);
+      await wsManager.broadcastToOrganization(task.organizationId, 'update', 'task', task, req.user?.id);
 
       // Send notifications for significant changes
       const currentUser = req.user;
@@ -3363,7 +3363,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const updatedProject = await updateProjectProgress(task.projectId);
 
           // Broadcast project update if progress or status changed significantly
-          await wsManager.broadcastDataChange('update', 'project', updatedProject, currentUser.id);
+          await wsManager.broadcastToOrganization(updatedProject.organizationId, 'update', 'project', updatedProject, currentUser.id);
 
           // Log project activity for status changes
           if (validatedData.status && validatedData.status !== originalTask.status) {
@@ -3406,7 +3406,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Broadcast the deletion to all connected clients, excluding the current user
       if (task) {
-        await wsManager.broadcastDataChange('delete', 'task', { id: req.params.id, ...task }, req.user?.id);
+        await wsManager.broadcastToOrganization(task.organizationId, 'delete', 'task', { id: req.params.id, ...task }, req.user?.id);
       }
 
       res.status(204).send();
@@ -3530,7 +3530,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .returning();
 
       // Broadcast the new dependency
-      await wsManager.broadcastDataChange('create', 'task-dependency', dependency, req.user?.id);
+      await wsManager.broadcastToOrganization(dependency.organizationId, 'create', 'task-dependency', dependency, req.user?.id);
 
       // Log activity for both tasks
       try {
@@ -3581,7 +3581,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(eq(taskDependencies.id, req.params.id));
 
       // Broadcast the deletion
-      await wsManager.broadcastDataChange('delete', 'task-dependency', { id: req.params.id, ...dependency }, req.user?.id);
+      await wsManager.broadcastToOrganization(dependency.organizationId, 'delete', 'task-dependency', { id: req.params.id, ...dependency }, req.user?.id);
 
       // Log activity
       try {
@@ -3896,7 +3896,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updatedProject = await updateProjectProgress(req.params.id);
 
       // Broadcast the update
-      await wsManager.broadcastDataChange('update', 'project', updatedProject, req.user?.id);
+      await wsManager.broadcastToOrganization(updatedProject.organizationId, 'update', 'project', updatedProject, req.user?.id);
 
       // Log activity
       try {
