@@ -2242,6 +2242,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
                   // Log project creation activity (within transaction)
                   await tx.insert(projectActivity).values({
+                    organizationId: opportunity.organizationId,
                     projectId: newProject.id,
                     action: 'project_created',
                     details: `Project automatically created from won opportunity: "${opportunity.title}" (Value: ${opportunity.value || 'N/A'}, Timeline: ${durationWeeks} weeks)`,
@@ -2251,13 +2252,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   // Transfer stakeholders from opportunity to project (within transaction)
                   const stakeholdersList = await tx.select()
                     .from(opportunityStakeholders)
-                    .where(eq(opportunityStakeholders.opportunityId, req.params.id));
+                    .where(and(
+                      eq(opportunityStakeholders.opportunityId, req.params.id),
+                      eq(opportunityStakeholders.organizationId, opportunity.organizationId)
+                    ));
 
                   console.log(`👥 Transferring ${stakeholdersList.length} stakeholders to project`);
 
                   for (const stakeholder of stakeholdersList) {
                     // Create project comment to document stakeholder transfer
                     await tx.insert(projectComments).values({
+                      organizationId: opportunity.organizationId,
                       projectId: newProject.id,
                       userId: userId,
                       content: `Stakeholder transferred from opportunity: ${stakeholder.name} (${stakeholder.role}) - ${stakeholder.email}`,
@@ -2267,6 +2272,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
                   if (stakeholdersList.length > 0) {
                     await tx.insert(projectActivity).values({
+                      organizationId: opportunity.organizationId,
                       projectId: newProject.id,
                       action: 'stakeholders_transferred',
                       details: `Transferred ${stakeholdersList.length} stakeholder(s) from opportunity`,
@@ -2281,6 +2287,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   const targetUserId = opportunity.assignedTo || userId;
                   if (targetUserId) {
                     notificationData = {
+                      organizationId: opportunity.organizationId,
                       userId: targetUserId,
                       type: 'project_created' as const,
                       title: 'Project Auto-Created from Won Opportunity',
