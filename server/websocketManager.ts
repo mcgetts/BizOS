@@ -1,10 +1,11 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import type { Server } from 'http';
+import type { IncomingMessage } from 'http';
 import { db } from './db';
-import { notifications, insertNotificationSchema, users } from '../shared/schema';
+import { notifications, insertNotificationSchema, users, organizationMembers } from '../shared/schema';
 import { emailService } from './emailService.js';
 import type { InsertNotification } from '../shared/schema';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, and, sql } from 'drizzle-orm';
 
 interface AuthenticatedWebSocket extends WebSocket {
   userId?: string;
@@ -38,10 +39,35 @@ class WebSocketManager {
       path: '/ws'
     });
 
-    this.wss.on('connection', (ws: AuthenticatedWebSocket, request) => {
-      console.log('WebSocket connection established');
+    this.wss.on('connection', async (ws: AuthenticatedWebSocket, request) => {
+      console.log('WebSocket connection attempt');
 
+      const authResult = await this.authenticateWebSocket(request);
+      if (!authResult) {
+        console.log('WebSocket connection rejected: Authentication failed');
+        ws.send(JSON.stringify({
+          type: 'error',
+          message: 'Authentication failed'
+        }));
+        ws.close(1008, 'Authentication failed');
+        return;
+      }
+
+      ws.userId = authResult.userId;
+      ws.organizationId = authResult.organizationId;
       ws.isAlive = true;
+
+      this.addClient(authResult.userId, ws);
+      this.addOrganizationClient(authResult.organizationId, ws);
+
+      console.log(`WebSocket authenticated: user=${authResult.userId}, org=${authResult.organizationId}`);
+
+      ws.send(JSON.stringify({
+        type: 'auth_success',
+        message: 'Authentication successful'
+      }));
+
+      await this.sendRecentNotifications(ws, authResult.userId, authResult.organizationId);
 
       // Handle pong responses for keepalive
       ws.on('pong', () => {
@@ -94,31 +120,67 @@ class WebSocketManager {
     console.log('WebSocket server initialized');
   }
 
+  private async authenticateWebSocket(request: IncomingMessage): Promise<{ userId: string; organizationId: string } | null> {
+    try {
+      const cookies = request.headers.cookie;
+      if (!cookies) {
+        console.log('WebSocket auth failed: No cookies');
+        return null;
+      }
+
+      const sessionCookieMatch = cookies.match(/connect\.sid=s%3A([^;]+)/);
+      if (!sessionCookieMatch) {
+        console.log('WebSocket auth failed: No session cookie');
+        return null;
+      }
+
+      const sessionId = sessionCookieMatch[1].split('.')[0];
+      
+      const sessionData = await db.execute(
+        sql`SELECT sess FROM sessions WHERE sid = ${sessionId} AND expire > NOW()`
+      );
+
+      if (!sessionData || !sessionData.rows || sessionData.rows.length === 0) {
+        console.log('WebSocket auth failed: Invalid or expired session');
+        return null;
+      }
+
+      const sess = (sessionData.rows[0] as any).sess;
+      if (!sess || !sess.passport || !sess.passport.user) {
+        console.log('WebSocket auth failed: No user in session');
+        return null;
+      }
+
+      const userId = sess.passport.user.id || sess.passport.user;
+      if (!userId) {
+        console.log('WebSocket auth failed: Invalid user ID');
+        return null;
+      }
+
+      const [membership] = await db
+        .select({ organizationId: organizationMembers.organizationId })
+        .from(organizationMembers)
+        .where(eq(organizationMembers.userId, userId))
+        .limit(1);
+
+      if (!membership) {
+        console.log(`WebSocket auth failed: User ${userId} has no organization membership`);
+        return null;
+      }
+
+      console.log(`WebSocket authenticated: userId=${userId}, orgId=${membership.organizationId}`);
+      return {
+        userId,
+        organizationId: membership.organizationId
+      };
+    } catch (error) {
+      console.error('WebSocket authentication error:', error);
+      return null;
+    }
+  }
+
   private async handleMessage(ws: AuthenticatedWebSocket, message: WebSocketMessage) {
     switch (message.type) {
-      case 'auth':
-        if (message.userId) {
-          ws.userId = message.userId;
-          ws.organizationId = message.organizationId;
-          this.addClient(message.userId, ws);
-
-          if (message.organizationId) {
-            this.addOrganizationClient(message.organizationId, ws);
-          }
-
-          console.log(`WebSocket authenticated for user: ${message.userId}, org: ${message.organizationId}`);
-
-          // Send authentication confirmation
-          ws.send(JSON.stringify({
-            type: 'auth_success',
-            message: 'Authentication successful'
-          }));
-
-          // Send recent unread notifications
-          await this.sendRecentNotifications(ws, message.userId);
-        }
-        break;
-
       case 'ping':
         ws.send(JSON.stringify({ type: 'pong' }));
         break;
@@ -164,13 +226,17 @@ class WebSocketManager {
     }
   }
 
-  private async sendRecentNotifications(ws: AuthenticatedWebSocket, userId: string) {
+  private async sendRecentNotifications(ws: AuthenticatedWebSocket, userId: string, organizationId: string) {
     try {
-      // Get recent unread notifications for the user
       const recentNotifications = await db
         .select()
         .from(notifications)
-        .where(eq(notifications.userId, userId))
+        .where(
+          and(
+            eq(notifications.userId, userId),
+            eq(notifications.organizationId, organizationId)
+          )
+        )
         .orderBy(desc(notifications.createdAt))
         .limit(20);
 
