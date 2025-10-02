@@ -55,7 +55,13 @@ export function tryGetTenantContext(): TenantContext | undefined {
  * @throws Error if no tenant context
  */
 export function getOrganizationId(): string {
-  return getTenantContext().organizationId;
+  const context = tryGetTenantContext();
+  if (!context) {
+    throw new Error(
+      'No tenant context available. Ensure tenant middleware is applied to this route.'
+    );
+  }
+  return context.organizationId;
 }
 
 /**

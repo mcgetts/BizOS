@@ -1350,6 +1350,7 @@ export const changePasswordSchema = z.object({
 
 export const insertClientSchema = createInsertSchema(clients).omit({
   id: true,
+  organizationId: true,
   createdAt: true,
   updatedAt: true,
 }).extend({
@@ -1364,6 +1365,7 @@ export const insertClientSchema = createInsertSchema(clients).omit({
 
 export const insertProjectSchema = createInsertSchema(projects).omit({
   id: true,
+  organizationId: true,
   createdAt: true,
   updatedAt: true,
 }).extend({
@@ -1400,6 +1402,7 @@ export const updateProjectSchema = createInsertSchema(projects).omit({
 
 export const insertTaskSchema = createInsertSchema(tasks).omit({
   id: true,
+  organizationId: true,
   createdAt: true,
   updatedAt: true,
 }).extend({
@@ -1521,6 +1524,7 @@ export const updateSystemVariableSchema = createInsertSchema(systemVariables).om
 
 export const insertCompanySchema = createInsertSchema(companies).omit({
   id: true,
+  organizationId: true,
   createdAt: true,
   updatedAt: true,
 }).extend({
@@ -1534,6 +1538,7 @@ export const insertCompanySchema = createInsertSchema(companies).omit({
 
 export const insertSalesOpportunitySchema = createInsertSchema(salesOpportunities).omit({
   id: true,
+  organizationId: true,
   createdAt: true,
   updatedAt: true,
 }).extend({

@@ -720,6 +720,311 @@ sudo certbot renew
 
 ---
 
+## Replit-Specific Deployment
+
+### Overview
+
+The system is **currently deployed on Replit Autoscale** with full multi-tenant support. This section covers Replit-specific deployment considerations.
+
+### Current Production Status
+
+**Environment**: Replit Production (Autoscale)
+**Port**: 5000 (mapped to external port 80)
+**Database**: PostgreSQL (Neon) via DATABASE_URL
+**Multi-Tenant**: Enabled with subdomain routing
+
+### Replit Configuration
+
+**File**: `.replit`
+
+```toml
+[deployment]
+deploymentTarget = "autoscale"
+build = ["npm", "run", "build"]
+run = ["npm", "run", "start"]
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[env]
+PORT = "5000"
+NODE_ENV = "development"  # Or "production" for prod
+REPLIT_ENV = "true"
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm run dev:replit"
+waitForPort = 5000
+```
+
+### Environment Variables (Replit Secrets)
+
+Configure these in Replit Secrets tab:
+
+```bash
+# Database (Required)
+DATABASE_URL=postgresql://user:pass@host.neon.tech/db?sslmode=require
+
+# Multi-Tenant (Required)
+REPLIT_DOMAINS=your-repl-slug.replit.dev,*.your-repl-slug.replit.dev
+
+# Authentication (Required)
+SESSION_SECRET=<32+ character random string>
+ISSUER_URL=https://replit.com/oidc
+REPL_ID=<your-repl-id>
+
+# Optional
+SMTP_HOST=smtp.sendgrid.net
+SMTP_PORT=587
+SMTP_USER=apikey
+SMTP_PASSWORD=<sendgrid-api-key>
+```
+
+### Deployment Process
+
+**Automatic Deployment**:
+
+1. Commit changes to main branch
+2. Replit automatically detects changes
+3. Runs build script: `npm run build`
+4. Starts application: `npm start`
+5. Seed script runs automatically on startup
+
+**Manual Deployment**:
+
+```bash
+# In Replit Shell
+npm run build
+npm start
+
+# Or use the Run button
+# Executes: npm run dev:replit
+```
+
+### Default Organization Setup
+
+The application automatically creates a default organization on first startup:
+
+```typescript
+// server/seed.ts
+export async function ensureDefaultOrganization(): Promise<Organization> {
+  const [existing] = await db
+    .select()
+    .from(organizations)
+    .where(eq(organizations.subdomain, 'default'))
+    .limit(1);
+
+  if (existing) {
+    return existing;
+  }
+
+  const [org] = await db
+    .insert(organizations)
+    .values({
+      name: 'Default Organization',
+      subdomain: 'default',
+      slug: 'default',
+      planTier: 'professional',
+      status: 'active',
+      maxUsers: 50,
+      settings: {
+        features: ['all'],
+        branding: {},
+        notifications: { email: true },
+      },
+      trialEndsAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+    })
+    .returning();
+
+  return org;
+}
+```
+
+### Subdomain Routing on Replit
+
+**Development/Preview**:
+
+```
+https://your-repl-slug.replit.dev  → Default organization (localhost routing)
+```
+
+**Custom Domain** (if configured):
+
+```
+https://default.yourdomain.com  → Default organization
+https://acme.yourdomain.com     → Acme organization (if created)
+```
+
+### Accessing Replit Deployment
+
+1. **Replit Webview**: Click "Open in New Tab" or use the webview panel
+2. **Direct URL**: `https://your-repl-slug.replit.dev`
+3. **Custom Domain**: Configure in Replit settings (requires paid plan)
+
+### Database Management (Neon)
+
+**Current Setup**: PostgreSQL hosted on Neon serverless
+
+**Connection**:
+
+```bash
+# Via Replit shell
+psql $DATABASE_URL
+
+# Common commands
+\dt                                    # List tables
+\d organizations                       # Describe organizations table
+SELECT * FROM organizations;           # View organizations
+SELECT COUNT(*) FROM organization_members;  # Count memberships
+```
+
+**Migrations**:
+
+```bash
+# Push schema changes
+npm run db:push
+
+# Run multi-tenant migration (if needed)
+npx tsx scripts/migrate-to-multi-tenant.ts
+```
+
+### Monitoring & Logs
+
+**View Application Logs**:
+
+1. Open Replit Shell
+2. Logs are visible in the Console tab
+3. Look for startup messages:
+
+```
+🌱 Starting database seeding...
+✅ Default organization already exists
+🔧 Using PostgreSQL session store
+Server running on port 5000
+```
+
+**Check Health**:
+
+```bash
+curl https://your-repl-slug.replit.dev/api/health
+```
+
+### Troubleshooting Replit Deployment
+
+**Issue 1: Port Already in Use**
+
+```bash
+# Check for running processes
+lsof -ti:5000 | xargs kill -9
+
+# Or restart the deployment
+# Stop and Start via Replit UI
+```
+
+**Issue 2: Database Connection Failed**
+
+```bash
+# Test database connection
+psql $DATABASE_URL -c "SELECT 1;"
+
+# Verify DATABASE_URL secret is set
+echo $DATABASE_URL  # Should not be empty
+```
+
+**Issue 3: Default Organization Not Created**
+
+```bash
+# Check if organization exists
+psql $DATABASE_URL -c "SELECT * FROM organizations WHERE subdomain='default';"
+
+# If missing, restart application
+# Or manually run seed
+npx tsx server/seed.ts
+```
+
+**Issue 4: Users Can't Login**
+
+```bash
+# Check user and organization membership
+psql $DATABASE_URL <<EOF
+SELECT u.email, om.role, o.name as organization
+FROM users u
+LEFT JOIN organization_members om ON u.id = om.user_id
+LEFT JOIN organizations o ON om.organization_id = o.id;
+EOF
+
+# Add user to default organization if missing
+npx tsx scripts/fix-user-organizations.ts
+```
+
+### Replit-Specific Features
+
+**Automatic Restarts**: Replit automatically restarts on code changes
+**Always-On**: Enable in Replit settings (requires paid plan)
+**Custom Domains**: Configure in Replit Domains settings
+**Database Integration**: Neon PostgreSQL configured via DATABASE_URL
+
+### Custom Domain Configuration on Replit
+
+**Step 1: Add Custom Domain in Replit**
+
+1. Go to Replit Deployment settings
+2. Add custom domain: `yourdomain.com`
+3. Configure DNS as instructed
+
+**Step 2: Update REPLIT_DOMAINS**
+
+```bash
+# In Replit Secrets
+REPLIT_DOMAINS=yourdomain.com,*.yourdomain.com
+```
+
+**Step 3: Configure Wildcard DNS**
+
+At your DNS provider:
+
+```
+Type: A
+Name: @
+Value: <replit-ip>
+
+Type: A
+Name: *
+Value: <replit-ip>
+```
+
+**Step 4: SSL Certificate**
+
+Replit automatically provisions SSL certificates for custom domains.
+
+### Production Best Practices on Replit
+
+1. ✅ **Use Secrets** for all sensitive data (DATABASE_URL, SESSION_SECRET, etc.)
+2. ✅ **Enable Always-On** to prevent cold starts
+3. ✅ **Set NODE_ENV=production** for production deployments
+4. ✅ **Monitor logs** for errors and performance issues
+5. ✅ **Backup database** regularly using Neon's backup features
+6. ✅ **Use Boost** for better performance (Replit paid feature)
+7. ✅ **Test multi-tenant isolation** after deployment
+
+### Scaling on Replit
+
+**Current**: Autoscale deployment handles multiple concurrent users
+**Limitations**: Single instance per Repl
+**Database**: Neon handles connection pooling and scaling
+**Alternative**: Deploy multiple Repls with load balancer for high-traffic
+
+---
+
 **Deployment Guide Complete**
-**Support**: Check TROUBLESHOOTING.md for common issues
+**Support**: Check TROUBLESHOOTING.md for common issues or [MULTI_TENANT_GUIDE.md](./MULTI_TENANT_GUIDE.md) for architecture details
+**Single-Tenant**: See [SINGLE_TENANT_DEPLOYMENT.md](./SINGLE_TENANT_DEPLOYMENT.md) for non-SaaS deployments
 **Next Steps**: Monitor application and verify multi-tenant isolation

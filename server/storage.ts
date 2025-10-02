@@ -434,11 +434,11 @@ export class DatabaseStorage implements IStorage {
     return client;
   }
 
-  async createClient(client: InsertClient): Promise<Client> {
-    const organizationId = getOrganizationId();
+  async createClient(client: InsertClient, organizationId?: string): Promise<Client> {
+    const orgId = organizationId || getOrganizationId();
     const [newClient] = await db.insert(clients).values({
       ...client,
-      organizationId
+      organizationId: orgId
     }).returning();
     return newClient;
   }
@@ -485,11 +485,11 @@ export class DatabaseStorage implements IStorage {
     return company;
   }
 
-  async createCompany(company: InsertCompany): Promise<Company> {
-    const organizationId = getOrganizationId();
+  async createCompany(company: InsertCompany, organizationId?: string): Promise<Company> {
+    const orgId = organizationId || getOrganizationId();
     const [newCompany] = await db.insert(companies).values({
       ...company,
-      organizationId
+      organizationId: orgId
     }).returning();
     return newCompany;
   }
@@ -706,11 +706,11 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(salesOpportunities.lastActivityDate));
   }
 
-  async createSalesOpportunity(opportunity: InsertSalesOpportunity): Promise<SalesOpportunity> {
-    const organizationId = getOrganizationId();
+  async createSalesOpportunity(opportunity: InsertSalesOpportunity, organizationId?: string): Promise<SalesOpportunity> {
+    const orgId = organizationId || getOrganizationId();
     const [newOpportunity] = await db.insert(salesOpportunities).values({
       ...opportunity,
-      organizationId,
+      organizationId: orgId,
       lastActivityDate: new Date(),
     }).returning();
     return newOpportunity;
@@ -1162,11 +1162,11 @@ export class DatabaseStorage implements IStorage {
       ));
   }
 
-  async createProject(project: InsertProject): Promise<Project> {
-    const organizationId = getOrganizationId();
+  async createProject(project: InsertProject, organizationId?: string): Promise<Project> {
+    const orgId = organizationId || getOrganizationId();
     const [newProject] = await db.insert(projects).values({
       ...project,
-      organizationId
+      organizationId: orgId
     }).returning();
     return newProject;
   }
@@ -1228,11 +1228,11 @@ export class DatabaseStorage implements IStorage {
       ));
   }
 
-  async createTask(task: InsertTask): Promise<Task> {
-    const organizationId = getOrganizationId();
+  async createTask(task: InsertTask, organizationId?: string): Promise<Task> {
+    const orgId = organizationId || getOrganizationId();
     const [newTask] = await db.insert(tasks).values({
       ...task,
-      organizationId
+      organizationId: orgId
     }).returning();
     return newTask;
   }

@@ -224,6 +224,11 @@ async function getProjectTemplateForOpportunity(opportunity: any): Promise<any> 
   }
 }
 
+// Helper function to get user ID from request (supports both OAuth and local auth)
+function getUserId(req: any): string | null {
+  return req.user?.claims?.sub || req.user?.id || null;
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Test reset endpoint - must be BEFORE auth setup to bypass authentication
   app.get('/api/test/reset', async (req, res) => {
@@ -292,9 +297,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return next();
     }
     
-    // Apply authentication and tenant middleware for all other API routes
-    isAuthenticated(req, res, (err) => {
-      if (err) return next(err);
+    // Apply authentication first, then tenant middleware
+    isAuthenticated(req, res, (authErr) => {
+      if (authErr) return next(authErr);
+
+      // Tenant middleware MUST wrap the rest of the chain
       resolveTenant(req, res, next);
     });
   });
@@ -386,15 +393,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let userId: string;
       let user: any;
 
-      if (req.user.isLocal) {
-        // Local authentication user
-        userId = req.user.id;
-        user = await storage.getUser(userId);
-      } else {
-        // OAuth authentication user
-        userId = req.user.claims.sub;
-        user = await storage.getUser(userId);
+      userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
       }
+      user = await storage.getUser(userId);
 
       res.json(user);
     } catch (error) {
@@ -781,11 +784,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validatedData = changePasswordSchema.parse(req.body);
       const { currentPassword, newPassword } = validatedData;
 
-      let userId: string;
-      if (req.user.isLocal) {
-        userId = req.user.id;
-      } else {
-        userId = req.user.claims.sub;
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
       }
 
       // Get current user
@@ -1877,7 +1878,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/clients', isAuthenticated, async (req: any, res) => {
     try {
       const validatedData = insertClientSchema.parse(req.body);
-      const client = await storage.createClient(validatedData);
+      const organizationId = req.tenant?.organizationId;
+      const client = await storage.createClient(validatedData, organizationId);
 
       // Broadcast the creation to all connected clients
       await wsManager.broadcastToAllUsers('create', 'client', client);
@@ -1949,7 +1951,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/companies', isAuthenticated, async (req: any, res) => {
     try {
       const validatedData = insertCompanySchema.parse(req.body);
-      const company = await storage.createCompany(validatedData);
+      const organizationId = req.tenant?.organizationId;
+      const company = await storage.createCompany(validatedData, organizationId);
 
       // Broadcast the creation to all connected clients
       await wsManager.broadcastToAllUsers('create', 'company', company);
@@ -2028,23 +2031,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/opportunities', isAuthenticated, async (req, res) => {
+  app.post('/api/opportunities', isAuthenticated, async (req: any, res) => {
     try {
       console.log('Creating opportunity - Request body:', JSON.stringify(req.body, null, 2));
+      console.log('req.tenant:', req.tenant);
+      console.log('req.user:', { id: req.user?.id, email: req.user?.email });
 
       const validatedData = insertSalesOpportunitySchema.parse(req.body);
       console.log('Validated data:', JSON.stringify(validatedData, null, 2));
 
-      const opportunity = await storage.createSalesOpportunity(validatedData);
+      const organizationId = req.tenant?.organizationId;
+      console.log('Extracted organizationId:', organizationId);
+
+      const opportunity = await storage.createSalesOpportunity(validatedData, organizationId);
       console.log('Created opportunity:', JSON.stringify(opportunity, null, 2));
 
       // Log activity history
-      await logActivityHistory(
-        opportunity.id,
-        'opportunity_created',
-        `Opportunity "${opportunity.title}" was created`,
-        (req as any).user.claims.sub
-      );
+      const userId = (req as any).user?.claims?.sub || (req as any).user?.id;
+      if (userId) {
+        await logActivityHistory(
+          opportunity.id,
+          'opportunity_created',
+          `Opportunity "${opportunity.title}" was created`,
+          userId
+        );
+      }
 
       res.status(201).json(opportunity);
     } catch (error) {
@@ -2110,7 +2121,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Log activity for changed fields
       const changes: string[] = [];
-      const userId = (req as any).user.claims.sub;
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
 
       if (validatedData.stage && validatedData.stage !== current.stage) {
         const stageLabels: Record<string, string> = {
@@ -2424,7 +2438,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           req.params.id,
           'opportunity_deleted',
           `Opportunity "${opportunity[0].title}" was deleted`,
-          (req as any).user.claims.sub
+          getUserId(req)
         );
       }
 
@@ -2470,10 +2484,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/opportunities/:opportunityId/next-steps', isAuthenticated, async (req: any, res) => {
     try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
+
       const validatedData = insertOpportunityNextStepSchema.parse({
         ...req.body,
         opportunityId: req.params.opportunityId,
-        createdBy: req.user.claims.sub,
+        createdBy: userId,
       });
       const nextStep = await db.insert(opportunityNextSteps).values(validatedData).returning();
 
@@ -2482,7 +2501,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         req.params.opportunityId,
         'next_step_added',
         `Added next step: "${nextStep[0].title}"`,
-        (req as any).user.claims.sub
+        userId
       );
 
       res.status(201).json(nextStep[0]);
@@ -2512,7 +2531,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         req.params.opportunityId,
         'next_step_updated',
         `Updated next step: "${nextStep[0].title}"`,
-        (req as any).user.claims.sub
+        getUserId(req)
       );
 
       res.json(nextStep[0]);
@@ -2540,7 +2559,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         req.params.opportunityId,
         'next_step_deleted',
         `Deleted next step: "${result[0].title}"`,
-        (req as any).user.claims.sub
+        getUserId(req)
       );
 
       res.status(204).send();
@@ -2586,10 +2605,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/opportunities/:opportunityId/communications', isAuthenticated, async (req: any, res) => {
     try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
+
       const validatedData = insertOpportunityCommunicationSchema.parse({
         ...req.body,
         opportunityId: req.params.opportunityId,
-        recordedBy: req.user.claims.sub,
+        recordedBy: userId,
       });
       const communication = await db.insert(opportunityCommunications).values(validatedData).returning();
 
@@ -2598,7 +2622,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         req.params.opportunityId,
         'communication_logged',
         `Logged ${communication[0].type}: "${communication[0].subject || 'Communication'}"`,
-        (req as any).user.claims.sub
+        getUserId(req)
       );
 
       res.status(201).json(communication[0]);
@@ -2628,7 +2652,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         req.params.opportunityId,
         'communication_updated',
         `Updated ${communication[0].type}: "${communication[0].subject || 'Communication'}"`,
-        (req as any).user.claims.sub
+        getUserId(req)
       );
 
       res.json(communication[0]);
@@ -2656,7 +2680,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         req.params.opportunityId,
         'communication_deleted',
         `Deleted ${result[0].type}: "${result[0].subject || 'Communication'}"`,
-        (req as any).user.claims.sub
+        getUserId(req)
       );
 
       res.status(204).send();
@@ -2748,6 +2772,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json({ message: "No file provided" });
         }
 
+        const userId = getUserId(req);
+        if (!userId) {
+          return res.status(401).json({ message: "User ID not found" });
+        }
+
         const { description, communicationId, isPublic } = req.body;
 
         const newAttachment = await db.insert(opportunityFileAttachments).values({
@@ -2758,7 +2787,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           fileSize: req.file.size,
           mimeType: req.file.mimetype,
           filePath: req.file.path,
-          uploadedBy: req.user.claims.sub,
+          uploadedBy: userId,
           description: description || null,
           isPublic: isPublic === 'true',
         }).returning();
@@ -2768,7 +2797,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           req.params.opportunityId,
           'file_attached',
           `Uploaded file: "${req.file.originalname}"${communicationId ? ' to communication' : ''}`,
-          req.user.claims.sub
+          userId
         );
 
         res.status(201).json(newAttachment[0]);
@@ -2842,7 +2871,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         req.params.opportunityId,
         'file_removed',
         `Deleted file: "${file.originalFileName}"`,
-        (req as any).user.claims.sub
+        getUserId(req)
       );
 
       res.status(204).send();
@@ -2885,10 +2914,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/opportunities/:opportunityId/stakeholders', isAuthenticated, async (req: any, res) => {
     try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
+
       const validatedData = insertOpportunityStakeholderSchema.parse({
         ...req.body,
         opportunityId: req.params.opportunityId,
-        createdBy: req.user.claims.sub,
+        createdBy: userId,
       });
       const stakeholder = await db.insert(opportunityStakeholders).values(validatedData).returning();
 
@@ -2897,7 +2931,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         req.params.opportunityId,
         'stakeholder_added',
         `Added stakeholder: "${stakeholder[0].name}" (${stakeholder[0].role || 'Unknown role'})`,
-        (req as any).user.claims.sub
+        getUserId(req)
       );
 
       res.status(201).json(stakeholder[0]);
@@ -2927,7 +2961,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         req.params.opportunityId,
         'stakeholder_updated',
         `Updated stakeholder: "${stakeholder[0].name}" (${stakeholder[0].role || 'Unknown role'})`,
-        (req as any).user.claims.sub
+        getUserId(req)
       );
 
       res.json(stakeholder[0]);
@@ -2955,7 +2989,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         req.params.opportunityId,
         'stakeholder_deleted',
         `Deleted stakeholder: "${result[0].name}" (${result[0].role || 'Unknown role'})`,
-        (req as any).user.claims.sub
+        getUserId(req)
       );
 
       res.status(204).send();
@@ -3021,7 +3055,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/projects', isAuthenticated, async (req: any, res) => {
     try {
       const validatedData = insertProjectSchema.parse(req.body);
-      const project = await storage.createProject(validatedData);
+      const organizationId = req.tenant?.organizationId;
+      const project = await storage.createProject(validatedData, organizationId);
 
       // Broadcast the creation to all connected clients
       await wsManager.broadcastToAllUsers('create', 'project', project);
@@ -3176,7 +3211,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/tasks', isAuthenticated, async (req: any, res) => {
     try {
       const validatedData = insertTaskSchema.parse(req.body);
-      const task = await storage.createTask(validatedData);
+      const organizationId = req.tenant?.organizationId;
+      const task = await storage.createTask(validatedData, organizationId);
 
       // Broadcast the creation to all connected clients
       await wsManager.broadcastToAllUsers('create', 'task', task);

@@ -164,12 +164,11 @@ export const resolveTenant: RequestHandler = async (req: any, res, next) => {
       userEmail: req.user?.email,
     };
 
-    // Store context and continue
-    tenantStorage.run(context, () => {
-      // Attach to request for convenience
-      req.tenant = context;
-      next();
-    });
+    // Attach to request for convenience
+    req.tenant = context;
+
+    // Store context and continue - wrap the ENTIRE remaining request chain
+    tenantStorage.run(context, () => next());
   } catch (error) {
     console.error('Tenant resolution error:', error);
     res.status(500).json({

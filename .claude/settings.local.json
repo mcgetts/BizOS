@@ -63,7 +63,9 @@
       "Bash(grep:*)",
       "Bash(test:*)",
       "Bash(env)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(ps:*)",
+      "Bash(timeout 5 curl -s \"http://localhost:3001/health\")"
     ],
     "deny": [],
     "ask": []

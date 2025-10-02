@@ -18,8 +18,12 @@ system_overview:
   runtime: "node_js"
   language: "typescript"
   deployment_target: "replit_cloud"
+  architecture_model: "multi_tenant_saas"
+  tenant_routing: "subdomain_based"
 
   key_features:
+    - "Multi-Tenant SaaS Architecture with Subdomain Routing"
+    - "Organization Management with Plan Tiers and Billing"
     - "Multi-method Authentication (Local + OAuth)"
     - "Real-time WebSocket Notifications"
     - "AI-Powered Business Analytics"
@@ -375,13 +379,95 @@ business_domains:
       - "Team performance insights"
       - "Custom reporting"
 
+multi_tenant_architecture:
+  deployment_status: "production_deployed"
+  tenant_routing_strategy: "subdomain_based"
+  default_organization: "default"
+
+  core_components:
+    organizations_table:
+      purpose: "Root tenant management"
+      features:
+        - "Subdomain routing (e.g., acme.yourdomain.com)"
+        - "Plan tiers (starter, professional, enterprise)"
+        - "Billing status tracking"
+        - "User limits per organization"
+        - "Custom settings (branding, features, notifications)"
+
+    organization_members_table:
+      purpose: "User-organization relationships"
+      roles:
+        - "owner: Full control"
+        - "admin: Administrative access"
+        - "member: Standard access"
+      statuses:
+        - "active: Full access granted"
+        - "invited: Pending acceptance"
+        - "suspended: Access temporarily revoked"
+
+    tenant_context:
+      implementation: "AsyncLocalStorage"
+      purpose: "Thread-safe request isolation"
+      benefits:
+        - "Automatic context propagation"
+        - "No manual parameter passing"
+        - "Type-safe tenant access"
+
+    tenant_middleware:
+      location: "server/middleware/tenantMiddleware.ts"
+      responsibilities:
+        - "Extract subdomain from hostname"
+        - "Resolve organization by subdomain"
+        - "Validate organization status (active/suspended/cancelled)"
+        - "Verify user membership"
+        - "Attach tenant context to request"
+
+    tenant_scoped_database:
+      location: "server/tenancy/tenantDb.ts"
+      features:
+        - "Automatic organizationId injection on INSERT"
+        - "Automatic organizationId filtering on SELECT"
+        - "Cross-tenant operation prevention on UPDATE/DELETE"
+        - "Type-safe query building"
+
+  data_isolation:
+    method: "Row-Level Tenant Filtering"
+    implementation: "organizationId foreign key on all business tables"
+    enforcement: "Middleware + Database layer"
+    security: "Automatic filtering prevents cross-tenant data leaks"
+
+  migration_support:
+    script: "scripts/migrate-to-multi-tenant.ts"
+    features:
+      - "Creates default organization"
+      - "Assigns existing data to default organization"
+      - "Creates organization memberships for all users"
+      - "Validates migration integrity"
+    test_script: "scripts/test-multi-tenant.ts"
+
+  development_workflow:
+    localhost_subdomain: "default"
+    subdomain_examples:
+      - "default.localhost:5000 (development)"
+      - "acme.yourdomain.com (production)"
+      - "contoso.yourdomain.com (production)"
+
+  deployment:
+    platform: "Replit Autoscale"
+    environment: "production"
+    configuration:
+      - "REPLIT_DOMAINS with wildcard support"
+      - "DATABASE_URL for PostgreSQL (Neon)"
+      - "Automatic default organization provisioning"
+      - "OAuth integration with tenant awareness"
+
 future_roadmap:
   planned_enhancements:
     - "Native mobile applications"
     - "Advanced AI automation"
     - "Enterprise SSO integrations"
     - "Advanced machine learning models"
-    - "Multi-tenant architecture"
+    - "Custom domain support for organizations"
 
   potential_scaling_paths:
     - "Microservices architecture"

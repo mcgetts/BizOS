@@ -1,6 +1,6 @@
 # Claude Development Notes
 
-## Platform Status: All 9 Phases Complete ✅
+## Platform Status: All 10 Phases Complete ✅
 
 ### Phase 1: Project Management Foundation
 - Project templates (3 industry types), Gantt charts with SVG connectors, critical path analysis
@@ -51,18 +51,35 @@
 - 6 strategic KPIs, Business Health Score, Financial Performance, Critical Actions Center
 - Role-based access (super admin/admin only), 7 executive API endpoints
 
+### Phase 10: Multi-Tenant Architecture (Production Deployed)
+- Subdomain-based tenant routing (e.g., acme.yourdomain.com, default.yourdomain.com)
+- Organizations table with plan tiers, billing status, user limits, and custom settings
+- Organization Members junction table with role-based access (owner, admin, member)
+- AsyncLocalStorage-based tenant context for thread-safe request isolation
+- Tenant middleware with automatic subdomain resolution and organization validation
+- Tenant-scoped database layer with automatic organizationId filtering on all queries
+- Storage layer integration with transparent multi-tenant data isolation
+- Migration scripts for single-tenant to multi-tenant conversion
+- Default organization auto-provisioning for development and first-time deployment
+- Automatic user assignment to organizations on OAuth login
+- Production deployed and managed via Replit autoscale with environment configuration
+
 ## Architecture Overview
 
 ### Database Schema
-- **Core tables** (25+): projects, tasks, projectTemplates, taskTemplates, taskDependencies, projectComments, projectActivity, notifications, timeEntries, expenses, invoices
+- **Core tables** (30+): organizations, organizationMembers, projects, tasks, projectTemplates, taskTemplates, taskDependencies, projectComments, projectActivity, notifications, timeEntries, expenses, invoices
+- **Multi-tenant tables** (2): organizations (root), organizationMembers (user-org junction with roles)
 - **Security tables** (8): roles, userRoleAssignments, userSessions, auditLogs, securityEvents, dataAccessLogs, permissionExceptions, mfaTokens
-- **User extensions**: passwordHash, authProvider, emailVerified, passwordResetToken, mfaEnabled, enhancedRole, department, sessionLimit
+- **User extensions**: passwordHash, authProvider, emailVerified, passwordResetToken, mfaEnabled, enhancedRole, department, sessionLimit, defaultOrganizationId
+- **Tenant isolation**: All business data tables include organizationId foreign key with cascade delete
 - **Type safety**: Centralized constants with TypeScript constraints, comprehensive validation
 
-### API Endpoints (70+)
+### API Endpoints (75+)
 - **Projects**: Templates, dependencies, comments, activity, progress analytics, completion estimates
 - **Auth**: Register, login, email verification, password reset, MFA (TOTP/SMS)
 - **MFA**: Setup, verification, disable, backup codes, status
+- **Organizations**: Multi-tenant routing, subdomain resolution, member management
+- **Tenancy**: Automatic tenant context resolution via subdomain, organization membership validation
 - **Dashboard**: KPIs, revenue trends, executive analytics
 - **Budget**: Expenses, time entries, budget impact, invoices
 - **Tasks**: Budget impact, notifications settings, productivity analytics, team insights
@@ -73,14 +90,16 @@
 - **Task Management**: QuickTaskActions, TaskTimeTracker, TaskNotifications, TaskAnalytics, MobileGantt
 - **Executive Dashboard**: ExecutiveKPIGrid, BusinessHealthScore, FinancialPerformance, CriticalActions, CustomerIntelligence, StrategicProjects
 - **Authentication**: LoginForm, RegisterForm, ForgotPasswordForm, AuthContainer, UserProfileMenu, UserAvatar
+- **Multi-Tenant**: OrganizationIndicator, TenantContext (AsyncLocalStorage), TenantMiddleware, TenantScopedDB
 - **Analytics**: Analytics dashboard (5 modules), BudgetManagement, TimeTracking, DashboardKPIs
 - **Security**: MFAService (TOTP/SMS), AuditService, RBACMiddleware, AuthMfaRoutes
 - **UI Library**: StandardSelects, NotificationPanel, Responsive Sidebar, Mobile Header, Touch Interface Utilities
 
 ### System Features
+- **Multi-Tenancy**: Subdomain-based routing, organization management, data isolation via AsyncLocalStorage, automatic organizationId filtering
 - **Real-time Infrastructure**: WebSocket notifications with authentication, connection pooling, dual-channel (WebSocket + email)
 - **Gantt & Scheduling**: Date-based positioning, multi-scale views, SVG connectors, drag & drop, critical path analysis (CPM algorithm)
-- **Authentication**: Local (email/password with bcrypt) + OAuth, MFA (TOTP/SMS), email verification, password reset
+- **Authentication**: Local (email/password with bcrypt) + OAuth, MFA (TOTP/SMS), email verification, password reset, multi-tenant aware
 - **Security**: RBAC (9 departments, 70+ resources, 7 roles), audit logging with risk scoring, session management with device fingerprinting
 - **Budget Management**: Real-time cost tracking, variance analysis, automated billing, invoice generation, profitability analytics
 - **AI Analytics**: ML-powered forecasting, strategic recommendations, productivity insights, efficiency scoring, predictive completion
@@ -100,13 +119,15 @@ npm run tsx scripts/data-cleanup-migration.ts [analyze|migrate]
 ## Key Files & Architecture
 
 ### Backend (`/server/`)
-- `schema.ts` (15+ tables, auth schemas, validation, TypeScript types)
+- `schema.ts` (30+ tables, auth schemas, validation, TypeScript types, multi-tenant organizationId)
 - `constants.ts` (centralized data constants)
-- `routes.ts` (70+ API endpoints with authentication)
+- `routes.ts` (75+ API endpoints with authentication and tenant middleware)
 - `websocketManager.ts`, `emailService.ts`, `index.ts`
 - `utils/authUtils.ts` (password hashing, rate limiting, tokens)
-- `replitAuth.ts` (local + OAuth authentication)
+- `replitAuth.ts` (local + OAuth authentication with multi-tenant support)
 - `integrations/` (Slack, Teams, GitHub APIs)
+- `tenancy/` (tenantContext.ts, tenantDb.ts - AsyncLocalStorage-based isolation)
+- `middleware/` (tenantMiddleware.ts - subdomain resolution and validation)
 
 ### Frontend (`/client/src/`)
 - **Components**: GanttChart, ProjectTemplateSelector, NotificationPanel, auth forms, analytics dashboards
@@ -141,10 +162,12 @@ npm run tsx scripts/data-cleanup-migration.ts [analyze|migrate]
 - **Sep 28**: Enterprise RBAC, MFA, audit logging
 - **Sep 29**: Schema fixes, intelligent deletion logic, server-authoritative mutations
 - **Sep 30**: Executive dashboard, customer intelligence, portfolio management
+- **Oct 01**: Multi-tenant architecture, subdomain routing, organization management, production deployment via Replit
 
 ## Technical Highlights
-- **Database**: Normalized schema, 25+ tables, centralized constants, TypeScript constraints
-- **Authentication**: Bcrypt hashing, passport-local + OAuth, MFA (TOTP/SMS), email verification
+- **Database**: Normalized schema, 30+ tables, centralized constants, TypeScript constraints, multi-tenant isolation
+- **Multi-Tenancy**: Subdomain-based routing, AsyncLocalStorage context, automatic organizationId filtering, data isolation
+- **Authentication**: Bcrypt hashing, passport-local + OAuth, MFA (TOTP/SMS), email verification, tenant-aware login
 - **Real-time**: WebSocket infrastructure, connection pooling, dual-channel notifications
 - **Security**: RBAC (9 depts, 70+ resources), audit logging, session management, device fingerprinting
 - **UI/UX**: Professional forms with validation, mobile-first responsive design, consistent layouts
@@ -152,7 +175,8 @@ npm run tsx scripts/data-cleanup-migration.ts [analyze|migrate]
 - **Integrations**: Slack/Teams/GitHub APIs, webhook processing, cross-platform broadcasting
 - **Workflow**: Smart progress automation, template-driven creation (16+ templates), dependency visualization
 - **Project Management**: Gantt with CPM algorithm, drag & drop, SVG connectors, critical path highlighting
+- **Deployment**: Replit autoscale deployment, PostgreSQL (Neon), environment-based configuration
 
 ---
-*Last updated: 2025-09-30 | All 9 phases complete*
-*Enterprise-grade business platform - fully production-ready*
+*Last updated: 2025-10-01 | All 10 phases complete*
+*Enterprise-grade multi-tenant SaaS platform - fully production-ready and deployed*

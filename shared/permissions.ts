@@ -104,7 +104,7 @@ export const ROLE_PERMISSION_TEMPLATES: Record<EnhancedUserRole, {
   },
 
   admin: {
-    departments: ['admin', 'it'],
+    departments: ['admin', 'it', 'sales', 'operations', 'finance', 'marketing', 'support'],
     permissions: [
       // User management
       'admin:users:create', 'admin:users:read', 'admin:users:update', 'admin:users:delete',
@@ -123,9 +123,29 @@ export const ROLE_PERMISSION_TEMPLATES: Record<EnhancedUserRole, {
 
       // Department management
       'admin:department_management:read', 'admin:department_management:update',
-      'admin:notification_settings:read', 'admin:notification_settings:update'
+      'admin:notification_settings:read', 'admin:notification_settings:update',
+
+      // Business data management (admin department has full access)
+      'admin:clients:create', 'admin:clients:read', 'admin:clients:update', 'admin:clients:delete',
+      'admin:companies:create', 'admin:companies:read', 'admin:companies:update', 'admin:companies:delete',
+      'admin:projects:create', 'admin:projects:read', 'admin:projects:update', 'admin:projects:delete',
+      'admin:tasks:create', 'admin:tasks:read', 'admin:tasks:update', 'admin:tasks:delete',
+      'admin:opportunities:create', 'admin:opportunities:read', 'admin:opportunities:update', 'admin:opportunities:delete',
+
+      // Financial management
+      'admin:invoices:create', 'admin:invoices:read', 'admin:invoices:update', 'admin:invoices:delete',
+      'admin:expenses:create', 'admin:expenses:read', 'admin:expenses:update', 'admin:expenses:delete', 'admin:expenses:approve',
+      'admin:time_entries:create', 'admin:time_entries:read', 'admin:time_entries:update', 'admin:time_entries:delete', 'admin:time_entries:approve',
+      'admin:financial_reports:read', 'admin:financial_reports:create', 'admin:financial_reports:export',
+      'admin:budget_management:read', 'admin:budget_management:update',
+
+      // Content management
+      'admin:documents:create', 'admin:documents:read', 'admin:documents:update', 'admin:documents:delete',
+      'admin:knowledge_articles:create', 'admin:knowledge_articles:read', 'admin:knowledge_articles:update', 'admin:knowledge_articles:delete',
+      'admin:marketing_campaigns:create', 'admin:marketing_campaigns:read', 'admin:marketing_campaigns:update', 'admin:marketing_campaigns:delete',
+      'admin:support_tickets:create', 'admin:support_tickets:read', 'admin:support_tickets:update', 'admin:support_tickets:delete'
     ],
-    description: 'Administrative access with user and system management capabilities'
+    description: 'Administrative access with full business operations and system management capabilities'
   },
 
   manager: {

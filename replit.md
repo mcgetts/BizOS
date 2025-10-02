@@ -38,6 +38,17 @@ Preferred communication style: Simple, everyday language.
 - **Multi-Tenant Integration**: New OAuth users are automatically assigned to default organization (slug='default') with member role upon first login
 - **Middleware Architecture**: Public auth routes (`/api/login`, `/api/callback`, `/api/auth/register`, etc.) bypass authentication middleware while all other `/api/*` routes require authentication and tenant context
 
+### Multi-Tenant Architecture
+- **Tenant Routing**: Subdomain-based organization routing (e.g., `acme.yourdomain.com`, `contoso.yourdomain.com`)
+- **Default Organization**: Development and localhost automatically use `default` subdomain
+- **Tenant Resolution**: Middleware extracts subdomain from hostname and loads corresponding organization
+- **Data Isolation**: AsyncLocalStorage-based tenant context ensures thread-safe request isolation
+- **Automatic Filtering**: All database queries automatically filtered by organizationId via tenant-scoped database layer
+- **Organization Members**: Junction table tracks user-organization relationships with roles (owner, admin, member)
+- **User Assignment**: New OAuth users automatically assigned to default organization on first login
+- **Replit Deployment**: Production deployment via Replit autoscale with multi-tenant configuration
+- **Subdomain Support**: Configure `REPLIT_DOMAINS` with wildcard support for subdomain routing
+
 ### Development Architecture
 - **Build System**: Vite with React plugin for frontend, esbuild for backend bundling
 - **Type Safety**: Shared TypeScript schemas between frontend and backend using Zod validation
