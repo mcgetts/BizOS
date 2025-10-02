@@ -2207,11 +2207,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   const successCriteria = opportunity.successCriteria || null;
 
                   console.log(`🎯 Project timeline: ${durationWeeks} weeks (${complexity} complexity)`);
+                  console.log(`🔑 Opportunity organizationId: ${opportunity.organizationId}`);
 
                   // Create project with comprehensive data mapping
                   const projectData = {
                     name: `${opportunity.title} - Project`,
                     description: opportunity.description || `Project created from won opportunity: ${opportunity.title}`,
+                    organizationId: opportunity.organizationId,
                     companyId: opportunity.companyId || null,
                     clientId: opportunity.contactId || null,
                     opportunityId: req.params.id,
@@ -2230,6 +2232,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     originalValue: opportunity.value || null,
                     tags: ["auto-created", "from-opportunity", complexity].filter(Boolean)
                   };
+
+                  console.log(`📦 ProjectData organizationId before insert: ${projectData.organizationId}`);
 
                   const [newProject] = await tx.insert(projects).values(projectData).returning();
 
