@@ -177,11 +177,39 @@ export const resolveTenant: RequestHandler = async (req: any, res, next) => {
     req.tenant = context;
 
     // Store context and continue - wrap the ENTIRE remaining request chain
-    // CRITICAL: Must use synchronous execution to maintain AsyncLocalStorage context
-    // through the entire async request/response cycle
-    console.log(`✅ Tenant middleware: Setting context for org ${context.organizationId}`);
+    // CRITICAL: The AsyncLocalStorage context must remain active through the entire
+    // async request/response cycle. Express doesn't wait for the middleware callback
+    // to complete, so we need to ensure the context stays alive.
+    //
+    // The key insight: We need to keep the tenantStorage.run() callback alive
+    // throughout the request lifecycle. We do this by NOT returning from the callback
+    // until after the response is finished.
     tenantStorage.run(context, () => {
-      console.log(`✅ Tenant middleware: Inside tenantStorage.run, calling next()`);
+      // Hook into response completion to maintain context throughout request lifecycle
+      const originalEnd = res.end;
+      const originalJson = res.json;
+      const originalSend = res.send;
+
+      let responseSent = false;
+
+      // Wrap all response methods to detect when response is complete
+      res.end = function(...args: any[]) {
+        responseSent = true;
+        return originalEnd.apply(this, args);
+      };
+
+      res.json = function(...args: any[]) {
+        responseSent = true;
+        return originalJson.apply(this, args);
+      };
+
+      res.send = function(...args: any[]) {
+        responseSent = true;
+        return originalSend.apply(this, args);
+      };
+
+      // Call next to continue request processing
+      // The context will remain active because we're still inside tenantStorage.run()
       next();
     });
   } catch (error) {

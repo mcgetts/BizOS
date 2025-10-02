@@ -35,13 +35,10 @@ const tenantStorage = new AsyncLocalStorage<TenantContext>();
 export function getTenantContext(): TenantContext {
   const context = tenantStorage.getStore();
   if (!context) {
-    console.error('❌ getTenantContext: No context found in AsyncLocalStorage');
-    console.error('❌ Stack trace:', new Error().stack);
     throw new Error(
       'No tenant context available. Ensure tenant middleware is applied to this route.'
     );
   }
-  console.log(`✅ getTenantContext: Found context for org ${context.organizationId}`);
   return context;
 }
 
