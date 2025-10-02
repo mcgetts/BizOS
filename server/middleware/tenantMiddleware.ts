@@ -25,9 +25,9 @@ function extractSubdomain(hostname: string): string | null {
     return 'default';
   }
 
-  // For Replit production URLs (*.repl.co), use 'default' subdomain
-  // This ensures consistency across dev and prod environments
-  if (host.endsWith('.repl.co')) {
+  // For Replit URLs (*.repl.co, *.replit.dev), use 'default' subdomain
+  // This ensures consistency across dev, prod, and webview environments
+  if (host.endsWith('.repl.co') || host.endsWith('.replit.dev')) {
     return 'default';
   }
 
