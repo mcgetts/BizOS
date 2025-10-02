@@ -339,7 +339,14 @@ class WebSocketManager {
     return !!(userClients && userClients.size > 0);
   }
 
+  /**
+   * @deprecated SECURITY WARNING: This method broadcasts to ALL users across ALL organizations.
+   * Use broadcastToOrganization() instead to maintain multi-tenant isolation.
+   * This method will be removed in a future version.
+   */
   async broadcastDataChange(operation: 'create' | 'update' | 'delete', entity: string, data: any, excludeUserId?: string) {
+    console.warn('⚠️  DEPRECATED: broadcastDataChange() is unsafe for multi-tenant systems. Use broadcastToOrganization() instead.');
+
     const message = JSON.stringify({
       type: 'data_change',
       operation,
@@ -362,7 +369,14 @@ class WebSocketManager {
     console.log(`Data change broadcasted: ${operation} ${entity} to ${this.getConnectionCount()} clients`);
   }
 
+  /**
+   * @deprecated SECURITY WARNING: This method broadcasts to ALL users across ALL organizations.
+   * Use broadcastToOrganization() instead to maintain multi-tenant isolation.
+   * This method will be removed in a future version.
+   */
   async broadcastToAllUsers(operation: 'create' | 'update' | 'delete', entity: string, data: any) {
+    console.warn('⚠️  DEPRECATED: broadcastToAllUsers() is unsafe for multi-tenant systems. Use broadcastToOrganization() instead.');
+
     const message = JSON.stringify({
       type: 'data_change',
       operation,

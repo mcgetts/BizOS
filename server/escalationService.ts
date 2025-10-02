@@ -1,11 +1,12 @@
 import { db } from './db';
-import { supportTickets, ticketEscalations, users } from '@shared/schema';
+import { supportTickets, ticketEscalations, users, organizations } from '@shared/schema';
 import type { SupportTicket, TicketEscalation, User } from '@shared/schema';
 import { checkEscalationNeeded, calculateSlaMetrics } from '@shared/slaUtils';
 import { eq, and, or, lte, sql } from 'drizzle-orm';
 import { wsManager } from './websocketManager';
 import { emailService } from './emailService';
 import { IntegrationManager, defaultIntegrationConfig } from './integrations';
+import { runInTenantContextAsync } from './tenancy/tenantContext';
 
 interface EscalationRule {
   level: number;
@@ -67,41 +68,66 @@ export class EscalationService {
 
   /**
    * Process all tickets for potential escalation
+   * MULTI-TENANT: Processes tickets per organization to maintain tenant isolation
    */
   async processEscalations(): Promise<EscalationResult[]> {
     try {
       console.log('Processing ticket escalations...');
 
-      // Get all open/in_progress tickets
-      const activeTickets = await db
+      // Get all active organizations
+      const allOrganizations = await db
         .select()
-        .from(supportTickets)
-        .where(
-          and(
-            or(
-              eq(supportTickets.status, 'open'),
-              eq(supportTickets.status, 'in_progress')
-            )
-          )
+        .from(organizations)
+        .where(eq(organizations.status, 'active'));
+
+      const allResults: EscalationResult[] = [];
+
+      // Process escalations per organization to maintain tenant isolation
+      for (const org of allOrganizations) {
+        const orgResults = await runInTenantContextAsync(
+          {
+            organizationId: org.id,
+            organization: org
+          },
+          async () => {
+            // Get active tickets for THIS organization only
+            const activeTickets = await db
+              .select()
+              .from(supportTickets)
+              .where(
+                and(
+                  or(
+                    eq(supportTickets.status, 'open'),
+                    eq(supportTickets.status, 'in_progress')
+                  ),
+                  eq(supportTickets.organizationId, org.id)
+                )
+              );
+
+            const results: EscalationResult[] = [];
+
+            for (const ticket of activeTickets) {
+              const result = await this.processTicketEscalation(ticket);
+              if (result.escalated) {
+                results.push(result);
+              }
+            }
+
+            // Update SLA statuses for this organization's tickets
+            await this.updateSlaStatuses(activeTickets);
+
+            return results;
+          }
         );
 
-      const results: EscalationResult[] = [];
-
-      for (const ticket of activeTickets) {
-        const result = await this.processTicketEscalation(ticket);
-        if (result.escalated) {
-          results.push(result);
-        }
+        allResults.push(...orgResults);
       }
 
-      // Update SLA statuses
-      await this.updateSlaStatuses(activeTickets);
-
-      if (results.length > 0) {
-        console.log(`Escalated ${results.length} tickets`);
+      if (allResults.length > 0) {
+        console.log(`Escalated ${allResults.length} tickets across ${allOrganizations.length} organizations`);
       }
 
-      return results;
+      return allResults;
     } catch (error) {
       console.error('Error processing escalations:', error);
       return [];
@@ -154,6 +180,7 @@ export class EscalationService {
       ticketId: ticket.id,
       fromUserId: ticket.assignedTo,
       toUserId: targetUser.id,
+      organizationId: ticket.organizationId, // Multi-tenant isolation
       escalationLevel: escalationCheck.escalationLevel,
       reason: escalationCheck.reason,
       automatedRule: targetRule.name,

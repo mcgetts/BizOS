@@ -1721,6 +1721,7 @@ export const insertWorkloadSnapshotSchema = createInsertSchema(workloadSnapshots
 
 export const insertNotificationSchema = createInsertSchema(notifications).omit({
   id: true,
+  organizationId: true, // Multi-tenant: Server provides this
   createdAt: true,
   updatedAt: true,
 });

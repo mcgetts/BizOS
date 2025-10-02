@@ -194,11 +194,21 @@ function formatPainPointsAsRequirements(painPoints: any): string | null {
 // Helper function to get appropriate project template based on opportunity
 async function getProjectTemplateForOpportunity(opportunity: any): Promise<any> {
   try {
+    // SECURITY: Filter templates by organizationId for multi-tenant isolation
+    const organizationId = opportunity.organizationId;
+    if (!organizationId) {
+      console.warn('getProjectTemplateForOpportunity: No organizationId found in opportunity');
+      return null;
+    }
+
     // Try to find template based on company industry first
     if (opportunity.company?.industry) {
       const industryTemplates = await db.select()
         .from(projectTemplates)
-        .where(eq(projectTemplates.industry, opportunity.company.industry))
+        .where(and(
+          eq(projectTemplates.industry, opportunity.company.industry),
+          eq(projectTemplates.organizationId, organizationId)
+        ))
         .limit(1);
 
       if (industryTemplates.length > 0) {
@@ -216,7 +226,10 @@ async function getProjectTemplateForOpportunity(opportunity: any): Promise<any> 
 
     const templates = await db.select()
       .from(projectTemplates)
-      .where(eq(projectTemplates.category, category))
+      .where(and(
+        eq(projectTemplates.category, category),
+        eq(projectTemplates.organizationId, organizationId)
+      ))
       .limit(1);
 
     return templates.length > 0 ? templates[0] : null;
@@ -233,34 +246,46 @@ function getUserId(req: any): string | null {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Test reset endpoint - must be BEFORE auth setup to bypass authentication
+  // SECURITY: Only available in development, requires organizationId parameter for multi-tenant safety
   app.get('/api/test/reset', async (req, res) => {
     if (process.env.NODE_ENV !== 'development') {
       return res.status(403).json({ message: 'Test reset endpoint only available in development' });
     }
 
+    // Multi-tenant safety: require explicit organizationId parameter
+    const organizationId = req.query.organizationId as string;
+    if (!organizationId) {
+      return res.status(400).json({
+        message: 'organizationId query parameter required for multi-tenant safety',
+        example: '/api/test/reset?organizationId=your-org-id'
+      });
+    }
+
     try {
       // Clear all database tables in reverse dependency order to avoid foreign key constraints
-      await db.delete(timeEntries);
-      await db.delete(clientInteractions);
-      await db.delete(supportTickets);
-      await db.delete(marketingCampaigns);
-      await db.delete(knowledgeArticles);
-      await db.delete(documents);
-      await db.delete(expenses);
-      await db.delete(invoices);
-      await db.delete(tasks);
-      await db.delete(projects);
-      await db.delete(salesOpportunities);
-      await db.delete(clients);
-      await db.delete(companies);
+      // IMPORTANT: Filter by organizationId to only delete data for specified organization
+      await db.delete(timeEntries).where(eq(timeEntries.organizationId, organizationId));
+      await db.delete(clientInteractions).where(eq(clientInteractions.organizationId, organizationId));
+      await db.delete(supportTickets).where(eq(supportTickets.organizationId, organizationId));
+      await db.delete(marketingCampaigns).where(eq(marketingCampaigns.organizationId, organizationId));
+      await db.delete(knowledgeArticles).where(eq(knowledgeArticles.organizationId, organizationId));
+      await db.delete(documents).where(eq(documents.organizationId, organizationId));
+      await db.delete(expenses).where(eq(expenses.organizationId, organizationId));
+      await db.delete(invoices).where(eq(invoices.organizationId, organizationId));
+      await db.delete(tasks).where(eq(tasks.organizationId, organizationId));
+      await db.delete(projects).where(eq(projects.organizationId, organizationId));
+      await db.delete(salesOpportunities).where(eq(salesOpportunities.organizationId, organizationId));
+      await db.delete(clients).where(eq(clients.organizationId, organizationId));
+      await db.delete(companies).where(eq(companies.organizationId, organizationId));
       // Note: Not clearing users table to keep authentication working
-      
-      res.json({ 
-        message: 'Test data reset successfully', 
+
+      res.json({
+        message: 'Test data reset successfully for organization',
+        organizationId,
         cleared: [
-          'timeEntries', 'clientInteractions', 'supportTickets', 
-          'marketingCampaigns', 'knowledgeArticles', 'documents', 
-          'expenses', 'invoices', 'tasks', 'projects', 'clients'
+          'timeEntries', 'clientInteractions', 'supportTickets',
+          'marketingCampaigns', 'knowledgeArticles', 'documents',
+          'expenses', 'invoices', 'tasks', 'projects', 'clients', 'companies'
         ]
       });
     } catch (error) {
@@ -3254,7 +3279,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Notify project manager if task is in a project
       if (task.projectId) {
-        const project = await db.select().from(projects).where(eq(projects.id, task.projectId)).limit(1);
+        const project = await db.select().from(projects)
+          .where(and(
+            eq(projects.id, task.projectId),
+            eq(projects.organizationId, task.organizationId)
+          ))
+          .limit(1);
         if (project.length && project[0].managerId && project[0].managerId !== currentUser.id && project[0].managerId !== task.assignedTo) {
           notifications.push({
             userId: project[0].managerId,
@@ -3318,7 +3348,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Notify project manager if task is in a project
         if (task.projectId) {
-          const project = await db.select().from(projects).where(eq(projects.id, task.projectId)).limit(1);
+          const project = await db.select().from(projects)
+            .where(and(
+              eq(projects.id, task.projectId),
+              eq(projects.organizationId, task.organizationId)
+            ))
+            .limit(1);
           if (project.length && project[0].managerId && project[0].managerId !== currentUser.id && project[0].managerId !== task.assignedTo) {
             statusNotifications.push({
               userId: project[0].managerId,
@@ -3371,6 +3406,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               await db.insert(projectActivity).values({
                 projectId: task.projectId,
                 userId: currentUser.id,
+                organizationId: updatedProject.organizationId, // Multi-tenant isolation
                 action: 'task_status_changed',
                 description: `Task "${task.title}" status changed from ${originalTask.status || 'none'} to ${validatedData.status}`,
                 details: {
@@ -3436,8 +3472,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: req.user.id,
       });
 
-      // Get task details for notifications
-      const task = await db.select().from(tasks).where(eq(tasks.id, req.params.id)).limit(1);
+      // Get task details for notifications (with tenant isolation)
+      const task = await db.select().from(tasks)
+        .where(and(
+          eq(tasks.id, req.params.id),
+          eq(tasks.organizationId, req.tenant.organizationId)
+        ))
+        .limit(1);
       if (task.length) {
         const currentUser = req.user;
         const notificationsToSend = [];
@@ -3446,6 +3487,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (task[0].assignedTo && task[0].assignedTo !== currentUser.id) {
           notificationsToSend.push({
             userId: task[0].assignedTo,
+            organizationId: task[0].organizationId, // Multi-tenant isolation
             type: 'task_comment_added',
             title: 'New Task Comment',
             message: `${currentUser.firstName} ${currentUser.lastName} commented on "${task[0].title}"`,
@@ -3457,6 +3499,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (task[0].createdBy && task[0].createdBy !== currentUser.id && task[0].createdBy !== task[0].assignedTo) {
           notificationsToSend.push({
             userId: task[0].createdBy,
+            organizationId: task[0].organizationId, // Multi-tenant isolation
             type: 'task_comment_added',
             title: 'Task Comment',
             message: `${currentUser.firstName} ${currentUser.lastName} commented on "${task[0].title}"`,
@@ -3542,6 +3585,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             await db.insert(projectActivity).values({
               projectId: task.projectId,
               userId: req.user.id,
+              organizationId: task.organizationId, // Multi-tenant isolation
               action: 'dependency_created',
               description: `Task "${task.title}" now depends on "${dependsOnTask.title}"`,
               details: {
@@ -3592,6 +3636,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await db.insert(projectActivity).values({
             projectId: task.projectId,
             userId: req.user.id,
+            organizationId: task.organizationId, // Multi-tenant isolation
             action: 'dependency_removed',
             description: `Removed dependency: "${task.title}" no longer depends on "${dependsOnTask.title}"`,
             details: {
@@ -3801,18 +3846,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: req.user.id,
       });
 
-      // Log activity
-      await db.insert(projectActivity).values({
-        projectId: req.params.id,
-        userId: req.user.id,
-        action: 'comment_added',
-        entityType: 'comment',
-        entityId: comment.id,
-        details: { content: validatedData.content.substring(0, 100) + '...' }
-      });
-
-      // Get project details for notifications
+      // Get project details for activity logging and notifications
       const project = await db.select().from(projects).where(eq(projects.id, req.params.id)).limit(1);
+
+      // Log activity
+      if (project.length) {
+        await db.insert(projectActivity).values({
+          projectId: req.params.id,
+          userId: req.user.id,
+          organizationId: project[0].organizationId, // Multi-tenant isolation
+          action: 'comment_added',
+          entityType: 'comment',
+          entityId: comment.id,
+          details: { content: validatedData.content.substring(0, 100) + '...' }
+        });
+      }
+
+      // Send notifications
       if (project.length) {
         const currentUser = req.user;
         const notifications = [];
@@ -3903,6 +3953,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await db.insert(projectActivity).values({
           projectId: req.params.id,
           userId: req.user.id,
+          organizationId: updatedProject.organizationId, // Multi-tenant isolation
           action: 'progress_recalculated',
           description: `Project progress manually recalculated to ${updatedProject.progress}%`,
           details: {

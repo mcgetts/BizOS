@@ -7,6 +7,7 @@ import type {
   Department
 } from '@shared/permissions';
 import type { Request } from 'express';
+import { tryGetTenantContext } from '../tenancy/tenantContext';
 
 interface AuditContext {
   userId?: string;
@@ -67,9 +68,13 @@ export class AuditService {
     } = {}
   ): Promise<void> {
     try {
+      // Multi-tenant: Get organizationId from tenant context if available
+      const tenantContext = tryGetTenantContext();
+
       await db.insert(auditLogs).values({
         userId: context.userId,
         sessionId: context.sessionId,
+        organizationId: tenantContext?.organizationId, // Multi-tenant isolation
         action,
         resource,
         resourceId: options.resourceId,
@@ -120,8 +125,11 @@ export class AuditService {
     eventData: SecurityEventData
   ): Promise<void> {
     try {
+      const tenantContext = tryGetTenantContext();
+
       await db.insert(securityEvents).values({
         userId: context.userId,
+        organizationId: tenantContext?.organizationId, // Multi-tenant isolation
         eventType: eventData.eventType,
         severity: eventData.severity,
         source: eventData.source || 'web',
@@ -174,8 +182,11 @@ export class AuditService {
     details: DataAccessDetails
   ): Promise<void> {
     try {
+      const tenantContext = tryGetTenantContext();
+
       await db.insert(dataAccessLogs).values({
         userId: context.userId!,
+        organizationId: tenantContext?.organizationId, // Multi-tenant isolation
         resource,
         resourceId,
         action,
