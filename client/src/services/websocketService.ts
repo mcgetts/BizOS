@@ -2,7 +2,7 @@ import { queryClient } from '@/lib/queryClient';
 import type { Notification } from '@/contexts/NotificationContext';
 
 interface WebSocketMessage {
-  type: 'auth' | 'notification' | 'data_change' | 'auth_success' | 'pong' | 'error';
+  type: 'notification' | 'data_change' | 'pong' | 'error';
   userId?: string;
   organizationId?: string;
   data?: any;
@@ -81,13 +81,6 @@ class WebSocketService {
         console.log('WebSocket service connected');
         this.isConnected = true;
         this.notifyConnectionListeners(true);
-
-        // Send authentication message with organizationId for multi-tenant support
-        this.ws?.send(JSON.stringify({
-          type: 'auth',
-          userId: this.user.id,
-          organizationId: this.user.defaultOrganizationId
-        }));
       };
 
       this.ws.onmessage = (event) => {
@@ -130,10 +123,6 @@ class WebSocketService {
 
   private handleMessage = (message: WebSocketMessage) => {
     switch (message.type) {
-      case 'auth_success':
-        console.log('WebSocket authentication successful');
-        break;
-
       case 'notification':
         if (message.id && message.title && message.message) {
           const notification: Notification = {
