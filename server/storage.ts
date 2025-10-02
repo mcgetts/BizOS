@@ -6,8 +6,15 @@ import {
   opportunityNextSteps,
   opportunityCommunications,
   opportunityStakeholders,
+  opportunityFileAttachments,
   projects,
+  projectComments,
+  projectTemplates,
+  projectActivity,
   tasks,
+  taskComments,
+  taskTemplates,
+  taskDependencies,
   invoices,
   expenses,
   documents,
@@ -24,7 +31,10 @@ import {
   userAvailability,
   userSkills,
   opportunityActivityHistory,
-  projectActivity,
+  resourceAllocations,
+  budgetCategories,
+  projectBudgets,
+  workloadSnapshots,
   type User,
   type UpsertUser,
   type InsertUser,
@@ -42,10 +52,22 @@ import {
   type OpportunityCommunication,
   type InsertOpportunityStakeholder,
   type OpportunityStakeholder,
+  type InsertOpportunityFileAttachment,
+  type OpportunityFileAttachment,
   type InsertProject,
   type Project,
+  type InsertProjectComment,
+  type ProjectComment,
+  type InsertProjectTemplate,
+  type ProjectTemplate,
   type InsertTask,
   type Task,
+  type InsertTaskComment,
+  type TaskComment,
+  type InsertTaskTemplate,
+  type TaskTemplate,
+  type InsertTaskDependency,
+  type TaskDependency,
   type InsertInvoice,
   type Invoice,
   type InsertExpense,
@@ -78,6 +100,14 @@ import {
   userInvitations,
   type InsertUserInvitation,
   type UserInvitation,
+  type InsertResourceAllocation,
+  type ResourceAllocation,
+  type InsertBudgetCategory,
+  type BudgetCategory,
+  type InsertProjectBudget,
+  type ProjectBudget,
+  type InsertWorkloadSnapshot,
+  type WorkloadSnapshot,
 } from "@shared/schema";
 import { db } from "./db";
 import { getTenantDb } from "./tenancy/tenantDb";
@@ -250,6 +280,52 @@ export interface IStorage {
     revenue: number;
     invoiceCount: number;
   }>>;
+
+  // Project comment operations
+  getProjectComments(projectId: string): Promise<ProjectComment[]>;
+  createProjectComment(comment: InsertProjectComment): Promise<ProjectComment>;
+
+  // Task comment operations
+  getTaskComments(taskId: string): Promise<TaskComment[]>;
+  createTaskComment(comment: InsertTaskComment): Promise<TaskComment>;
+
+  // Opportunity file attachment operations
+  getOpportunityFileAttachments(opportunityId: string): Promise<OpportunityFileAttachment[]>;
+  getOpportunityFileAttachment(id: string): Promise<OpportunityFileAttachment | undefined>;
+  createOpportunityFileAttachment(attachment: InsertOpportunityFileAttachment): Promise<OpportunityFileAttachment>;
+  deleteOpportunityFileAttachment(id: string): Promise<void>;
+
+  // Project template operations
+  getProjectTemplates(): Promise<ProjectTemplate[]>;
+  getProjectTemplate(id: string): Promise<ProjectTemplate | undefined>;
+  createProjectTemplate(template: InsertProjectTemplate): Promise<ProjectTemplate>;
+  updateProjectTemplate(id: string, template: Partial<InsertProjectTemplate>): Promise<ProjectTemplate>;
+  deleteProjectTemplate(id: string): Promise<void>;
+
+  // Task template operations
+  getTaskTemplates(projectTemplateId: string): Promise<TaskTemplate[]>;
+
+  // Task dependency operations
+  getTaskDependencies(taskId: string): Promise<TaskDependency[]>;
+  getAllTaskDependencies(projectId: string): Promise<TaskDependency[]>;
+  createTaskDependency(dependency: InsertTaskDependency): Promise<TaskDependency>;
+  deleteTaskDependency(id: string): Promise<void>;
+
+  // Resource allocation operations
+  getResourceAllocations(filters?: { projectId?: string; userId?: string }): Promise<ResourceAllocation[]>;
+  createResourceAllocation(allocation: InsertResourceAllocation): Promise<ResourceAllocation>;
+  updateResourceAllocation(id: string, allocation: Partial<InsertResourceAllocation>): Promise<ResourceAllocation>;
+  deleteResourceAllocation(id: string): Promise<void>;
+
+  // Budget operations
+  getBudgetCategories(): Promise<BudgetCategory[]>;
+  createBudgetCategory(category: InsertBudgetCategory): Promise<BudgetCategory>;
+  getProjectBudgets(projectId?: string): Promise<ProjectBudget[]>;
+  createProjectBudget(budget: InsertProjectBudget): Promise<ProjectBudget>;
+
+  // Workload snapshot operations
+  getWorkloadSnapshots(filters?: { userId?: string }): Promise<WorkloadSnapshot[]>;
+  createWorkloadSnapshot(snapshot: InsertWorkloadSnapshot): Promise<WorkloadSnapshot>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2581,6 +2657,262 @@ export class DatabaseStorage implements IStorage {
       console.error("Error fetching productivity analytics:", error);
       throw error;
     }
+  }
+
+  // Project comment operations
+  async getProjectComments(projectId: string): Promise<ProjectComment[]> {
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select()
+        .from(projectComments)
+        .where(and(
+          eq(projectComments.projectId, projectId),
+          eq(projectComments.organizationId, organizationId)
+        ))
+        .orderBy(desc(projectComments.createdAt))
+    ) as ProjectComment[];
+  }
+
+  async createProjectComment(comment: InsertProjectComment): Promise<ProjectComment> {
+    const tenantDb = getTenantDb();
+    const [result] = await tenantDb.insert(projectComments).values(comment).returning();
+    return result as ProjectComment;
+  }
+
+  // Task comment operations
+  async getTaskComments(taskId: string): Promise<TaskComment[]> {
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select()
+        .from(taskComments)
+        .where(and(
+          eq(taskComments.taskId, taskId),
+          eq(taskComments.organizationId, organizationId)
+        ))
+        .orderBy(desc(taskComments.createdAt))
+    ) as TaskComment[];
+  }
+
+  async createTaskComment(comment: InsertTaskComment): Promise<TaskComment> {
+    const tenantDb = getTenantDb();
+    const [result] = await tenantDb.insert(taskComments).values(comment).returning();
+    return result as TaskComment;
+  }
+
+  // Opportunity file attachment operations
+  async getOpportunityFileAttachments(opportunityId: string): Promise<OpportunityFileAttachment[]> {
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select()
+        .from(opportunityFileAttachments)
+        .where(and(
+          eq(opportunityFileAttachments.opportunityId, opportunityId),
+          eq(opportunityFileAttachments.organizationId, organizationId)
+        ))
+        .orderBy(desc(opportunityFileAttachments.uploadedAt))
+    ) as OpportunityFileAttachment[];
+  }
+
+  async getOpportunityFileAttachment(id: string): Promise<OpportunityFileAttachment | undefined> {
+    const tenantDb = getTenantDb();
+    const [result] = await tenantDb.query((db, organizationId) =>
+      db.select()
+        .from(opportunityFileAttachments)
+        .where(and(
+          eq(opportunityFileAttachments.id, id),
+          eq(opportunityFileAttachments.organizationId, organizationId)
+        ))
+        .limit(1)
+    ) as OpportunityFileAttachment[];
+    return result;
+  }
+
+  async createOpportunityFileAttachment(attachment: InsertOpportunityFileAttachment): Promise<OpportunityFileAttachment> {
+    const tenantDb = getTenantDb();
+    const [result] = await tenantDb.insert(opportunityFileAttachments).values(attachment).returning();
+    return result as OpportunityFileAttachment;
+  }
+
+  async deleteOpportunityFileAttachment(id: string): Promise<void> {
+    const tenantDb = getTenantDb();
+    await tenantDb.delete(opportunityFileAttachments).where(eq(opportunityFileAttachments.id, id));
+  }
+
+  // Project template operations
+  async getProjectTemplates(): Promise<ProjectTemplate[]> {
+    const tenantDb = getTenantDb();
+    return await tenantDb.select().from(projectTemplates) as ProjectTemplate[];
+  }
+
+  async getProjectTemplate(id: string): Promise<ProjectTemplate | undefined> {
+    const tenantDb = getTenantDb();
+    const [result] = await tenantDb.query((db, organizationId) =>
+      db.select()
+        .from(projectTemplates)
+        .where(and(
+          eq(projectTemplates.id, id),
+          eq(projectTemplates.organizationId, organizationId)
+        ))
+        .limit(1)
+    ) as ProjectTemplate[];
+    return result;
+  }
+
+  async createProjectTemplate(template: InsertProjectTemplate): Promise<ProjectTemplate> {
+    const tenantDb = getTenantDb();
+    const [result] = await tenantDb.insert(projectTemplates).values(template).returning();
+    return result as ProjectTemplate;
+  }
+
+  async updateProjectTemplate(id: string, template: Partial<InsertProjectTemplate>): Promise<ProjectTemplate> {
+    const tenantDb = getTenantDb();
+    const [result] = await tenantDb.update(projectTemplates)
+      .set({ ...template, updatedAt: new Date() })
+      .where(eq(projectTemplates.id, id))
+      .returning();
+    return result as ProjectTemplate;
+  }
+
+  async deleteProjectTemplate(id: string): Promise<void> {
+    const tenantDb = getTenantDb();
+    await tenantDb.delete(projectTemplates).where(eq(projectTemplates.id, id));
+  }
+
+  // Task template operations
+  async getTaskTemplates(projectTemplateId: string): Promise<TaskTemplate[]> {
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select()
+        .from(taskTemplates)
+        .where(and(
+          eq(taskTemplates.projectTemplateId, projectTemplateId),
+          eq(taskTemplates.organizationId, organizationId)
+        ))
+    ) as TaskTemplate[];
+  }
+
+  // Task dependency operations
+  async getTaskDependencies(taskId: string): Promise<TaskDependency[]> {
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select()
+        .from(taskDependencies)
+        .where(and(
+          eq(taskDependencies.taskId, taskId),
+          eq(taskDependencies.organizationId, organizationId)
+        ))
+    ) as TaskDependency[];
+  }
+
+  async getAllTaskDependencies(projectId: string): Promise<TaskDependency[]> {
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select()
+        .from(taskDependencies)
+        .where(eq(taskDependencies.organizationId, organizationId))
+    ) as TaskDependency[];
+  }
+
+  async createTaskDependency(dependency: InsertTaskDependency): Promise<TaskDependency> {
+    const tenantDb = getTenantDb();
+    const [result] = await tenantDb.insert(taskDependencies).values(dependency).returning();
+    return result as TaskDependency;
+  }
+
+  async deleteTaskDependency(id: string): Promise<void> {
+    const tenantDb = getTenantDb();
+    await tenantDb.delete(taskDependencies).where(eq(taskDependencies.id, id));
+  }
+
+  // Resource allocation operations
+  async getResourceAllocations(filters?: { projectId?: string; userId?: string }): Promise<ResourceAllocation[]> {
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) => {
+      const conditions = [eq(resourceAllocations.organizationId, organizationId)];
+      if (filters?.projectId) {
+        conditions.push(eq(resourceAllocations.projectId, filters.projectId));
+      }
+      if (filters?.userId) {
+        conditions.push(eq(resourceAllocations.userId, filters.userId));
+      }
+      return db.select()
+        .from(resourceAllocations)
+        .where(and(...conditions));
+    }) as ResourceAllocation[];
+  }
+
+  async createResourceAllocation(allocation: InsertResourceAllocation): Promise<ResourceAllocation> {
+    const tenantDb = getTenantDb();
+    const [result] = await tenantDb.insert(resourceAllocations).values(allocation).returning();
+    return result as ResourceAllocation;
+  }
+
+  async updateResourceAllocation(id: string, allocation: Partial<InsertResourceAllocation>): Promise<ResourceAllocation> {
+    const tenantDb = getTenantDb();
+    const [result] = await tenantDb.update(resourceAllocations)
+      .set({ ...allocation, updatedAt: new Date() })
+      .where(eq(resourceAllocations.id, id))
+      .returning();
+    return result as ResourceAllocation;
+  }
+
+  async deleteResourceAllocation(id: string): Promise<void> {
+    const tenantDb = getTenantDb();
+    await tenantDb.delete(resourceAllocations).where(eq(resourceAllocations.id, id));
+  }
+
+  // Budget operations
+  async getBudgetCategories(): Promise<BudgetCategory[]> {
+    const tenantDb = getTenantDb();
+    return await tenantDb.select().from(budgetCategories) as BudgetCategory[];
+  }
+
+  async createBudgetCategory(category: InsertBudgetCategory): Promise<BudgetCategory> {
+    const tenantDb = getTenantDb();
+    const [result] = await tenantDb.insert(budgetCategories).values(category).returning();
+    return result as BudgetCategory;
+  }
+
+  async getProjectBudgets(projectId?: string): Promise<ProjectBudget[]> {
+    const tenantDb = getTenantDb();
+    if (projectId) {
+      return await tenantDb.query((db, organizationId) =>
+        db.select()
+          .from(projectBudgets)
+          .where(and(
+            eq(projectBudgets.projectId, projectId),
+            eq(projectBudgets.organizationId, organizationId)
+          ))
+      ) as ProjectBudget[];
+    }
+    return await tenantDb.select().from(projectBudgets) as ProjectBudget[];
+  }
+
+  async createProjectBudget(budget: InsertProjectBudget): Promise<ProjectBudget> {
+    const tenantDb = getTenantDb();
+    const [result] = await tenantDb.insert(projectBudgets).values(budget).returning();
+    return result as ProjectBudget;
+  }
+
+  // Workload snapshot operations
+  async getWorkloadSnapshots(filters?: { userId?: string }): Promise<WorkloadSnapshot[]> {
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) => {
+      const conditions = [eq(workloadSnapshots.organizationId, organizationId)];
+      if (filters?.userId) {
+        conditions.push(eq(workloadSnapshots.userId, filters.userId));
+      }
+      return db.select()
+        .from(workloadSnapshots)
+        .where(and(...conditions))
+        .orderBy(desc(workloadSnapshots.snapshotDate));
+    }) as WorkloadSnapshot[];
+  }
+
+  async createWorkloadSnapshot(snapshot: InsertWorkloadSnapshot): Promise<WorkloadSnapshot> {
+    const tenantDb = getTenantDb();
+    const [result] = await tenantDb.insert(workloadSnapshots).values(snapshot).returning();
+    return result as WorkloadSnapshot;
   }
 }
 

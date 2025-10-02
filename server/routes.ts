@@ -2801,7 +2801,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const { description, communicationId, isPublic } = req.body;
 
-        const newAttachment = await db.insert(opportunityFileAttachments).values({
+        const newAttachment = await storage.createOpportunityFileAttachment({
           opportunityId: req.params.opportunityId,
           communicationId: communicationId || null,
           fileName: req.file.filename,
@@ -2812,7 +2812,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           uploadedBy: userId,
           description: description || null,
           isPublic: isPublic === 'true',
-        }).returning();
+        });
 
         // Log activity history
         await logActivityHistory(
@@ -2822,7 +2822,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId
         );
 
-        res.status(201).json(newAttachment[0]);
+        res.status(201).json(newAttachment);
       } catch (error) {
         console.error("Error uploading file:", error);
         // Clean up uploaded file on error
@@ -2865,23 +2865,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete('/api/opportunities/:opportunityId/attachments/:id', isAuthenticated, async (req, res) => {
     try {
-      const attachment = await db.select()
-        .from(opportunityFileAttachments)
-        .where(and(
-          eq(opportunityFileAttachments.id, req.params.id),
-          eq(opportunityFileAttachments.opportunityId, req.params.opportunityId)
-        ))
-        .limit(1);
+      const attachment = await storage.getOpportunityFileAttachment(req.params.id);
 
-      if (!attachment.length) {
+      if (!attachment) {
         return res.status(404).json({ message: "File not found" });
       }
 
-      const file = attachment[0];
+      const file = attachment;
 
       // Delete from database
-      await db.delete(opportunityFileAttachments)
-        .where(eq(opportunityFileAttachments.id, req.params.id));
+      await storage.deleteOpportunityFileAttachment(req.params.id);
 
       // Delete physical file
       if (fs.existsSync(file.filePath)) {
@@ -3426,23 +3419,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Task Comments routes
   app.get('/api/tasks/:id/comments', isAuthenticated, async (req, res) => {
     try {
-      const comments = await db.select({
-        id: taskComments.id,
-        taskId: taskComments.taskId,
-        userId: taskComments.userId,
-        content: taskComments.content,
-        type: taskComments.type,
-        mentionedUsers: taskComments.mentionedUsers,
-        attachments: taskComments.attachments,
-        editedAt: taskComments.editedAt,
-        createdAt: taskComments.createdAt,
-        userFirstName: users.firstName,
-        userLastName: users.lastName,
-      })
-        .from(taskComments)
-        .leftJoin(users, eq(taskComments.userId, users.id))
-        .where(eq(taskComments.taskId, req.params.id))
-        .orderBy(desc(taskComments.createdAt));
+      const comments = await storage.getTaskComments(req.params.id);
       res.json(comments);
     } catch (error) {
       console.error("Error fetching task comments:", error);
@@ -3453,11 +3430,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/tasks/:id/comments', isAuthenticated, async (req: any, res) => {
     try {
       const validatedData = insertTaskCommentSchema.parse(req.body);
-      const comment = await db.insert(taskComments).values({
+      const comment = await storage.createTaskComment({
         ...validatedData,
         taskId: req.params.id,
         userId: req.user.id,
-      }).returning();
+      });
 
       // Get task details for notifications
       const task = await db.select().from(tasks).where(eq(tasks.id, req.params.id)).limit(1);
@@ -3472,7 +3449,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             type: 'task_comment_added',
             title: 'New Task Comment',
             message: `${currentUser.firstName} ${currentUser.lastName} commented on "${task[0].title}"`,
-            data: { taskId: req.params.id, commentId: comment[0].id, commentBy: currentUser.id }
+            data: { taskId: req.params.id, commentId: comment.id, commentBy: currentUser.id }
           });
         }
 
@@ -3483,7 +3460,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             type: 'task_comment_added',
             title: 'Task Comment',
             message: `${currentUser.firstName} ${currentUser.lastName} commented on "${task[0].title}"`,
-            data: { taskId: req.params.id, commentId: comment[0].id, commentBy: currentUser.id }
+            data: { taskId: req.params.id, commentId: comment.id, commentBy: currentUser.id }
           });
         }
 
@@ -3494,7 +3471,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      res.status(201).json(comment[0]);
+      res.status(201).json(comment);
     } catch (error) {
       console.error("Error creating task comment:", error);
       res.status(400).json({ message: "Failed to create task comment" });
@@ -3504,7 +3481,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Task Dependencies routes
   app.get('/api/task-dependencies', isAuthenticated, async (req, res) => {
     try {
-      const dependencies = await db.select().from(taskDependencies);
+      const projectId = req.query.projectId as string;
+      const dependencies = projectId 
+        ? await storage.getAllTaskDependencies(projectId)
+        : await storage.getAllTaskDependencies('');
       res.json(dependencies);
     } catch (error) {
       console.error("Error fetching task dependencies:", error);
@@ -3635,7 +3615,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Project Template routes
   app.get('/api/project-templates', isAuthenticated, async (req, res) => {
     try {
-      const templates = await db.select().from(projectTemplates).where(eq(projectTemplates.isActive, true));
+      const templates = await storage.getProjectTemplates();
       res.json(templates);
     } catch (error) {
       console.error("Error fetching project templates:", error);
@@ -3645,18 +3625,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/project-templates/:id', isAuthenticated, async (req, res) => {
     try {
-      const template = await db.select().from(projectTemplates)
-        .where(eq(projectTemplates.id, req.params.id))
-        .limit(1);
+      const template = await storage.getProjectTemplate(req.params.id);
 
-      if (!template.length) {
+      if (!template) {
         return res.status(404).json({ message: "Project template not found" });
       }
 
-      const tasks = await db.select().from(taskTemplates)
-        .where(eq(taskTemplates.projectTemplateId, req.params.id));
+      const tasks = await storage.getTaskTemplates(req.params.id);
 
-      res.json({ ...template[0], taskTemplates: tasks });
+      res.json({ ...template, taskTemplates: tasks });
     } catch (error) {
       console.error("Error fetching project template:", error);
       res.status(500).json({ message: "Failed to fetch project template" });
@@ -3666,12 +3643,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/project-templates', isAuthenticated, requireRole(['admin', 'manager']), async (req, res) => {
     try {
       const validatedData = insertProjectTemplateSchema.parse(req.body);
-      const template = await db.insert(projectTemplates).values({
+      const template = await storage.createProjectTemplate({
         ...validatedData,
         createdBy: req.user.id,
-      }).returning();
+      });
 
-      res.status(201).json(template[0]);
+      res.status(201).json(template);
     } catch (error) {
       console.error("Error creating project template:", error);
       res.status(400).json({ message: "Failed to create project template" });
@@ -3681,19 +3658,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/project-templates/:id', isAuthenticated, requireRole(['admin', 'manager']), async (req, res) => {
     try {
       const validatedData = insertProjectTemplateSchema.parse(req.body);
-      const result = await db.update(projectTemplates)
-        .set({
-          ...validatedData,
-          updatedAt: new Date(),
-        })
-        .where(eq(projectTemplates.id, req.params.id))
-        .returning();
+      const result = await storage.updateProjectTemplate(req.params.id, validatedData);
 
-      if (!result.length) {
+      if (!result) {
         return res.status(404).json({ message: "Project template not found" });
       }
 
-      res.json(result[0]);
+      res.json(result);
     } catch (error) {
       console.error("Error updating project template:", error);
       res.status(400).json({ message: "Failed to update project template" });
@@ -3702,14 +3673,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete('/api/project-templates/:id', isAuthenticated, requireRole(['admin', 'manager']), async (req, res) => {
     try {
-      const result = await db.delete(projectTemplates)
-        .where(eq(projectTemplates.id, req.params.id))
-        .returning();
-
-      if (!result.length) {
-        return res.status(404).json({ message: "Project template not found" });
-      }
-
+      await storage.deleteProjectTemplate(req.params.id);
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting project template:", error);
@@ -3730,22 +3694,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("📝 Validated project data:", validatedData);
 
       // Get template with task templates
-      const template = await db.select().from(projectTemplates)
-        .where(eq(projectTemplates.id, templateId))
-        .limit(1);
+      const template = await storage.getProjectTemplate(templateId);
 
-      if (!template.length) {
+      if (!template) {
         return res.status(404).json({ message: "Project template not found" });
       }
 
-      const taskTemplatesList = await db.select().from(taskTemplates)
-        .where(eq(taskTemplates.projectTemplateId, templateId));
+      const taskTemplatesList = await storage.getTaskTemplates(templateId);
 
       // Create project from template
       const newProject = await db.insert(projects).values({
         ...validatedData,
-        budget: validatedData.budget || template[0].defaultBudget,
-        priority: validatedData.priority || template[0].defaultPriority,
+        budget: validatedData.budget || template.defaultBudget,
+        priority: validatedData.priority || template.defaultPriority,
       }).returning();
 
       // Create tasks from templates
@@ -3778,8 +3739,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Task Dependencies routes
   app.get('/api/tasks/:id/dependencies', isAuthenticated, async (req, res) => {
     try {
-      const dependencies = await db.select().from(taskDependencies)
-        .where(eq(taskDependencies.taskId, req.params.id));
+      const dependencies = await storage.getTaskDependencies(req.params.id);
       res.json(dependencies);
     } catch (error) {
       console.error("Error fetching task dependencies:", error);
@@ -3789,7 +3749,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/task-dependencies', isAuthenticated, async (req, res) => {
     try {
-      const dependencies = await db.select().from(taskDependencies);
+      const projectId = req.query.projectId as string;
+      const dependencies = projectId 
+        ? await storage.getAllTaskDependencies(projectId)
+        : await storage.getAllTaskDependencies('');
       res.json(dependencies);
     } catch (error) {
       console.error("Error fetching task dependencies:", error);
@@ -3800,8 +3763,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/task-dependencies', isAuthenticated, async (req, res) => {
     try {
       const validatedData = insertTaskDependencySchema.parse(req.body);
-      const dependency = await db.insert(taskDependencies).values(validatedData).returning();
-      res.status(201).json(dependency[0]);
+      const dependency = await storage.createTaskDependency(validatedData);
+      res.status(201).json(dependency);
     } catch (error) {
       console.error("Error creating task dependency:", error);
       res.status(400).json({ message: "Failed to create task dependency" });
@@ -3810,7 +3773,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete('/api/task-dependencies/:id', isAuthenticated, async (req, res) => {
     try {
-      await db.delete(taskDependencies).where(eq(taskDependencies.id, req.params.id));
+      await storage.deleteTaskDependency(req.params.id);
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting task dependency:", error);
@@ -3821,9 +3784,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Project Comments routes
   app.get('/api/projects/:id/comments', isAuthenticated, async (req, res) => {
     try {
-      const comments = await db.select().from(projectComments)
-        .where(eq(projectComments.projectId, req.params.id))
-        .orderBy(desc(projectComments.createdAt));
+      const comments = await storage.getProjectComments(req.params.id);
       res.json(comments);
     } catch (error) {
       console.error("Error fetching project comments:", error);
@@ -3834,11 +3795,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/projects/:id/comments', isAuthenticated, async (req: any, res) => {
     try {
       const validatedData = insertProjectCommentSchema.parse(req.body);
-      const comment = await db.insert(projectComments).values({
+      const comment = await storage.createProjectComment({
         ...validatedData,
         projectId: req.params.id,
         userId: req.user.id,
-      }).returning();
+      });
 
       // Log activity
       await db.insert(projectActivity).values({
@@ -3846,7 +3807,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: req.user.id,
         action: 'comment_added',
         entityType: 'comment',
-        entityId: comment[0].id,
+        entityId: comment.id,
         details: { content: validatedData.content.substring(0, 100) + '...' }
       });
 
@@ -3863,7 +3824,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             type: 'comment_added',
             title: 'New Project Comment',
             message: `${currentUser.firstName} ${currentUser.lastName} commented on ${project[0].name}`,
-            data: { projectId: req.params.id, commentId: comment[0].id, commentBy: currentUser.id }
+            data: { projectId: req.params.id, commentId: comment.id, commentBy: currentUser.id }
           });
         }
 
@@ -3874,7 +3835,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             type: 'comment_added',
             title: 'Project Update',
             message: `New comment added to project ${project[0].name}`,
-            data: { projectId: req.params.id, commentId: comment[0].id, commentBy: currentUser.id }
+            data: { projectId: req.params.id, commentId: comment.id, commentBy: currentUser.id }
           });
         }
 
@@ -4164,8 +4125,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...req.body,
         createdBy: req.user.id,
       });
-      const allocation = await db.insert(resourceAllocations).values(validatedData).returning();
-      res.status(201).json(allocation[0]);
+      const allocation = await storage.createResourceAllocation(validatedData);
+      res.status(201).json(allocation);
     } catch (error) {
       console.error("Error creating resource allocation:", error);
       res.status(400).json({ message: "Failed to create resource allocation" });
@@ -4194,7 +4155,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete('/api/resource-allocations/:id', isAuthenticated, requireRole(['admin', 'manager']), async (req, res) => {
     try {
-      await db.delete(resourceAllocations).where(eq(resourceAllocations.id, req.params.id));
+      await storage.deleteResourceAllocation(req.params.id);
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting resource allocation:", error);
@@ -4220,8 +4181,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/budget-categories', isAuthenticated, requireRole(['admin', 'manager']), async (req, res) => {
     try {
       const validatedData = insertBudgetCategorySchema.parse(req.body);
-      const category = await db.insert(budgetCategories).values(validatedData).returning();
-      res.status(201).json(category[0]);
+      const category = await storage.createBudgetCategory(validatedData);
+      res.status(201).json(category);
     } catch (error) {
       console.error("Error creating budget category:", error);
       res.status(400).json({ message: "Failed to create budget category" });
@@ -4259,8 +4220,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...req.body,
         projectId: req.params.id,
       });
-      const budget = await db.insert(projectBudgets).values(validatedData).returning();
-      res.status(201).json(budget[0]);
+      const budget = await storage.createProjectBudget(validatedData);
+      res.status(201).json(budget);
     } catch (error) {
       console.error("Error creating project budget:", error);
       res.status(400).json({ message: "Failed to create project budget" });
