@@ -2496,6 +2496,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Opportunity Next Steps routes
   app.get('/api/opportunities/:opportunityId/next-steps', isAuthenticated, async (req, res) => {
     try {
+      const tenantDb = getTenantDb();
+      const organizationId = tenantDb.getOrganizationId();
+
       const nextSteps = await db.select({
         id: opportunityNextSteps.id,
         opportunityId: opportunityNextSteps.opportunityId,
@@ -2516,7 +2519,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           lastName: users.lastName,
         } : null,
       }).from(opportunityNextSteps)
-        .where(eq(opportunityNextSteps.opportunityId, req.params.opportunityId))
+        .where(and(
+          eq(opportunityNextSteps.opportunityId, req.params.opportunityId),
+          eq(opportunityNextSteps.organizationId, organizationId)
+        ))
         .leftJoin(users, eq(opportunityNextSteps.assignedTo, users.id));
       res.json(nextSteps);
     } catch (error) {
@@ -2622,6 +2628,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Opportunity Communications routes
   app.get('/api/opportunities/:opportunityId/communications', isAuthenticated, async (req, res) => {
     try {
+      const tenantDb = getTenantDb();
+      const organizationId = tenantDb.getOrganizationId();
+
       const communications = await db.select({
         id: opportunityCommunications.id,
         opportunityId: opportunityCommunications.opportunityId,
@@ -2643,7 +2652,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           lastName: users.lastName,
         } : null,
       }).from(opportunityCommunications)
-        .where(eq(opportunityCommunications.opportunityId, req.params.opportunityId))
+        .where(and(
+          eq(opportunityCommunications.opportunityId, req.params.opportunityId),
+          eq(opportunityCommunications.organizationId, organizationId)
+        ))
         .leftJoin(users, eq(opportunityCommunications.recordedBy, users.id))
         .orderBy(desc(opportunityCommunications.communicationDate));
       res.json(communications);
@@ -2934,6 +2946,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Opportunity Stakeholders routes
   app.get('/api/opportunities/:opportunityId/stakeholders', isAuthenticated, async (req, res) => {
     try {
+      const tenantDb = getTenantDb();
+      const organizationId = tenantDb.getOrganizationId();
+
       const stakeholders = await db.select({
         id: opportunityStakeholders.id,
         opportunityId: opportunityStakeholders.opportunityId,
@@ -2953,7 +2968,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           lastName: users.lastName,
         } : null,
       }).from(opportunityStakeholders)
-        .where(eq(opportunityStakeholders.opportunityId, req.params.opportunityId))
+        .where(and(
+          eq(opportunityStakeholders.opportunityId, req.params.opportunityId),
+          eq(opportunityStakeholders.organizationId, organizationId)
+        ))
         .leftJoin(users, eq(opportunityStakeholders.createdBy, users.id));
       res.json(stakeholders);
     } catch (error) {
