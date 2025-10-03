@@ -128,6 +128,12 @@ const navigationGroups = [
         href: "/admin",
         icon: Settings,
       },
+      {
+        title: "Organizations",
+        href: "/admin/organizations",
+        icon: Building2,
+        requiresRole: ["super_admin"],
+      },
     ]
   },
 ];

@@ -62,6 +62,11 @@
 - Migration scripts for single-tenant to multi-tenant conversion
 - Default organization auto-provisioning for development and first-time deployment
 - Automatic user assignment to organizations on OAuth login
+- **Organization Admin Panel**: Full-featured UI for super admins to create, manage, and delete organizations
+- **Member Management**: Add/remove members, assign roles, enforce user limits per organization
+- **Plan Management**: 4 tier system (Free: 5, Starter: 20, Professional: 50, Enterprise: unlimited)
+- **Status Management**: Trial, active, suspended, cancelled states with automatic trial periods
+- **Role Synchronization**: Automated script to keep `role` and `enhancedRole` fields in sync
 - Production deployed and managed via Replit autoscale with environment configuration
 
 ## Architecture Overview
@@ -74,11 +79,12 @@
 - **Tenant isolation**: All business data tables include organizationId foreign key with cascade delete
 - **Type safety**: Centralized constants with TypeScript constraints, comprehensive validation
 
-### API Endpoints (75+)
+### API Endpoints (85+)
 - **Projects**: Templates, dependencies, comments, activity, progress analytics, completion estimates
 - **Auth**: Register, login, email verification, password reset, MFA (TOTP/SMS)
 - **MFA**: Setup, verification, disable, backup codes, status
-- **Organizations**: Multi-tenant routing, subdomain resolution, member management
+- **Organizations (Admin)**: Create, read, update, delete organizations (super admin only)
+- **Organization Members**: List, add, update role, remove members with permission checks
 - **Tenancy**: Automatic tenant context resolution via subdomain, organization membership validation
 - **Dashboard**: KPIs, revenue trends, executive analytics
 - **Budget**: Expenses, time entries, budget impact, invoices
@@ -90,9 +96,10 @@
 - **Task Management**: QuickTaskActions, TaskTimeTracker, TaskNotifications, TaskAnalytics, MobileGantt
 - **Executive Dashboard**: ExecutiveKPIGrid, BusinessHealthScore, FinancialPerformance, CriticalActions, CustomerIntelligence, StrategicProjects
 - **Authentication**: LoginForm, RegisterForm, ForgotPasswordForm, AuthContainer, UserProfileMenu, UserAvatar
-- **Multi-Tenant**: OrganizationIndicator, TenantContext (AsyncLocalStorage), TenantMiddleware, TenantScopedDB
+- **Multi-Tenant**: OrganizationIndicator, OrganizationAdmin, TenantContext (AsyncLocalStorage), TenantMiddleware, TenantScopedDB
+- **Organization Management**: OrganizationAdmin page, member management UI, plan/status controls, search/filter functionality
 - **Analytics**: Analytics dashboard (5 modules), BudgetManagement, TimeTracking, DashboardKPIs
-- **Security**: MFAService (TOTP/SMS), AuditService, RBACMiddleware, AuthMfaRoutes
+- **Security**: MFAService (TOTP/SMS), AuditService, RBACMiddleware, AuthMfaRoutes, RoleSyncScript
 - **UI Library**: StandardSelects, NotificationPanel, Responsive Sidebar, Mobile Header, Touch Interface Utilities
 
 ### System Features
@@ -113,7 +120,8 @@
 npm run dev:safe    # RECOMMENDED: Complete cleanup + conflict-free startup
 npm run dev:clean   # Manual cleanup + standard startup
 npm run dev         # Direct startup
-npm run tsx scripts/data-cleanup-migration.ts [analyze|migrate]
+npx tsx scripts/data-cleanup-migration.ts [analyze|migrate]  # Data cleanup utility
+npx tsx scripts/sync-user-roles.ts [--dry-run] [--role-priority]  # Sync role/enhancedRole fields
 ```
 
 ## Key Files & Architecture
@@ -121,7 +129,7 @@ npm run tsx scripts/data-cleanup-migration.ts [analyze|migrate]
 ### Backend (`/server/`)
 - `schema.ts` (30+ tables, auth schemas, validation, TypeScript types, multi-tenant organizationId)
 - `constants.ts` (centralized data constants)
-- `routes.ts` (75+ API endpoints with authentication and tenant middleware)
+- `routes.ts` (85+ API endpoints with authentication and tenant middleware)
 - `websocketManager.ts`, `emailService.ts`, `index.ts`
 - `utils/authUtils.ts` (password hashing, rate limiting, tokens)
 - `replitAuth.ts` (local + OAuth authentication with multi-tenant support)
@@ -130,9 +138,15 @@ npm run tsx scripts/data-cleanup-migration.ts [analyze|migrate]
 - `middleware/` (tenantMiddleware.ts - subdomain resolution and validation)
 
 ### Frontend (`/client/src/`)
-- **Components**: GanttChart, ProjectTemplateSelector, NotificationPanel, auth forms, analytics dashboards
+- **Components**: GanttChart, ProjectTemplateSelector, NotificationPanel, auth forms, analytics dashboards, OrganizationIndicator
 - **Libraries**: statusUtils, criticalPathAnalysis, StandardSelects
-- **Pages**: 8 redesigned pages (Marketing, CRM, Projects, Tasks, Support, Finance, Team, Knowledge) with consistent KPI → Search → Content → Actions layout
+- **Pages**: 10+ pages including OrganizationAdmin (super admin), Executive (admin), Marketing, CRM, Projects, Tasks, Support, Finance, Team, Knowledge
+- **Layouts**: Consistent KPI → Search → Content → Actions pattern across all pages
+
+### Scripts & Utilities (`/scripts/`)
+- `sync-user-roles.ts` - Synchronizes role and enhancedRole fields across all users
+- `data-cleanup-migration.ts` - Database cleanup and migration utilities
+- `start-dev-server.sh` - Safe development server startup with conflict prevention
 
 ## Success Metrics
 - **Efficiency**: 50% reduction in project setup time with templates
@@ -163,6 +177,7 @@ npm run tsx scripts/data-cleanup-migration.ts [analyze|migrate]
 - **Sep 29**: Schema fixes, intelligent deletion logic, server-authoritative mutations
 - **Sep 30**: Executive dashboard, customer intelligence, portfolio management
 - **Oct 01**: Multi-tenant architecture, subdomain routing, organization management, production deployment via Replit
+- **Oct 03**: Organization admin panel, member management UI, plan/status controls, role synchronization utilities
 
 ## Technical Highlights
 - **Database**: Normalized schema, 30+ tables, centralized constants, TypeScript constraints, multi-tenant isolation
@@ -177,6 +192,15 @@ npm run tsx scripts/data-cleanup-migration.ts [analyze|migrate]
 - **Project Management**: Gantt with CPM algorithm, drag & drop, SVG connectors, critical path highlighting
 - **Deployment**: Replit autoscale deployment, PostgreSQL (Neon), environment-based configuration
 
+## Documentation
+- **User Guides**:
+  - `/docs/ORGANIZATION_ADMIN_GUIDE.md` - Comprehensive admin panel documentation
+  - `/docs/ORGANIZATION_QUICKSTART.md` - Quick start guide for non-technical users
+- **Architecture**:
+  - `CLAUDE.md` - Development notes and technical overview (this file)
+  - `README.md` - Project setup and installation instructions
+- **API**: 85+ endpoints documented in route handlers with inline comments
+
 ---
-*Last updated: 2025-10-01 | All 10 phases complete*
+*Last updated: 2025-10-03 | All 10 phases complete + Organization Admin Panel*
 *Enterprise-grade multi-tenant SaaS platform - fully production-ready and deployed*

@@ -65,10 +65,14 @@ This is a comprehensive **multi-tenant SaaS business management platform** featu
 ### **Phase 10: Multi-Tenant SaaS Architecture ✅ (Production Deployed)**
 - **Subdomain-Based Routing**: Automatic tenant resolution from URL (e.g., acme.yourdomain.com)
 - **Organization Management**: Complete organization lifecycle with plan tiers and billing
+- **Organization Admin Panel**: Full-featured super admin UI for creating and managing organizations
+- **Member Management**: Add/remove members, assign roles (owner, admin, member), enforce user limits
+- **Plan Tiers**: 4-tier system (Free: 5 users, Starter: 20, Professional: 50, Enterprise: unlimited)
+- **Status Management**: Trial, active, suspended, cancelled states with automatic trial periods (30 days)
 - **Data Isolation**: AsyncLocalStorage-based tenant context for thread-safe request isolation
 - **Automatic Filtering**: Tenant-scoped database queries with organizationId enforcement
-- **Organization Members**: User-organization junction table with role-based access (owner, admin, member)
-- **Migration Tools**: Scripts for single-tenant to multi-tenant conversion
+- **Role Synchronization**: Automated utilities to maintain consistency between role and enhancedRole fields
+- **Migration Tools**: Scripts for single-tenant to multi-tenant conversion and role sync
 - **Replit Deployment**: Production-ready deployment on Replit autoscale infrastructure
 
 ## 🛠 **Technology Stack**
@@ -155,6 +159,7 @@ This is a comprehensive **multi-tenant SaaS business management platform** featu
 | `npm run test` | 🧪 Run test suite |
 | `npm run test:e2e` | 🎭 Run end-to-end tests |
 | `npm run check` | 🔍 TypeScript type checking |
+| `npx tsx scripts/sync-user-roles.ts` | 🔄 Synchronize user role fields (--dry-run, --role-priority) |
 
 ### Key API Endpoints
 
@@ -163,6 +168,8 @@ This is a comprehensive **multi-tenant SaaS business management platform** featu
 | **Authentication** | `/api/auth/*` | Login, registration, password reset, MFA |
 | **Multi-Factor Auth** | `/api/mfa/*` | TOTP setup, SMS verification, backup codes |
 | **Session Management** | `/api/sessions/*` | Active sessions, session limits, cleanup |
+| **Organizations (Admin)** | `/api/admin/organizations/*` | Create, update, delete organizations (super admin) |
+| **Organization Members** | `/api/admin/organizations/:id/members/*` | Manage organization members and roles |
 | **Projects** | `/api/projects/*` | Project CRUD, templates, progress tracking |
 | **Tasks** | `/api/tasks/*` | Task management, dependencies, time tracking |
 | **Analytics** | `/api/analytics/*` | Business intelligence, KPIs, productivity |
@@ -198,9 +205,11 @@ This is a comprehensive **multi-tenant SaaS business management platform** featu
 - **Tenant isolation** via AsyncLocalStorage and automatic query filtering
 
 ### **API Design**
-- **75+ REST endpoints** with full authentication and tenant context
+- **85+ REST endpoints** with full authentication and tenant context
 - **Service boundaries** aligned with business domains
 - **Tenant middleware** for automatic subdomain resolution and organization validation
+- **Organization management** with super admin-only CRUD operations
+- **Member management** with role-based permissions and user limit enforcement
 - **Comprehensive validation** using Zod schemas
 - **Rate limiting** and security middleware
 
@@ -216,16 +225,25 @@ This is a comprehensive **multi-tenant SaaS business management platform** featu
 ```
 ├── client/src/           # Frontend React application
 │   ├── components/       # Reusable UI components
-│   ├── pages/           # Application pages/routes
+│   ├── pages/           # Application pages/routes (Home, Projects, Tasks, OrganizationAdmin, etc.)
 │   ├── lib/             # Utility functions and hooks
 │   └── hooks/           # Custom React hooks
 ├── server/              # Backend Express application
-│   ├── routes.ts        # API route definitions
+│   ├── routes.ts        # API route definitions (85+ endpoints)
 │   ├── integrations/    # Third-party service integrations
-│   └── utils/           # Server utilities and middleware
+│   ├── tenancy/         # Multi-tenant context and database layer
+│   ├── middleware/      # Tenant middleware, RBAC, auth
+│   └── utils/           # Server utilities and helpers
 ├── shared/              # Shared TypeScript types and schemas
-├── docs/                # Comprehensive YAML DSL documentation
+│   ├── schema.ts        # Database schema and Zod validation
+│   ├── constants.ts     # Centralized data constants
+│   └── permissions.ts   # RBAC permissions and roles
+├── docs/                # User guides and technical documentation
+│   ├── ORGANIZATION_ADMIN_GUIDE.md   # Admin panel documentation
+│   └── ORGANIZATION_QUICKSTART.md    # Quick start for non-technical users
 ├── scripts/             # Database migrations and utilities
+│   ├── sync-user-roles.ts            # Role synchronization utility
+│   └── start-dev-server.sh           # Safe dev server startup
 └── .github/             # GitHub workflows and templates
 ```
 
@@ -241,17 +259,20 @@ For security vulnerabilities, please see our [Security Policy](SECURITY.md).
 
 ## 📋 **Documentation**
 
+### **User Guides**
+- **[🏢 Organization Admin Guide](docs/ORGANIZATION_ADMIN_GUIDE.md)**: Comprehensive admin panel documentation
+- **[⚡ Quick Start Guide](docs/ORGANIZATION_QUICKSTART.md)**: Quick start for non-technical users
+- **[📁 Architecture Overview](CLAUDE.md)**: Development notes and technical overview
+
 ### **System Documentation**
-- **[📁 Architecture Overview](docs/README.md)**: Complete system blueprint
-- **[🗄️ Database Schema](docs/technical/database-schema.yaml)**: Data model specifications
-- **[🔌 API Documentation](docs/technical/api-endpoints.yaml)**: REST API reference
-- **[🧩 Component Library](docs/technical/frontend-components.yaml)**: UI component guide
-- **[🔐 Security Guide](docs/technical/security-auth.yaml)**: Authentication and security
+- **[🗄️ Database Schema](docs/technical/database-schema.yaml)**: Data model specifications (if exists)
+- **[🔌 API Documentation](server/routes.ts)**: 85+ REST API endpoints with inline documentation
+- **[🔐 Security Guide](docs/technical/security-auth.yaml)**: Authentication and security (if exists)
 
 ### **Integration Guides**
-- **[💬 Slack Integration](docs/integrations/slack-setup.md)**: Setup and configuration
-- **[🔗 Teams Integration](docs/integrations/teams-setup.md)**: Microsoft Teams connectivity
-- **[🐙 GitHub Integration](docs/integrations/github-setup.md)**: Repository automation
+- **[💬 Slack Integration](docs/integrations/slack-setup.md)**: Setup and configuration (if exists)
+- **[🔗 Teams Integration](docs/integrations/teams-setup.md)**: Microsoft Teams connectivity (if exists)
+- **[🐙 GitHub Integration](docs/integrations/github-setup.md)**: Repository automation (if exists)
 
 ## 🚀 **Deployment**
 

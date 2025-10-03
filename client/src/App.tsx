@@ -24,6 +24,7 @@ import Marketing from "@/pages/Marketing";
 import Support from "@/pages/Support";
 import Company from "@/pages/Company";
 import Admin from "@/pages/Admin";
+import OrganizationAdmin from "@/pages/OrganizationAdmin";
 import Resources from "@/pages/Resources";
 import TimeTracking from "@/pages/TimeTracking";
 import BudgetManagement from "@/pages/BudgetManagement";
@@ -73,6 +74,7 @@ function Router() {
           <Route path="/company" component={Company} />
           <Route path="/analytics" component={Analytics} />
           <Route path="/admin" component={Admin} />
+          <Route path="/admin/organizations" component={OrganizationAdmin} />
         </>
       )}
       <Route component={NotFound} />

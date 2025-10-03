@@ -1348,6 +1348,63 @@ export const changePasswordSchema = z.object({
     .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, "Password must contain at least one lowercase letter, one uppercase letter, and one number"),
 });
 
+// Organization schemas
+export const insertOrganizationSchema = createInsertSchema(organizations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  name: z.string().min(1, "Organization name is required"),
+  subdomain: z.string()
+    .min(3, "Subdomain must be at least 3 characters")
+    .max(63, "Subdomain must be less than 63 characters")
+    .regex(/^[a-z0-9-]+$/, "Subdomain can only contain lowercase letters, numbers, and hyphens")
+    .regex(/^[a-z0-9]/, "Subdomain must start with a letter or number")
+    .regex(/[a-z0-9]$/, "Subdomain must end with a letter or number"),
+  slug: z.string()
+    .min(3, "Slug must be at least 3 characters")
+    .regex(/^[a-z0-9-]+$/, "Slug can only contain lowercase letters, numbers, and hyphens"),
+  planTier: z.enum(["free", "starter", "professional", "enterprise"]).default("starter"),
+  status: z.enum(["trial", "active", "suspended", "cancelled"]).default("trial"),
+  billingEmail: z.string().email().optional(),
+  billingStatus: z.enum(["current", "past_due", "cancelled"]).default("current"),
+  maxUsers: z.number().int().positive().default(5),
+  settings: z.object({
+    features: z.array(z.string()).optional(),
+    branding: z.object({
+      logo: z.string().optional(),
+      primaryColor: z.string().optional(),
+    }).optional(),
+    notifications: z.object({
+      email: z.boolean().optional(),
+      slack: z.boolean().optional(),
+    }).optional(),
+  }).optional(),
+  ownerId: z.string().optional(),
+  trialEndsAt: z.coerce.date().nullable().optional(),
+});
+
+export const updateOrganizationSchema = insertOrganizationSchema.partial();
+
+// Organization member schemas
+export const insertOrganizationMemberSchema = createInsertSchema(organizationMembers).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  joinedAt: true,
+}).extend({
+  organizationId: z.string().min(1, "Organization ID is required"),
+  userId: z.string().min(1, "User ID is required"),
+  role: z.enum(["owner", "admin", "member"]).default("member"),
+  status: z.enum(["active", "invited", "suspended"]).default("active"),
+  invitedBy: z.string().optional(),
+});
+
+export const updateOrganizationMemberSchema = insertOrganizationMemberSchema.partial().omit({
+  organizationId: true,
+  userId: true,
+});
+
 export const insertClientSchema = createInsertSchema(clients).omit({
   id: true,
   organizationId: true,
@@ -2295,6 +2352,30 @@ export type InsertWorkloadSnapshot = z.infer<typeof insertWorkloadSnapshotSchema
 export type WorkloadSnapshot = typeof workloadSnapshots.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type Notification = typeof notifications.$inferSelect;
+
+// ====================================
+// MULTI-TENANT ORGANIZATION TYPES
+// ====================================
+
+export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
+export type UpdateOrganization = z.infer<typeof updateOrganizationSchema>;
+export type Organization = typeof organizations.$inferSelect;
+export type InsertOrganizationMember = z.infer<typeof insertOrganizationMemberSchema>;
+export type UpdateOrganizationMember = z.infer<typeof updateOrganizationMemberSchema>;
+export type OrganizationMember = typeof organizationMembers.$inferSelect;
+
+// Organization with related data
+export type OrganizationWithMembers = Organization & {
+  members: (OrganizationMember & {
+    user: User;
+  })[];
+  owner?: User;
+};
+
+export type OrganizationMemberWithUser = OrganizationMember & {
+  user: User;
+  organization: Organization;
+};
 
 // ====================================
 // PHASE 2: ENHANCED SECURITY TYPES

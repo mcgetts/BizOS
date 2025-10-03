@@ -21,6 +21,10 @@ import {
   requestPasswordResetSchema,
   resetPasswordSchema,
   changePasswordSchema,
+  insertOrganizationSchema,
+  updateOrganizationSchema,
+  insertOrganizationMemberSchema,
+  updateOrganizationMemberSchema,
   insertClientSchema,
   insertCompanySchema,
   insertSalesOpportunitySchema,
@@ -47,6 +51,8 @@ import {
   clientInteractions,
   documents,
   users,
+  organizations,
+  organizationMembers,
   opportunityNextSteps,
   opportunityCommunications,
   opportunityStakeholders,
@@ -5797,6 +5803,493 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: req.user?.id
       });
       res.status(500).json({ message: 'Failed to cleanup expired invitations' });
+    }
+  });
+
+  // ====================================
+  // ORGANIZATION MANAGEMENT (Super Admin Only)
+  // ====================================
+
+  // Get all organizations (super admin only)
+  app.get('/api/admin/organizations', isAuthenticated, requireRole(['super_admin']), async (req, res) => {
+    try {
+      const allOrgs = await db
+        .select({
+          id: organizations.id,
+          name: organizations.name,
+          subdomain: organizations.subdomain,
+          slug: organizations.slug,
+          planTier: organizations.planTier,
+          status: organizations.status,
+          billingEmail: organizations.billingEmail,
+          billingStatus: organizations.billingStatus,
+          maxUsers: organizations.maxUsers,
+          settings: organizations.settings,
+          ownerId: organizations.ownerId,
+          trialEndsAt: organizations.trialEndsAt,
+          createdAt: organizations.createdAt,
+          updatedAt: organizations.updatedAt,
+        })
+        .from(organizations)
+        .orderBy(desc(organizations.createdAt));
+
+      // Get member counts for each organization
+      const orgsWithCounts = await Promise.all(
+        allOrgs.map(async (org) => {
+          const memberCount = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(organizationMembers)
+            .where(eq(organizationMembers.organizationId, org.id));
+
+          return {
+            ...org,
+            memberCount: Number(memberCount[0]?.count || 0),
+          };
+        })
+      );
+
+      res.json(orgsWithCounts);
+    } catch (error) {
+      console.error('Error fetching organizations:', error);
+      res.status(500).json({ message: 'Failed to fetch organizations' });
+    }
+  });
+
+  // Get single organization details (super admin only)
+  app.get('/api/admin/organizations/:id', isAuthenticated, requireRole(['super_admin']), async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const org = await db
+        .select()
+        .from(organizations)
+        .where(eq(organizations.id, id))
+        .limit(1);
+
+      if (!org.length) {
+        return res.status(404).json({ message: 'Organization not found' });
+      }
+
+      // Get members with user details
+      const members = await db
+        .select({
+          id: organizationMembers.id,
+          organizationId: organizationMembers.organizationId,
+          userId: organizationMembers.userId,
+          role: organizationMembers.role,
+          status: organizationMembers.status,
+          invitedBy: organizationMembers.invitedBy,
+          joinedAt: organizationMembers.joinedAt,
+          createdAt: organizationMembers.createdAt,
+          user: {
+            id: users.id,
+            email: users.email,
+            firstName: users.firstName,
+            lastName: users.lastName,
+            profileImageUrl: users.profileImageUrl,
+          },
+        })
+        .from(organizationMembers)
+        .leftJoin(users, eq(organizationMembers.userId, users.id))
+        .where(eq(organizationMembers.organizationId, id));
+
+      res.json({
+        ...org[0],
+        members,
+      });
+    } catch (error) {
+      console.error('Error fetching organization:', error);
+      res.status(500).json({ message: 'Failed to fetch organization details' });
+    }
+  });
+
+  // Create new organization (super admin only)
+  app.post('/api/admin/organizations', isAuthenticated, requireRole(['super_admin']), async (req, res) => {
+    try {
+      const validatedData = insertOrganizationSchema.parse(req.body);
+
+      // Check if subdomain already exists
+      const existingOrg = await db
+        .select()
+        .from(organizations)
+        .where(eq(organizations.subdomain, validatedData.subdomain))
+        .limit(1);
+
+      if (existingOrg.length > 0) {
+        return res.status(400).json({ message: 'Subdomain already exists' });
+      }
+
+      // Auto-generate slug from subdomain if not provided
+      if (!validatedData.slug) {
+        validatedData.slug = validatedData.subdomain;
+      }
+
+      // Set trial end date if status is trial and not provided
+      if (validatedData.status === 'trial' && !validatedData.trialEndsAt) {
+        const trialEnd = new Date();
+        trialEnd.setDate(trialEnd.getDate() + 30); // 30 day trial
+        validatedData.trialEndsAt = trialEnd;
+      }
+
+      // Set max users based on plan tier if not provided
+      if (!validatedData.maxUsers) {
+        const planLimits: Record<string, number> = {
+          free: 5,
+          starter: 20,
+          professional: 50,
+          enterprise: 999999,
+        };
+        validatedData.maxUsers = planLimits[validatedData.planTier || 'starter'] || 5;
+      }
+
+      const [newOrg] = await db.insert(organizations).values(validatedData).returning();
+
+      res.status(201).json(newOrg);
+    } catch (error) {
+      console.error('Error creating organization:', error);
+      if (error instanceof Error && error.message.includes('validation')) {
+        return res.status(400).json({ message: error.message });
+      }
+      res.status(500).json({ message: 'Failed to create organization' });
+    }
+  });
+
+  // Update organization (super admin only)
+  app.patch('/api/admin/organizations/:id', isAuthenticated, requireRole(['super_admin']), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const validatedData = updateOrganizationSchema.parse(req.body);
+
+      // Check if organization exists
+      const existing = await db
+        .select()
+        .from(organizations)
+        .where(eq(organizations.id, id))
+        .limit(1);
+
+      if (!existing.length) {
+        return res.status(404).json({ message: 'Organization not found' });
+      }
+
+      // If updating subdomain, check it's not taken
+      if (validatedData.subdomain && validatedData.subdomain !== existing[0].subdomain) {
+        const subdomainExists = await db
+          .select()
+          .from(organizations)
+          .where(eq(organizations.subdomain, validatedData.subdomain))
+          .limit(1);
+
+        if (subdomainExists.length > 0) {
+          return res.status(400).json({ message: 'Subdomain already exists' });
+        }
+      }
+
+      const [updated] = await db
+        .update(organizations)
+        .set({ ...validatedData, updatedAt: new Date() })
+        .where(eq(organizations.id, id))
+        .returning();
+
+      res.json(updated);
+    } catch (error) {
+      console.error('Error updating organization:', error);
+      if (error instanceof Error && error.message.includes('validation')) {
+        return res.status(400).json({ message: error.message });
+      }
+      res.status(500).json({ message: 'Failed to update organization' });
+    }
+  });
+
+  // Delete organization (super admin only - DANGEROUS)
+  app.delete('/api/admin/organizations/:id', isAuthenticated, requireRole(['super_admin']), async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      // Check if organization exists
+      const existing = await db
+        .select()
+        .from(organizations)
+        .where(eq(organizations.id, id))
+        .limit(1);
+
+      if (!existing.length) {
+        return res.status(404).json({ message: 'Organization not found' });
+      }
+
+      // Prevent deletion of default organization
+      if (existing[0].subdomain === 'default') {
+        return res.status(403).json({ message: 'Cannot delete default organization' });
+      }
+
+      // Delete organization (cascade will handle related data)
+      await db.delete(organizations).where(eq(organizations.id, id));
+
+      res.json({ message: 'Organization deleted successfully' });
+    } catch (error) {
+      console.error('Error deleting organization:', error);
+      res.status(500).json({ message: 'Failed to delete organization' });
+    }
+  });
+
+  // ====================================
+  // ORGANIZATION MEMBER MANAGEMENT
+  // ====================================
+
+  // Get organization members (super admin or org owner/admin)
+  app.get('/api/admin/organizations/:id/members', isAuthenticated, async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      // Check if user has permission (super admin or member of this org with owner/admin role)
+      const isSuperAdmin = req.user?.role === 'super_admin';
+
+      if (!isSuperAdmin) {
+        const membership = await db
+          .select()
+          .from(organizationMembers)
+          .where(
+            and(
+              eq(organizationMembers.organizationId, id),
+              eq(organizationMembers.userId, req.user!.id)
+            )
+          )
+          .limit(1);
+
+        if (!membership.length || !['owner', 'admin'].includes(membership[0].role || '')) {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+      }
+
+      const members = await db
+        .select({
+          id: organizationMembers.id,
+          organizationId: organizationMembers.organizationId,
+          userId: organizationMembers.userId,
+          role: organizationMembers.role,
+          status: organizationMembers.status,
+          invitedBy: organizationMembers.invitedBy,
+          joinedAt: organizationMembers.joinedAt,
+          createdAt: organizationMembers.createdAt,
+          user: {
+            id: users.id,
+            email: users.email,
+            firstName: users.firstName,
+            lastName: users.lastName,
+            profileImageUrl: users.profileImageUrl,
+            department: users.department,
+            position: users.position,
+          },
+        })
+        .from(organizationMembers)
+        .leftJoin(users, eq(organizationMembers.userId, users.id))
+        .where(eq(organizationMembers.organizationId, id))
+        .orderBy(desc(organizationMembers.joinedAt));
+
+      res.json(members);
+    } catch (error) {
+      console.error('Error fetching organization members:', error);
+      res.status(500).json({ message: 'Failed to fetch organization members' });
+    }
+  });
+
+  // Add member to organization (super admin or org owner/admin)
+  app.post('/api/admin/organizations/:id/members', isAuthenticated, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const validatedData = insertOrganizationMemberSchema.parse({
+        ...req.body,
+        organizationId: id,
+      });
+
+      // Check if user has permission
+      const isSuperAdmin = req.user?.role === 'super_admin';
+
+      if (!isSuperAdmin) {
+        const membership = await db
+          .select()
+          .from(organizationMembers)
+          .where(
+            and(
+              eq(organizationMembers.organizationId, id),
+              eq(organizationMembers.userId, req.user!.id)
+            )
+          )
+          .limit(1);
+
+        if (!membership.length || !['owner', 'admin'].includes(membership[0].role || '')) {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+      }
+
+      // Check if organization exists
+      const org = await db
+        .select()
+        .from(organizations)
+        .where(eq(organizations.id, id))
+        .limit(1);
+
+      if (!org.length) {
+        return res.status(404).json({ message: 'Organization not found' });
+      }
+
+      // Check if user already is a member
+      const existingMember = await db
+        .select()
+        .from(organizationMembers)
+        .where(
+          and(
+            eq(organizationMembers.organizationId, id),
+            eq(organizationMembers.userId, validatedData.userId)
+          )
+        )
+        .limit(1);
+
+      if (existingMember.length > 0) {
+        return res.status(400).json({ message: 'User is already a member of this organization' });
+      }
+
+      // Check user limit
+      const currentMemberCount = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(organizationMembers)
+        .where(eq(organizationMembers.organizationId, id));
+
+      const count = Number(currentMemberCount[0]?.count || 0);
+
+      if (count >= org[0].maxUsers!) {
+        return res.status(400).json({ message: 'Organization has reached maximum user limit' });
+      }
+
+      const [newMember] = await db
+        .insert(organizationMembers)
+        .values({
+          ...validatedData,
+          invitedBy: req.user!.id,
+        })
+        .returning();
+
+      res.status(201).json(newMember);
+    } catch (error) {
+      console.error('Error adding organization member:', error);
+      if (error instanceof Error && error.message.includes('validation')) {
+        return res.status(400).json({ message: error.message });
+      }
+      res.status(500).json({ message: 'Failed to add organization member' });
+    }
+  });
+
+  // Update organization member role (super admin or org owner)
+  app.patch('/api/admin/organizations/:orgId/members/:memberId', isAuthenticated, async (req, res) => {
+    try {
+      const { orgId, memberId } = req.params;
+      const validatedData = updateOrganizationMemberSchema.parse(req.body);
+
+      // Check if user has permission
+      const isSuperAdmin = req.user?.role === 'super_admin';
+
+      if (!isSuperAdmin) {
+        const membership = await db
+          .select()
+          .from(organizationMembers)
+          .where(
+            and(
+              eq(organizationMembers.organizationId, orgId),
+              eq(organizationMembers.userId, req.user!.id)
+            )
+          )
+          .limit(1);
+
+        if (!membership.length || membership[0].role !== 'owner') {
+          return res.status(403).json({ message: 'Only organization owners can update member roles' });
+        }
+      }
+
+      // Check if member exists
+      const existing = await db
+        .select()
+        .from(organizationMembers)
+        .where(eq(organizationMembers.id, memberId))
+        .limit(1);
+
+      if (!existing.length) {
+        return res.status(404).json({ message: 'Member not found' });
+      }
+
+      const [updated] = await db
+        .update(organizationMembers)
+        .set({ ...validatedData, updatedAt: new Date() })
+        .where(eq(organizationMembers.id, memberId))
+        .returning();
+
+      res.json(updated);
+    } catch (error) {
+      console.error('Error updating organization member:', error);
+      if (error instanceof Error && error.message.includes('validation')) {
+        return res.status(400).json({ message: error.message });
+      }
+      res.status(500).json({ message: 'Failed to update organization member' });
+    }
+  });
+
+  // Remove member from organization (super admin or org owner/admin)
+  app.delete('/api/admin/organizations/:orgId/members/:memberId', isAuthenticated, async (req, res) => {
+    try {
+      const { orgId, memberId } = req.params;
+
+      // Check if user has permission
+      const isSuperAdmin = req.user?.role === 'super_admin';
+
+      if (!isSuperAdmin) {
+        const membership = await db
+          .select()
+          .from(organizationMembers)
+          .where(
+            and(
+              eq(organizationMembers.organizationId, orgId),
+              eq(organizationMembers.userId, req.user!.id)
+            )
+          )
+          .limit(1);
+
+        if (!membership.length || !['owner', 'admin'].includes(membership[0].role || '')) {
+          return res.status(403).json({ message: 'Access denied' });
+        }
+      }
+
+      // Check if member exists
+      const existing = await db
+        .select()
+        .from(organizationMembers)
+        .where(eq(organizationMembers.id, memberId))
+        .limit(1);
+
+      if (!existing.length) {
+        return res.status(404).json({ message: 'Member not found' });
+      }
+
+      // Prevent removal of last owner
+      if (existing[0].role === 'owner') {
+        const ownerCount = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(organizationMembers)
+          .where(
+            and(
+              eq(organizationMembers.organizationId, orgId),
+              eq(organizationMembers.role, 'owner')
+            )
+          );
+
+        if (Number(ownerCount[0]?.count || 0) <= 1) {
+          return res.status(400).json({ message: 'Cannot remove the last owner of an organization' });
+        }
+      }
+
+      await db.delete(organizationMembers).where(eq(organizationMembers.id, memberId));
+
+      res.json({ message: 'Member removed successfully' });
+    } catch (error) {
+      console.error('Error removing organization member:', error);
+      res.status(500).json({ message: 'Failed to remove organization member' });
     }
   });
 
