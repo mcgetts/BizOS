@@ -4,7 +4,7 @@
  */
 
 import { db } from '../db';
-import { getTenantContext, getOrganizationId } from './tenantContext';
+import { getTenantContext, getOrganizationId, tenantStorage } from './tenantContext';
 import { eq, and, SQL } from 'drizzle-orm';
 import type { PgTable } from 'drizzle-orm/pg-core';
 
@@ -221,6 +221,44 @@ export async function tenantBatchInsert<T extends PgTable>(
     : data;
 
   await db.insert(table).values(dataWithOrgId);
+}
+
+/**
+ * Execute a database transaction with tenant context preserved
+ *
+ * CRITICAL: This wrapper ensures AsyncLocalStorage context propagates into
+ * db.transaction() callbacks, which normally create new async execution contexts.
+ *
+ * Usage:
+ * ```typescript
+ * await tenantTransaction(async (tx, organizationId) => {
+ *   // Context is preserved here - getTenantDb() will work
+ *   await tx.insert(table).values({ ...data, organizationId });
+ *
+ *   // Can safely call other methods that use getTenantDb()
+ *   await this.someMethodUsingGetTenantDb();
+ * });
+ * ```
+ *
+ * @param callback Transaction callback that receives transaction object and organizationId
+ * @returns Promise that resolves with the callback's return value
+ * @throws Error if no tenant context is available
+ */
+export async function tenantTransaction<T>(
+  callback: (tx: typeof db, organizationId: string) => Promise<T>
+): Promise<T> {
+  // Capture context BEFORE entering transaction
+  const context = getTenantContext();
+  const organizationId = context.organizationId;
+
+  // Execute transaction with context re-established
+  return await db.transaction(async (tx) => {
+    // Re-establish AsyncLocalStorage context inside transaction callback
+    // This is necessary because db.transaction() may create a new async execution context
+    return await tenantStorage.run(context, async () => {
+      return await callback(tx, organizationId);
+    });
+  });
 }
 
 // Export the main function

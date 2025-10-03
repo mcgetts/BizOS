@@ -1,5 +1,6 @@
 import {
   users,
+  organizationMembers,
   clients,
   companies,
   salesOpportunities,
@@ -110,7 +111,7 @@ import {
   type WorkloadSnapshot,
 } from "@shared/schema";
 import { db } from "./db";
-import { getTenantDb } from "./tenancy/tenantDb";
+import { getTenantDb, tenantTransaction } from "./tenancy/tenantDb";
 import { eq, desc, and, or, like, sql, count, gte, lte } from "drizzle-orm";
 import { calculateSlaMetrics, calculateBusinessImpact, DEFAULT_SLA_CONFIGS } from "@shared/slaUtils";
 import { getOrganizationId } from "./tenancy/tenantContext";
@@ -120,6 +121,7 @@ export interface IStorage {
   // User operations (mandatory for Replit Auth)
   getUser(id: string): Promise<User | undefined>;
   getUsers(): Promise<User[]>;
+  getUsersForOrganization(organizationId: string): Promise<User[]>;
   upsertUser(user: UpsertUser): Promise<User>;
   createUser(userData: InsertUser): Promise<User>;
   updateUser(id: string, userData: Partial<InsertUser>): Promise<User | undefined>;
@@ -337,6 +339,36 @@ export class DatabaseStorage implements IStorage {
 
   async getUsers(): Promise<User[]> {
     return await db.select().from(users).where(eq(users.isActive, true)).orderBy(users.firstName, users.lastName);
+  }
+
+  async getUsersForOrganization(organizationId: string): Promise<User[]> {
+    // Get users that are members of the specified organization
+    return await db.select({
+      id: users.id,
+      email: users.email,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      profileImageUrl: users.profileImageUrl,
+      role: users.role,
+      enhancedRole: users.enhancedRole,
+      department: users.department,
+      isActive: users.isActive,
+      emailVerified: users.emailVerified,
+      mfaEnabled: users.mfaEnabled,
+      authProvider: users.authProvider,
+      sessionLimit: users.sessionLimit,
+      defaultOrganizationId: users.defaultOrganizationId,
+      createdAt: users.createdAt,
+      updatedAt: users.updatedAt,
+    })
+      .from(users)
+      .innerJoin(organizationMembers, eq(users.id, organizationMembers.userId))
+      .where(and(
+        eq(users.isActive, true),
+        eq(organizationMembers.organizationId, organizationId),
+        eq(organizationMembers.status, 'active')
+      ))
+      .orderBy(users.firstName, users.lastName);
   }
 
   async upsertUser(userData: UpsertUser): Promise<User> {
@@ -798,38 +830,36 @@ export class DatabaseStorage implements IStorage {
     
     if (result[0]?.maxDate) {
       await tx.update(salesOpportunities)
-        .set({ lastActivityDate: result[0].maxDate })
+        .set({ lastActivityDate: new Date(result[0].maxDate) })
         .where(eq(salesOpportunities.id, opportunityId));
     }
   }
 
   async deleteSalesOpportunity(id: string): Promise<void> {
-    const tenantDb = getTenantDb();
-    const organizationId = tenantDb.getOrganizationId();
     // Transactionally delete all related records first to maintain referential integrity
-    await db.transaction(async (tx) => {
+    await tenantTransaction(async (tx, orgId) => {
       // Delete related next steps
       await tx.delete(opportunityNextSteps).where(and(
         eq(opportunityNextSteps.opportunityId, id),
-        eq(opportunityNextSteps.organizationId, organizationId)
+        eq(opportunityNextSteps.organizationId, orgId)
       ));
 
       // Delete related communications
       await tx.delete(opportunityCommunications).where(and(
         eq(opportunityCommunications.opportunityId, id),
-        eq(opportunityCommunications.organizationId, organizationId)
+        eq(opportunityCommunications.organizationId, orgId)
       ));
 
       // Delete related stakeholders
       await tx.delete(opportunityStakeholders).where(and(
         eq(opportunityStakeholders.opportunityId, id),
-        eq(opportunityStakeholders.organizationId, organizationId)
+        eq(opportunityStakeholders.organizationId, orgId)
       ));
 
       // Finally delete the opportunity itself
       await tx.delete(salesOpportunities).where(and(
         eq(salesOpportunities.id, id),
-        eq(salesOpportunities.organizationId, organizationId)
+        eq(salesOpportunities.organizationId, orgId)
       ));
     });
   }
@@ -870,21 +900,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getOpportunityNextStep(id: string): Promise<OpportunityNextStep | undefined> {
-    const tenantDb = getTenantDb();
-    const [nextStep] = await tenantDb.query((db, organizationId) =>
-      db.select()
-        .from(opportunityNextSteps)
-        .where(and(
-          eq(opportunityNextSteps.id, id),
-          eq(opportunityNextSteps.organizationId, organizationId)
-        ))
-    );
+    const organizationId = getOrganizationId();
+    const [nextStep] = await db.select()
+      .from(opportunityNextSteps)
+      .where(and(
+        eq(opportunityNextSteps.id, id),
+        eq(opportunityNextSteps.organizationId, organizationId)
+      ));
     return nextStep;
   }
 
   async createOpportunityNextStep(nextStep: InsertOpportunityNextStep & { organizationId: string }): Promise<OpportunityNextStep> {
-    const organizationId = nextStep.organizationId;
-    return await db.transaction(async (tx) => {
+    return await tenantTransaction(async (tx, orgId) => {
       const [result] = await tx.insert(opportunityNextSteps).values(nextStep).returning();
 
       // Update parent opportunity's last activity date to the step creation time
@@ -893,7 +920,7 @@ export class DatabaseStorage implements IStorage {
           .set({ lastActivityDate: result.createdAt })
           .where(and(
             eq(salesOpportunities.id, nextStep.opportunityId),
-            eq(salesOpportunities.organizationId, organizationId)
+            eq(salesOpportunities.organizationId, orgId)
           ));
       }
 
@@ -902,15 +929,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateOpportunityNextStep(id: string, nextStep: Partial<InsertOpportunityNextStep>): Promise<OpportunityNextStep> {
-    const tenantDb = getTenantDb();
-    const organizationId = tenantDb.getOrganizationId();
-    return await db.transaction(async (tx) => {
+    return await tenantTransaction(async (tx, orgId) => {
       const [result] = await tx
         .update(opportunityNextSteps)
         .set({ ...nextStep, updatedAt: new Date() })
         .where(and(
           eq(opportunityNextSteps.id, id),
-          eq(opportunityNextSteps.organizationId, organizationId)
+          eq(opportunityNextSteps.organizationId, orgId)
         ))
         .returning();
 
@@ -920,7 +945,7 @@ export class DatabaseStorage implements IStorage {
           .set({ lastActivityDate: result.updatedAt })
           .where(and(
             eq(salesOpportunities.id, result.opportunityId),
-            eq(salesOpportunities.organizationId, organizationId)
+            eq(salesOpportunities.organizationId, orgId)
           ));
       }
 
@@ -929,23 +954,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteOpportunityNextStep(id: string): Promise<void> {
-    const tenantDb = getTenantDb();
-    const organizationId = tenantDb.getOrganizationId();
-    await db.transaction(async (tx) => {
+    await tenantTransaction(async (tx, orgId) => {
       // Get the opportunity ID before deleting the next step
       const [nextStep] = await tx.select({ opportunityId: opportunityNextSteps.opportunityId })
         .from(opportunityNextSteps)
         .where(and(
           eq(opportunityNextSteps.id, id),
-          eq(opportunityNextSteps.organizationId, organizationId)
+          eq(opportunityNextSteps.organizationId, orgId)
         ));
 
       if (nextStep) {
         await tx.delete(opportunityNextSteps).where(and(
           eq(opportunityNextSteps.id, id),
-          eq(opportunityNextSteps.organizationId, organizationId)
+          eq(opportunityNextSteps.organizationId, orgId)
         ));
-        
+
         // Update parent opportunity's last activity date
         await this.recomputeLastActivityDate(nextStep.opportunityId!, tx);
       }
@@ -989,21 +1012,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getOpportunityCommunication(id: string): Promise<OpportunityCommunication | undefined> {
-    const tenantDb = getTenantDb();
-    const [communication] = await tenantDb.query((db, organizationId) =>
-      db.select()
-        .from(opportunityCommunications)
-        .where(and(
-          eq(opportunityCommunications.id, id),
-          eq(opportunityCommunications.organizationId, organizationId)
-        ))
-    );
+    const organizationId = getOrganizationId();
+    const [communication] = await db.select()
+      .from(opportunityCommunications)
+      .where(and(
+        eq(opportunityCommunications.id, id),
+        eq(opportunityCommunications.organizationId, organizationId)
+      ));
     return communication;
   }
 
   async createOpportunityCommunication(communication: InsertOpportunityCommunication & { organizationId: string }): Promise<OpportunityCommunication> {
-    const organizationId = communication.organizationId;
-    return await db.transaction(async (tx) => {
+    return await tenantTransaction(async (tx, orgId) => {
       const [result] = await tx.insert(opportunityCommunications).values(communication).returning();
 
       // Update parent opportunity's last activity date to the communication date
@@ -1012,7 +1032,7 @@ export class DatabaseStorage implements IStorage {
           .set({ lastActivityDate: result.communicationDate })
           .where(and(
             eq(salesOpportunities.id, communication.opportunityId),
-            eq(salesOpportunities.organizationId, organizationId)
+            eq(salesOpportunities.organizationId, orgId)
           ));
       }
 
@@ -1021,15 +1041,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateOpportunityCommunication(id: string, communication: Partial<InsertOpportunityCommunication>): Promise<OpportunityCommunication> {
-    const tenantDb = getTenantDb();
-    const organizationId = tenantDb.getOrganizationId();
-    return await db.transaction(async (tx) => {
+    return await tenantTransaction(async (tx, orgId) => {
       const [result] = await tx
         .update(opportunityCommunications)
         .set({ ...communication, updatedAt: new Date() })
         .where(and(
           eq(opportunityCommunications.id, id),
-          eq(opportunityCommunications.organizationId, organizationId)
+          eq(opportunityCommunications.organizationId, orgId)
         ))
         .returning();
 
@@ -1039,7 +1057,7 @@ export class DatabaseStorage implements IStorage {
           .set({ lastActivityDate: result.communicationDate || result.updatedAt })
           .where(and(
             eq(salesOpportunities.id, result.opportunityId),
-            eq(salesOpportunities.organizationId, organizationId)
+            eq(salesOpportunities.organizationId, orgId)
           ));
       }
 
@@ -1048,21 +1066,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteOpportunityCommunication(id: string): Promise<void> {
-    const tenantDb = getTenantDb();
-    const organizationId = tenantDb.getOrganizationId();
-    await db.transaction(async (tx) => {
+    await tenantTransaction(async (tx, orgId) => {
       // Get the opportunity ID before deleting the communication
       const [communication] = await tx.select({ opportunityId: opportunityCommunications.opportunityId })
         .from(opportunityCommunications)
         .where(and(
           eq(opportunityCommunications.id, id),
-          eq(opportunityCommunications.organizationId, organizationId)
+          eq(opportunityCommunications.organizationId, orgId)
         ));
-      
+
       if (communication) {
         await tx.delete(opportunityCommunications).where(and(
           eq(opportunityCommunications.id, id),
-          eq(opportunityCommunications.organizationId, organizationId)
+          eq(opportunityCommunications.organizationId, orgId)
         ));
 
         // Update parent opportunity's last activity date
@@ -1106,21 +1122,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getOpportunityStakeholder(id: string): Promise<OpportunityStakeholder | undefined> {
-    const tenantDb = getTenantDb();
-    const [stakeholder] = await tenantDb.query((db, organizationId) =>
-      db.select()
-        .from(opportunityStakeholders)
-        .where(and(
-          eq(opportunityStakeholders.id, id),
-          eq(opportunityStakeholders.organizationId, organizationId)
-        ))
-    );
+    const organizationId = getOrganizationId();
+    const [stakeholder] = await db.select()
+      .from(opportunityStakeholders)
+      .where(and(
+        eq(opportunityStakeholders.id, id),
+        eq(opportunityStakeholders.organizationId, organizationId)
+      ));
     return stakeholder;
   }
 
   async createOpportunityStakeholder(stakeholder: InsertOpportunityStakeholder & { organizationId: string }): Promise<OpportunityStakeholder> {
-    const organizationId = stakeholder.organizationId;
-    return await db.transaction(async (tx) => {
+    return await tenantTransaction(async (tx, orgId) => {
       const [result] = await tx.insert(opportunityStakeholders).values(stakeholder).returning();
 
       // Update parent opportunity's last activity date
@@ -1129,7 +1142,7 @@ export class DatabaseStorage implements IStorage {
           .set({ lastActivityDate: new Date() })
           .where(and(
             eq(salesOpportunities.id, stakeholder.opportunityId),
-            eq(salesOpportunities.organizationId, organizationId)
+            eq(salesOpportunities.organizationId, orgId)
           ));
       }
 
@@ -1138,15 +1151,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateOpportunityStakeholder(id: string, stakeholder: Partial<InsertOpportunityStakeholder>): Promise<OpportunityStakeholder> {
-    const tenantDb = getTenantDb();
-    const organizationId = tenantDb.getOrganizationId();
-    return await db.transaction(async (tx) => {
+    return await tenantTransaction(async (tx, orgId) => {
       const [result] = await tx
         .update(opportunityStakeholders)
         .set({ ...stakeholder, updatedAt: new Date() })
         .where(and(
           eq(opportunityStakeholders.id, id),
-          eq(opportunityStakeholders.organizationId, organizationId)
+          eq(opportunityStakeholders.organizationId, orgId)
         ))
         .returning();
 
@@ -1156,7 +1167,7 @@ export class DatabaseStorage implements IStorage {
           .set({ lastActivityDate: new Date() })
           .where(and(
             eq(salesOpportunities.id, result.opportunityId),
-            eq(salesOpportunities.organizationId, organizationId)
+            eq(salesOpportunities.organizationId, orgId)
           ));
       }
 
@@ -1165,21 +1176,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteOpportunityStakeholder(id: string): Promise<void> {
-    const tenantDb = getTenantDb();
-    const organizationId = tenantDb.getOrganizationId();
-    await db.transaction(async (tx) => {
+    await tenantTransaction(async (tx, orgId) => {
       // Get the opportunity ID before deleting the stakeholder
       const [stakeholder] = await tx.select({ opportunityId: opportunityStakeholders.opportunityId })
         .from(opportunityStakeholders)
         .where(and(
           eq(opportunityStakeholders.id, id),
-          eq(opportunityStakeholders.organizationId, organizationId)
+          eq(opportunityStakeholders.organizationId, orgId)
         ));
 
       if (stakeholder) {
         await tx.delete(opportunityStakeholders).where(and(
           eq(opportunityStakeholders.id, id),
-          eq(opportunityStakeholders.organizationId, organizationId)
+          eq(opportunityStakeholders.organizationId, orgId)
         ));
 
         // Update parent opportunity's last activity date

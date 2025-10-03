@@ -880,7 +880,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Users routes
   app.get('/api/users', isAuthenticated, async (req, res) => {
     try {
-      const users = await storage.getUsers();
+      const tenantDb = getTenantDb();
+      const organizationId = tenantDb.getOrganizationId();
+      const users = await storage.getUsersForOrganization(organizationId);
       res.json(users);
     } catch (error) {
       console.error("Error fetching users:", error);
@@ -2138,11 +2140,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`📝 Updating opportunity ${req.params.id} with data:`, JSON.stringify(req.body, null, 2));
       const validatedData = insertSalesOpportunitySchema.partial().parse(req.body);
 
-      // Get the current opportunity to track changes
-      const currentOpportunity = await db.select()
-        .from(salesOpportunities)
-        .where(eq(salesOpportunities.id, req.params.id))
-        .limit(1);
+      // Get the current opportunity to track changes (with tenant isolation)
+      const tenantDb = getTenantDb();
+      const currentOpportunity = await tenantDb.query((db, organizationId) =>
+        db.select()
+          .from(salesOpportunities)
+          .where(and(
+            eq(salesOpportunities.id, req.params.id),
+            eq(salesOpportunities.organizationId, organizationId)
+          ))
+          .limit(1)
+      );
 
       if (!currentOpportunity.length) {
         return res.status(404).json({ message: "Opportunity not found" });
@@ -2191,10 +2199,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
             if (!isEnabled) {
               console.log('📋 Automatic project creation is disabled via system configuration');
             } else {
-              // Check if project already exists for this opportunity (idempotency protection)
+              // Check if project already exists for this opportunity (idempotency protection) with tenant isolation
+              const tenantDbInner = getTenantDb();
+              const organizationId = tenantDbInner.getOrganizationId();
+
               const [existingProject] = await db.select()
                 .from(projects)
-                .where(eq(projects.opportunityId, req.params.id))
+                .where(and(
+                  eq(projects.opportunityId, req.params.id),
+                  eq(projects.organizationId, organizationId)
+                ))
                 .limit(1);
 
               if (existingProject) {
@@ -2202,10 +2216,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 return; // Skip creation - project already exists
               }
 
-              // Get the opportunity data first
+              // Get the opportunity data first (with tenant isolation)
               const [opportunity] = await db.select()
                 .from(salesOpportunities)
-                .where(eq(salesOpportunities.id, req.params.id))
+                .where(and(
+                  eq(salesOpportunities.id, req.params.id),
+                  eq(salesOpportunities.organizationId, organizationId)
+                ))
                 .limit(1);
 
               if (!opportunity) {
@@ -2469,20 +2486,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete('/api/opportunities/:id', isAuthenticated, async (req, res) => {
     try {
-      // Get opportunity details before deletion for logging
-      const opportunity = await db.select()
-        .from(salesOpportunities)
-        .where(eq(salesOpportunities.id, req.params.id))
-        .limit(1);
+      // Get opportunity details before deletion for logging (with tenant isolation)
+      const tenantDb = getTenantDb();
+      const opportunity = await tenantDb.query((db, organizationId) =>
+        db.select()
+          .from(salesOpportunities)
+          .where(and(
+            eq(salesOpportunities.id, req.params.id),
+            eq(salesOpportunities.organizationId, organizationId)
+          ))
+          .limit(1)
+      );
 
       if (opportunity.length > 0) {
-        // Log activity history before deletion
-        await logActivityHistory(
-          req.params.id,
-          'opportunity_deleted',
-          `Opportunity "${opportunity[0].title}" was deleted`,
-          getUserId(req)
-        );
+        // Log activity history before deletion (wrapped in try-catch to prevent deletion failure)
+        try {
+          await logActivityHistory(
+            req.params.id,
+            'opportunity_deleted',
+            `Opportunity "${opportunity[0].title}" was deleted`,
+            getUserId(req)
+          );
+        } catch (logError) {
+          console.error("Error logging activity history:", logError);
+          // Continue with deletion even if logging fails
+        }
       }
 
       await storage.deleteSalesOpportunity(req.params.id);
@@ -2608,8 +2636,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete('/api/opportunities/:opportunityId/next-steps/:id', isAuthenticated, async (req, res) => {
     try {
+      console.log('🔍 DELETE next-step - Request params:', req.params);
+      console.log('🔍 DELETE next-step - Tenant context:', (req as any).tenant);
+
       const nextStep = await storage.getOpportunityNextStep(req.params.id);
-      
+
       if (!nextStep) {
         return res.status(404).json({ message: "Next step not found" });
       }
@@ -2619,7 +2650,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Next step not found" });
       }
 
+      console.log('🔍 DELETE next-step - About to call deleteOpportunityNextStep');
       await storage.deleteOpportunityNextStep(req.params.id);
+      console.log('✅ DELETE next-step - Successfully deleted');
 
       // Log activity history
       await logActivityHistory(
@@ -2631,7 +2664,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.status(204).send();
     } catch (error) {
-      console.error("Error deleting next step:", error);
+      console.error("❌ Error deleting next step:", error);
+      console.error("❌ Error stack:", (error as Error).stack);
       res.status(500).json({ message: "Failed to delete next step" });
     }
   });
@@ -2754,7 +2788,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/opportunities/:opportunityId/communications/:id', isAuthenticated, async (req, res) => {
     try {
       const communication = await storage.getOpportunityCommunication(req.params.id);
-      
+
       if (!communication) {
         return res.status(404).json({ message: "Communication not found" });
       }
@@ -2826,6 +2860,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Opportunity File Attachments routes
   app.get('/api/opportunities/:opportunityId/attachments', isAuthenticated, async (req, res) => {
     try {
+      const tenantDb = getTenantDb();
+      const organizationId = tenantDb.getOrganizationId();
+
       const attachments = await db.select({
         id: opportunityFileAttachments.id,
         originalFileName: opportunityFileAttachments.originalFileName,
@@ -2844,7 +2881,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       })
       .from(opportunityFileAttachments)
       .leftJoin(users, eq(opportunityFileAttachments.uploadedBy, users.id))
-      .where(eq(opportunityFileAttachments.opportunityId, req.params.opportunityId))
+      .where(and(
+        eq(opportunityFileAttachments.opportunityId, req.params.opportunityId),
+        eq(opportunityFileAttachments.organizationId, organizationId)
+      ))
       .orderBy(desc(opportunityFileAttachments.uploadedAt));
 
       res.json(attachments);
@@ -2905,11 +2945,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/opportunities/:opportunityId/attachments/:id/download', isAuthenticated, async (req, res) => {
     try {
+      const tenantDb = getTenantDb();
+      const organizationId = tenantDb.getOrganizationId();
+
       const attachment = await db.select()
         .from(opportunityFileAttachments)
         .where(and(
           eq(opportunityFileAttachments.id, req.params.id),
-          eq(opportunityFileAttachments.opportunityId, req.params.opportunityId)
+          eq(opportunityFileAttachments.opportunityId, req.params.opportunityId),
+          eq(opportunityFileAttachments.organizationId, organizationId)
         ))
         .limit(1);
 
@@ -3110,6 +3154,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Opportunity Activity History routes
   app.get('/api/opportunities/:opportunityId/activity-history', isAuthenticated, async (req, res) => {
     try {
+      const tenantDb = getTenantDb();
+      const organizationId = tenantDb.getOrganizationId();
+
       const activityHistory = await db.select({
         id: opportunityActivityHistory.id,
         opportunityId: opportunityActivityHistory.opportunityId,
@@ -3126,7 +3173,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           lastName: users.lastName,
         } : null,
       }).from(opportunityActivityHistory)
-        .where(eq(opportunityActivityHistory.opportunityId, req.params.opportunityId))
+        .where(and(
+          eq(opportunityActivityHistory.opportunityId, req.params.opportunityId),
+          eq(opportunityActivityHistory.organizationId, organizationId)
+        ))
         .leftJoin(users, eq(opportunityActivityHistory.performedBy, users.id))
         .orderBy(desc(opportunityActivityHistory.performedAt));
       res.json(activityHistory);
@@ -3808,14 +3858,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const taskTemplatesList = await storage.getTaskTemplates(templateId);
 
-      // Create project from template
+      // Get organizationId for tenant isolation
+      const tenantDb = getTenantDb();
+      const organizationId = tenantDb.getOrganizationId();
+
+      // Create project from template (with tenant isolation)
       const newProject = await db.insert(projects).values({
         ...validatedData,
         budget: validatedData.budget || template.defaultBudget,
         priority: validatedData.priority || template.defaultPriority,
+        organizationId, // Multi-tenant isolation
       }).returning();
 
-      // Create tasks from templates
+      // Create tasks from templates (with tenant isolation)
       const createdTasks = [];
       for (const taskTemplate of taskTemplatesList) {
         const task = await db.insert(tasks).values({
@@ -3826,6 +3881,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           priority: taskTemplate.priority,
           tags: taskTemplate.tags,
           createdBy: req.user.id,
+          organizationId, // Multi-tenant isolation
         }).returning();
         createdTasks.push(task[0]);
       }
@@ -3907,8 +3963,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: req.user.id,
       });
 
-      // Get project details for activity logging and notifications
-      const project = await db.select().from(projects).where(eq(projects.id, req.params.id)).limit(1);
+      // Get project details for activity logging and notifications (with tenant isolation)
+      const tenantDb = getTenantDb();
+      const project = await tenantDb.query((db, organizationId) =>
+        db.select().from(projects).where(and(
+          eq(projects.id, req.params.id),
+          eq(projects.organizationId, organizationId)
+        )).limit(1)
+      );
 
       // Log activity
       if (project.length) {
@@ -3970,8 +4032,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Project Activity routes
   app.get('/api/projects/:id/activity', isAuthenticated, async (req, res) => {
     try {
+      const tenantDb = getTenantDb();
+      const organizationId = tenantDb.getOrganizationId();
+
       const activities = await db.select().from(projectActivity)
-        .where(eq(projectActivity.projectId, req.params.id))
+        .where(and(
+          eq(projectActivity.projectId, req.params.id),
+          eq(projectActivity.organizationId, organizationId)
+        ))
         .orderBy(desc(projectActivity.createdAt))
         .limit(50);
       res.json(activities);
@@ -4055,9 +4123,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/users/:id/capacity', isAuthenticated, requireRole(['admin', 'manager']), async (req, res) => {
     try {
+      const tenantDb = getTenantDb();
+      const organizationId = tenantDb.getOrganizationId();
+
       const validatedData = insertUserCapacitySchema.parse({
         ...req.body,
         userId: req.params.id,
+        organizationId, // Multi-tenant isolation
       });
       const capacity = await db.insert(userCapacity).values(validatedData).returning();
       res.status(201).json(capacity[0]);
@@ -4084,9 +4156,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/users/:id/availability', isAuthenticated, async (req, res) => {
     try {
+      const tenantDb = getTenantDb();
+      const organizationId = tenantDb.getOrganizationId();
+
       const validatedData = insertUserAvailabilitySchema.parse({
         ...req.body,
         userId: req.params.id,
+        organizationId, // Multi-tenant isolation
         approvedBy: req.user.role === 'admin' || req.user.role === 'manager' ? req.user.id : null,
         approvedAt: req.user.role === 'admin' || req.user.role === 'manager' ? new Date() : null,
       });
@@ -4115,9 +4191,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/users/:id/skills', isAuthenticated, async (req, res) => {
     try {
+      const tenantDb = getTenantDb();
+      const organizationId = tenantDb.getOrganizationId();
+
       const validatedData = insertUserSkillsSchema.parse({
         ...req.body,
         userId: req.params.id,
+        organizationId, // Multi-tenant isolation
       });
       const skill = await db.insert(userSkills).values(validatedData).returning();
       res.status(201).json(skill[0]);
@@ -4343,14 +4423,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Budget Summary
   app.get('/api/budget/summary', isAuthenticated, async (req, res) => {
     try {
-      // Get all projects
-      const allProjects = await db.select().from(projects);
-      
-      // Get all project budgets
-      const allBudgets = await db.select().from(projectBudgets);
-      
-      // Get all invoices for revenue calculation
-      const allInvoices = await db.select().from(invoices);
+      const tenantDb = getTenantDb();
+      const organizationId = tenantDb.getOrganizationId();
+
+      // Get all projects (with tenant isolation)
+      const allProjects = await db.select().from(projects)
+        .where(eq(projects.organizationId, organizationId));
+
+      // Get all project budgets (with tenant isolation)
+      const allBudgets = await db.select().from(projectBudgets)
+        .where(eq(projectBudgets.organizationId, organizationId));
+
+      // Get all invoices for revenue calculation (with tenant isolation)
+      const allInvoices = await db.select().from(invoices)
+        .where(eq(invoices.organizationId, organizationId));
       
       // Calculate budget summary
       const totalBudget = allBudgets.reduce((sum, budget) => {

@@ -176,8 +176,9 @@ export const resolveTenant: RequestHandler = async (req: any, res, next) => {
     // Attach to request for convenience
     req.tenant = context;
 
-    // Store context in AsyncLocalStorage AND continue with next()
-    // The context will be available for synchronous access in the same tick
+    // CRITICAL FIX: Run the rest of the request handling within tenant context
+    // AsyncLocalStorage.run() automatically propagates context through ALL async operations
+    // initiated within the callback, including those started by calling next()
     tenantStorage.run(context, () => {
       next();
     });

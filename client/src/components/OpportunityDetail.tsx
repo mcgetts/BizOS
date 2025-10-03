@@ -172,6 +172,14 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
       queryClient.invalidateQueries({
         queryKey: [`/api/opportunities/${opportunity.id}/next-steps`]
       });
+      alert('Next step deleted successfully!');
+    },
+    onError: (error: any) => {
+      console.error('Failed to delete next step:', error);
+      const errorMessage = error?.message ||
+        error?.response?.data?.message ||
+        'Failed to delete next step. Please try again.';
+      alert(errorMessage);
     },
   });
 
@@ -181,6 +189,14 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
       queryClient.invalidateQueries({
         queryKey: [`/api/opportunities/${opportunity.id}/communications`]
       });
+      alert('Communication deleted successfully!');
+    },
+    onError: (error: any) => {
+      console.error('Failed to delete communication:', error);
+      const errorMessage = error?.message ||
+        error?.response?.data?.message ||
+        'Failed to delete communication. Please try again.';
+      alert(errorMessage);
     },
   });
 
@@ -190,6 +206,14 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
       queryClient.invalidateQueries({
         queryKey: [`/api/opportunities/${opportunity.id}/stakeholders`]
       });
+      alert('Stakeholder deleted successfully!');
+    },
+    onError: (error: any) => {
+      console.error('Failed to delete stakeholder:', error);
+      const errorMessage = error?.message ||
+        error?.response?.data?.message ||
+        'Failed to delete stakeholder. Please try again.';
+      alert(errorMessage);
     },
   });
 
