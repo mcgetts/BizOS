@@ -165,6 +165,13 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
   });
   const activityHistory = Array.isArray(activityHistoryData) ? activityHistoryData : [];
 
+  // Fetch products linked to this opportunity
+  const { data: productsData = [] } = useQuery({
+    queryKey: [`/api/opportunities/${opportunity.id}/products`],
+    enabled: isOpen,
+  });
+  const products = Array.isArray(productsData) ? productsData : [];
+
   // Create mutations for deletions
   const deleteNextStepMutation = useMutation({
     mutationFn: (id: string) => apiRequest("DELETE", `/api/opportunities/${opportunity.id}/next-steps/${id}`),
@@ -578,7 +585,7 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="next-steps">
               Next Steps
@@ -601,6 +608,10 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
               <Badge variant="secondary" className="ml-1">{activityHistory.length}</Badge>
             </TabsTrigger>
             <TabsTrigger value="strategy">Strategy</TabsTrigger>
+            <TabsTrigger value="products">
+              Products
+              <Badge variant="secondary" className="ml-1">{products.length}</Badge>
+            </TabsTrigger>
           </TabsList>
 
           <div className="mt-4 overflow-y-auto flex-1 min-h-0">
@@ -2051,6 +2062,52 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
                     )}
                   </CardContent>
                 </Card>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="products" className="space-y-4">
+              <div className="space-y-4">
+                {products.length > 0 ? (
+                  products.map((product: any) => (
+                    <Card key={product.id} data-testid={`product-card-${product.id}`}>
+                      <CardContent className="pt-6">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-lg" data-testid={`product-name-${product.id}`}>
+                              {product.name}
+                            </h4>
+                            {product.description && (
+                              <p className="text-sm text-gray-600 mt-1" data-testid={`product-description-${product.id}`}>
+                                {product.description}
+                              </p>
+                            )}
+                            <div className="mt-3 flex items-center gap-4 text-sm text-gray-600">
+                              {product.status && (
+                                <Badge variant="secondary" data-testid={`product-status-${product.id}`}>
+                                  {product.status}
+                                </Badge>
+                              )}
+                              {product.version && (
+                                <span data-testid={`product-version-${product.id}`}>
+                                  Version: {product.version}
+                                </span>
+                              )}
+                              {product.owner && (
+                                <span data-testid={`product-owner-${product.id}`}>
+                                  Owner: {product.owner}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-gray-500" data-testid="no-products-message">
+                    No products linked to this opportunity yet.
+                  </div>
+                )}
               </div>
             </TabsContent>
           </div>
