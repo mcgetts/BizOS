@@ -7153,6 +7153,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Integration Routes - Connect Product Management with CRM, Projects, and Tasks
+  
+  // Get products for an opportunity
+  app.get('/api/opportunities/:id/products', isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const products = await storage.getProductsByOpportunity(req.params.id);
+      res.json(products);
+    } catch (error: any) {
+      console.error('Error fetching products for opportunity:', error);
+      res.status(500).json({
+        message: 'Failed to fetch products for opportunity',
+        error: error.message,
+      });
+    }
+  });
+
+  // Get projects for a product
+  app.get('/api/products/:id/projects', isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const projects = await storage.getProjectsByProduct(req.params.id);
+      res.json(projects);
+    } catch (error: any) {
+      console.error('Error fetching projects for product:', error);
+      res.status(500).json({
+        message: 'Failed to fetch projects for product',
+        error: error.message,
+      });
+    }
+  });
+
+  // Get user stories for a task
+  app.get('/api/tasks/:id/stories', isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const stories = await storage.getUserStoriesByTask(req.params.id);
+      res.json(stories);
+    } catch (error: any) {
+      console.error('Error fetching user stories for task:', error);
+      res.status(500).json({
+        message: 'Failed to fetch user stories for task',
+        error: error.message,
+      });
+    }
+  });
+
   // API 404 handler - catch any unmatched /api routes before SPA fallback
   app.use('/api/*', (req, res) => {
     res.status(404).json({ message: 'API endpoint not found' });
