@@ -24,6 +24,7 @@ import {
   ChevronDown,
   ChevronRight,
   Crown,
+  Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -63,6 +64,11 @@ const navigationGroups = [
   {
     title: "DELIVERY",
     items: [
+      {
+        title: "Products",
+        href: "/product",
+        icon: Layers,
+      },
       {
         title: "Projects",
         href: "/projects",

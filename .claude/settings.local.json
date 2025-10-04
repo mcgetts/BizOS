@@ -74,7 +74,8 @@
       "Bash(do echo \"=== $method ===\")",
       "Bash(done)",
       "Bash(/tmp/route_analysis.sh:*)",
-      "Bash(timeout 20 npm run dev)"
+      "Bash(timeout 20 npm run dev)",
+      "Bash(timeout:*)"
     ],
     "deny": [],
     "ask": []

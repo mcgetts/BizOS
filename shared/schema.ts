@@ -138,6 +138,7 @@ export const projects = pgTable("projects", {
   companyId: varchar("company_id").references(() => companies.id),
   clientId: varchar("client_id").references(() => clients.id), // Secondary link to primary contact
   opportunityId: varchar("opportunity_id").references(() => salesOpportunities.id).unique(), // Link to the originating opportunity (unique to prevent duplicate projects)
+  productId: varchar("product_id"), // Link to product management (foreign key to products table in productSchema.ts)
   managerId: varchar("manager_id").references(() => users.id),
   status: varchar("status").default("planning").$type<ProjectStatus>(),
   priority: varchar("priority").default("medium").$type<Priority>(),
@@ -2461,3 +2462,10 @@ export type ResourceAllocationWithDetails = ResourceAllocation & {
   project: Project;
   task?: Task;
 };
+
+// ====================================
+// PRODUCT MANAGEMENT MODULE
+// ====================================
+
+// Re-export all Product Management tables and types
+export * from './productSchema';

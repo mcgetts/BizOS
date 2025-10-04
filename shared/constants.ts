@@ -249,3 +249,217 @@ export const COMPANY_SIZE_OPTIONS = Object.entries(COMPANY_SIZE_LABELS).map(([va
   value,
   label
 }));
+
+// ============================================
+// PRODUCT MANAGEMENT CONSTANTS
+// ============================================
+
+// Product Types
+export const PRODUCT_TYPES = {
+  INTERNAL: 'internal',
+  CLIENT: 'client',
+  SAAS: 'saas'
+} as const;
+
+export type ProductType = typeof PRODUCT_TYPES[keyof typeof PRODUCT_TYPES];
+
+export const PRODUCT_TYPE_LABELS: Record<ProductType, string> = {
+  [PRODUCT_TYPES.INTERNAL]: 'Internal',
+  [PRODUCT_TYPES.CLIENT]: 'Client',
+  [PRODUCT_TYPES.SAAS]: 'SaaS'
+};
+
+// Product Status
+export const PRODUCT_STATUSES = {
+  DISCOVERY: 'discovery',
+  DEVELOPMENT: 'development',
+  LAUNCHED: 'launched',
+  MAINTENANCE: 'maintenance',
+  SUNSET: 'sunset'
+} as const;
+
+export type ProductStatus = typeof PRODUCT_STATUSES[keyof typeof PRODUCT_STATUSES];
+
+export const PRODUCT_STATUS_LABELS: Record<ProductStatus, string> = {
+  [PRODUCT_STATUSES.DISCOVERY]: 'Discovery',
+  [PRODUCT_STATUSES.DEVELOPMENT]: 'Development',
+  [PRODUCT_STATUSES.LAUNCHED]: 'Launched',
+  [PRODUCT_STATUSES.MAINTENANCE]: 'Maintenance',
+  [PRODUCT_STATUSES.SUNSET]: 'Sunset'
+};
+
+export const PRODUCT_STATUS_COLORS: Record<ProductStatus, string> = {
+  [PRODUCT_STATUSES.DISCOVERY]: 'bg-purple-100 text-purple-800',
+  [PRODUCT_STATUSES.DEVELOPMENT]: 'bg-blue-100 text-blue-800',
+  [PRODUCT_STATUSES.LAUNCHED]: 'bg-green-100 text-green-800',
+  [PRODUCT_STATUSES.MAINTENANCE]: 'bg-yellow-100 text-yellow-800',
+  [PRODUCT_STATUSES.SUNSET]: 'bg-gray-100 text-gray-800'
+};
+
+// Epic Status
+export const EPIC_STATUSES = {
+  PLANNED: 'planned',
+  IN_PROGRESS: 'in_progress',
+  COMPLETED: 'completed',
+  CANCELLED: 'cancelled'
+} as const;
+
+export type EpicStatus = typeof EPIC_STATUSES[keyof typeof EPIC_STATUSES];
+
+export const EPIC_STATUS_LABELS: Record<EpicStatus, string> = {
+  [EPIC_STATUSES.PLANNED]: 'Planned',
+  [EPIC_STATUSES.IN_PROGRESS]: 'In Progress',
+  [EPIC_STATUSES.COMPLETED]: 'Completed',
+  [EPIC_STATUSES.CANCELLED]: 'Cancelled'
+};
+
+export const EPIC_STATUS_COLORS: Record<EpicStatus, string> = {
+  [EPIC_STATUSES.PLANNED]: 'bg-gray-100 text-gray-800',
+  [EPIC_STATUSES.IN_PROGRESS]: 'bg-blue-100 text-blue-800',
+  [EPIC_STATUSES.COMPLETED]: 'bg-green-100 text-green-800',
+  [EPIC_STATUSES.CANCELLED]: 'bg-red-100 text-red-800'
+};
+
+// Feature Status
+export const FEATURE_STATUSES = {
+  BACKLOG: 'backlog',
+  PLANNED: 'planned',
+  IN_PROGRESS: 'in_progress',
+  IN_REVIEW: 'in_review',
+  COMPLETED: 'completed',
+  CANCELLED: 'cancelled'
+} as const;
+
+export type FeatureStatus = typeof FEATURE_STATUSES[keyof typeof FEATURE_STATUSES];
+
+export const FEATURE_STATUS_LABELS: Record<FeatureStatus, string> = {
+  [FEATURE_STATUSES.BACKLOG]: 'Backlog',
+  [FEATURE_STATUSES.PLANNED]: 'Planned',
+  [FEATURE_STATUSES.IN_PROGRESS]: 'In Progress',
+  [FEATURE_STATUSES.IN_REVIEW]: 'In Review',
+  [FEATURE_STATUSES.COMPLETED]: 'Completed',
+  [FEATURE_STATUSES.CANCELLED]: 'Cancelled'
+};
+
+export const FEATURE_STATUS_COLORS: Record<FeatureStatus, string> = {
+  [FEATURE_STATUSES.BACKLOG]: 'bg-gray-100 text-gray-800',
+  [FEATURE_STATUSES.PLANNED]: 'bg-purple-100 text-purple-800',
+  [FEATURE_STATUSES.IN_PROGRESS]: 'bg-blue-100 text-blue-800',
+  [FEATURE_STATUSES.IN_REVIEW]: 'bg-yellow-100 text-yellow-800',
+  [FEATURE_STATUSES.COMPLETED]: 'bg-green-100 text-green-800',
+  [FEATURE_STATUSES.CANCELLED]: 'bg-red-100 text-red-800'
+};
+
+// Confidence Levels
+export const CONFIDENCE_LEVELS = {
+  LOW: 'low',
+  MEDIUM: 'medium',
+  HIGH: 'high'
+} as const;
+
+export type ConfidenceLevel = typeof CONFIDENCE_LEVELS[keyof typeof CONFIDENCE_LEVELS];
+
+export const CONFIDENCE_LABELS: Record<ConfidenceLevel, string> = {
+  [CONFIDENCE_LEVELS.LOW]: 'Low',
+  [CONFIDENCE_LEVELS.MEDIUM]: 'Medium',
+  [CONFIDENCE_LEVELS.HIGH]: 'High'
+};
+
+export const CONFIDENCE_COLORS: Record<ConfidenceLevel, string> = {
+  [CONFIDENCE_LEVELS.LOW]: 'bg-red-100 text-red-800',
+  [CONFIDENCE_LEVELS.MEDIUM]: 'bg-yellow-100 text-yellow-800',
+  [CONFIDENCE_LEVELS.HIGH]: 'bg-green-100 text-green-800'
+};
+
+// Risk Levels
+export const RISK_LEVELS = {
+  LOW: 'low',
+  MEDIUM: 'medium',
+  HIGH: 'high'
+} as const;
+
+export type RiskLevel = typeof RISK_LEVELS[keyof typeof RISK_LEVELS];
+
+export const RISK_LABELS: Record<RiskLevel, string> = {
+  [RISK_LEVELS.LOW]: 'Low',
+  [RISK_LEVELS.MEDIUM]: 'Medium',
+  [RISK_LEVELS.HIGH]: 'High'
+};
+
+export const RISK_COLORS: Record<RiskLevel, string> = {
+  [RISK_LEVELS.LOW]: 'bg-green-100 text-green-800',
+  [RISK_LEVELS.MEDIUM]: 'bg-yellow-100 text-yellow-800',
+  [RISK_LEVELS.HIGH]: 'bg-red-100 text-red-800'
+};
+
+// Helper functions for Product Management
+export const getProductStatusLabel = (status: ProductStatus | string): string => {
+  return PRODUCT_STATUS_LABELS[status as ProductStatus] || status;
+};
+
+export const getProductStatusColor = (status: ProductStatus | string): string => {
+  return PRODUCT_STATUS_COLORS[status as ProductStatus] || 'bg-gray-100 text-gray-800';
+};
+
+export const getEpicStatusLabel = (status: EpicStatus | string): string => {
+  return EPIC_STATUS_LABELS[status as EpicStatus] || status;
+};
+
+export const getEpicStatusColor = (status: EpicStatus | string): string => {
+  return EPIC_STATUS_COLORS[status as EpicStatus] || 'bg-gray-100 text-gray-800';
+};
+
+export const getFeatureStatusLabel = (status: FeatureStatus | string): string => {
+  return FEATURE_STATUS_LABELS[status as FeatureStatus] || status;
+};
+
+export const getFeatureStatusColor = (status: FeatureStatus | string): string => {
+  return FEATURE_STATUS_COLORS[status as FeatureStatus] || 'bg-gray-100 text-gray-800';
+};
+
+export const getConfidenceLabel = (level: ConfidenceLevel | string): string => {
+  return CONFIDENCE_LABELS[level as ConfidenceLevel] || level;
+};
+
+export const getConfidenceColor = (level: ConfidenceLevel | string): string => {
+  return CONFIDENCE_COLORS[level as ConfidenceLevel] || 'bg-gray-100 text-gray-800';
+};
+
+export const getRiskLabel = (level: RiskLevel | string): string => {
+  return RISK_LABELS[level as RiskLevel] || level;
+};
+
+export const getRiskColor = (level: RiskLevel | string): string => {
+  return RISK_COLORS[level as RiskLevel] || 'bg-gray-100 text-gray-800';
+};
+
+// Dropdown options for Product Management
+export const PRODUCT_TYPE_OPTIONS = Object.entries(PRODUCT_TYPE_LABELS).map(([value, label]) => ({
+  value,
+  label
+}));
+
+export const PRODUCT_STATUS_OPTIONS = Object.entries(PRODUCT_STATUS_LABELS).map(([value, label]) => ({
+  value,
+  label
+}));
+
+export const EPIC_STATUS_OPTIONS = Object.entries(EPIC_STATUS_LABELS).map(([value, label]) => ({
+  value,
+  label
+}));
+
+export const FEATURE_STATUS_OPTIONS = Object.entries(FEATURE_STATUS_LABELS).map(([value, label]) => ({
+  value,
+  label
+}));
+
+export const CONFIDENCE_OPTIONS = Object.entries(CONFIDENCE_LABELS).map(([value, label]) => ({
+  value,
+  label
+}));
+
+export const RISK_OPTIONS = Object.entries(RISK_LABELS).map(([value, label]) => ({
+  value,
+  label
+}));

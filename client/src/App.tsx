@@ -28,6 +28,10 @@ import OrganizationAdmin from "@/pages/OrganizationAdmin";
 import Resources from "@/pages/Resources";
 import TimeTracking from "@/pages/TimeTracking";
 import BudgetManagement from "@/pages/BudgetManagement";
+import ProductHub from "@/pages/ProductHub";
+import ProductDetail from "@/pages/ProductDetail";
+import SprintBoard from "@/pages/SprintBoard";
+import SprintOverview from "@/pages/SprintOverview";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -58,6 +62,10 @@ function Router() {
           {/* Legacy dashboard route - redirect to executive for admins, home for others */}
           <Route path="/dashboard">{() => { window.location.replace('/executive'); return null; }}</Route>
           <Route path="/sales" component={Clients} />
+          <Route path="/product" component={ProductHub} />
+          <Route path="/product/:productId/sprint-overview" component={SprintOverview} />
+          <Route path="/product/:productId/sprints" component={SprintBoard} />
+          <Route path="/product/:id" component={ProductDetail} />
           <Route path="/projects" component={Projects} />
           <Route path="/tasks" component={Tasks} />
           {/* Legacy routes - redirect to new consolidated pages */}

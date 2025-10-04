@@ -101,6 +101,25 @@ import {
   // Access control schemas
   accessControlDomainsSchema,
   createInvitationSchema,
+  // Product Management
+  products,
+  epics,
+  features,
+  userStories,
+  sprints,
+  releases,
+  productBacklog,
+  roadmapItems,
+  insertProductSchema,
+  updateProductSchema,
+  insertEpicSchema,
+  updateEpicSchema,
+  insertFeatureSchema,
+  updateFeatureSchema,
+  insertUserStorySchema,
+  updateUserStorySchema,
+  insertSprintSchema,
+  updateSprintSchema,
 } from "@shared/schema";
 import {
   calculateUserWorkload,
@@ -6290,6 +6309,847 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error removing organization member:', error);
       res.status(500).json({ message: 'Failed to remove organization member' });
+    }
+  });
+
+  // ====================================
+  // PRODUCT MANAGEMENT API ENDPOINTS
+  // ====================================
+
+  // DEBUG endpoint - get all products without tenant filtering
+  app.get('/api/products/debug/all', isAuthenticated, async (req: any, res) => {
+    try {
+      const allProducts = await db.select().from(products);
+      res.json({
+        total: allProducts.length,
+        reqOrgId: req.organizationId,
+        userDefaultOrgId: req.user?.defaultOrganizationId,
+        products: allProducts.map(p => ({
+          id: p.id,
+          name: p.name,
+          orgId: p.organizationId
+        }))
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Products - CRUD operations
+  app.get('/api/products', isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const tenantDb = getTenantDb();
+      const organizationId = req.organizationId;
+
+      console.log('[GET /api/products] organizationId:', organizationId);
+      console.log('[GET /api/products] user:', req.user?.id);
+
+      const productsList = await tenantDb
+        .select()
+        .from(products)
+        .where(eq(products.organizationId, organizationId))
+        .orderBy(desc(products.createdAt));
+
+      console.log('[GET /api/products] Found products:', productsList.length);
+      console.log('[GET /api/products] Products:', productsList.map(p => ({ id: p.id, name: p.name, org: p.organizationId })));
+
+      res.json(productsList);
+    } catch (error: any) {
+      console.error('Error fetching products:', error);
+      res.status(500).json({
+        message: 'Failed to fetch products',
+        error: error.message,
+      });
+    }
+  });
+
+  app.get('/api/products/:id', isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const tenantDb = getTenantDb();
+      const organizationId = req.organizationId;
+
+      const product = await tenantDb
+        .select()
+        .from(products)
+        .where(
+          and(
+            eq(products.id, req.params.id),
+            eq(products.organizationId, organizationId)
+          )
+        )
+        .limit(1);
+
+      if (!product.length) {
+        return res.status(404).json({ message: 'Product not found' });
+      }
+
+      res.json(product[0]);
+    } catch (error: any) {
+      console.error('Error fetching product:', error);
+      res.status(500).json({
+        message: 'Failed to fetch product',
+        error: error.message,
+      });
+    }
+  });
+
+  app.post('/api/products', isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const tenantDb = getTenantDb();
+      const organizationId = req.organizationId;
+
+      const validatedData = insertProductSchema.parse({
+        ...req.body,
+        organizationId,
+      });
+
+      const newProduct = await tenantDb
+        .insert(products)
+        .values(validatedData)
+        .returning();
+
+      res.status(201).json(newProduct[0]);
+    } catch (error: any) {
+      console.error('Error creating product:', error);
+
+      // Handle Zod validation errors
+      if (error.name === 'ZodError') {
+        return res.status(400).json({
+          message: 'Validation error',
+          errors: error.errors,
+        });
+      }
+
+      res.status(400).json({
+        message: 'Failed to create product',
+        error: error.message,
+      });
+    }
+  });
+
+  app.patch('/api/products/:id', isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const tenantDb = getTenantDb();
+      const organizationId = req.organizationId;
+
+      const validatedData = updateProductSchema.parse(req.body);
+
+      const updatedProduct = await tenantDb
+        .update(products)
+        .set({ ...validatedData, updatedAt: new Date() })
+        .where(
+          and(
+            eq(products.id, req.params.id),
+            eq(products.organizationId, organizationId)
+          )
+        )
+        .returning();
+
+      if (!updatedProduct.length) {
+        return res.status(404).json({ message: 'Product not found' });
+      }
+
+      res.json(updatedProduct[0]);
+    } catch (error: any) {
+      console.error('Error updating product:', error);
+
+      if (error.name === 'ZodError') {
+        return res.status(400).json({
+          message: 'Validation error',
+          errors: error.errors,
+        });
+      }
+
+      res.status(400).json({
+        message: 'Failed to update product',
+        error: error.message,
+      });
+    }
+  });
+
+  app.delete('/api/products/:id', isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const tenantDb = getTenantDb();
+      const organizationId = req.organizationId;
+
+      const deletedProduct = await tenantDb
+        .delete(products)
+        .where(
+          and(
+            eq(products.id, req.params.id),
+            eq(products.organizationId, organizationId)
+          )
+        )
+        .returning();
+
+      if (!deletedProduct.length) {
+        return res.status(404).json({ message: 'Product not found' });
+      }
+
+      res.json({ message: 'Product deleted successfully' });
+    } catch (error: any) {
+      console.error('Error deleting product:', error);
+      res.status(500).json({
+        message: 'Failed to delete product',
+        error: error.message,
+      });
+    }
+  });
+
+  // Epics - CRUD operations
+  app.get('/api/products/:productId/epics', isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const tenantDb = getTenantDb();
+      const organizationId = req.organizationId;
+
+      const epicsList = await tenantDb
+        .select()
+        .from(epics)
+        .where(
+          and(
+            eq(epics.productId, req.params.productId),
+            eq(epics.organizationId, organizationId)
+          )
+        )
+        .orderBy(desc(epics.createdAt));
+
+      res.json(epicsList);
+    } catch (error: any) {
+      console.error('Error fetching epics:', error);
+      res.status(500).json({
+        message: 'Failed to fetch epics',
+        error: error.message,
+      });
+    }
+  });
+
+  app.get('/api/epics/:id', isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const tenantDb = getTenantDb();
+      const organizationId = req.organizationId;
+
+      const epic = await tenantDb
+        .select()
+        .from(epics)
+        .where(
+          and(
+            eq(epics.id, req.params.id),
+            eq(epics.organizationId, organizationId)
+          )
+        )
+        .limit(1);
+
+      if (!epic.length) {
+        return res.status(404).json({ message: 'Epic not found' });
+      }
+
+      res.json(epic[0]);
+    } catch (error: any) {
+      console.error('Error fetching epic:', error);
+      res.status(500).json({
+        message: 'Failed to fetch epic',
+        error: error.message,
+      });
+    }
+  });
+
+  app.post('/api/epics', isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const tenantDb = getTenantDb();
+      const organizationId = req.organizationId;
+
+      const validatedData = insertEpicSchema.parse({
+        ...req.body,
+        organizationId,
+      });
+
+      const newEpic = await tenantDb
+        .insert(epics)
+        .values(validatedData)
+        .returning();
+
+      res.status(201).json(newEpic[0]);
+    } catch (error: any) {
+      console.error('Error creating epic:', error);
+
+      if (error.name === 'ZodError') {
+        return res.status(400).json({
+          message: 'Validation error',
+          errors: error.errors,
+        });
+      }
+
+      res.status(400).json({
+        message: 'Failed to create epic',
+        error: error.message,
+      });
+    }
+  });
+
+  app.patch('/api/epics/:id', isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const tenantDb = getTenantDb();
+      const organizationId = req.organizationId;
+
+      const validatedData = updateEpicSchema.parse(req.body);
+
+      const updatedEpic = await tenantDb
+        .update(epics)
+        .set({ ...validatedData, updatedAt: new Date() })
+        .where(
+          and(
+            eq(epics.id, req.params.id),
+            eq(epics.organizationId, organizationId)
+          )
+        )
+        .returning();
+
+      if (!updatedEpic.length) {
+        return res.status(404).json({ message: 'Epic not found' });
+      }
+
+      res.json(updatedEpic[0]);
+    } catch (error: any) {
+      console.error('Error updating epic:', error);
+
+      // Handle Zod validation errors
+      if (error.name === 'ZodError') {
+        return res.status(400).json({
+          message: 'Validation error',
+          errors: error.errors,
+        });
+      }
+
+      res.status(400).json({
+        message: 'Failed to update epic',
+        error: error.message,
+      });
+    }
+  });
+
+  app.delete('/api/epics/:id', isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const tenantDb = getTenantDb();
+      const organizationId = req.organizationId;
+
+      const deletedEpic = await tenantDb
+        .delete(epics)
+        .where(
+          and(
+            eq(epics.id, req.params.id),
+            eq(epics.organizationId, organizationId)
+          )
+        )
+        .returning();
+
+      if (!deletedEpic.length) {
+        return res.status(404).json({ message: 'Epic not found' });
+      }
+
+      res.json({ message: 'Epic deleted successfully' });
+    } catch (error: any) {
+      console.error('Error deleting epic:', error);
+      res.status(500).json({
+        message: 'Failed to delete epic',
+        error: error.message,
+      });
+    }
+  });
+
+  // Features - CRUD operations
+  app.get('/api/epics/:epicId/features', isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const tenantDb = getTenantDb();
+      const organizationId = req.organizationId;
+
+      const featuresList = await tenantDb
+        .select()
+        .from(features)
+        .where(
+          and(
+            eq(features.epicId, req.params.epicId),
+            eq(features.organizationId, organizationId)
+          )
+        )
+        .orderBy(desc(features.createdAt));
+
+      res.json(featuresList);
+    } catch (error: any) {
+      console.error('Error fetching features:', error);
+      res.status(500).json({
+        message: 'Failed to fetch features',
+        error: error.message,
+      });
+    }
+  });
+
+  app.get('/api/features/:id', isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const tenantDb = getTenantDb();
+      const organizationId = req.organizationId;
+
+      const feature = await tenantDb
+        .select()
+        .from(features)
+        .where(
+          and(
+            eq(features.id, req.params.id),
+            eq(features.organizationId, organizationId)
+          )
+        )
+        .limit(1);
+
+      if (!feature.length) {
+        return res.status(404).json({ message: 'Feature not found' });
+      }
+
+      res.json(feature[0]);
+    } catch (error: any) {
+      console.error('Error fetching feature:', error);
+      res.status(500).json({
+        message: 'Failed to fetch feature',
+        error: error.message,
+      });
+    }
+  });
+
+  app.post('/api/features', isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const tenantDb = getTenantDb();
+      const organizationId = req.organizationId;
+
+      const validatedData = insertFeatureSchema.parse({
+        ...req.body,
+        organizationId,
+      });
+
+      const newFeature = await tenantDb
+        .insert(features)
+        .values(validatedData)
+        .returning();
+
+      res.status(201).json(newFeature[0]);
+    } catch (error: any) {
+      console.error('Error creating feature:', error);
+
+      // Handle Zod validation errors
+      if (error.name === 'ZodError') {
+        return res.status(400).json({
+          message: 'Validation error',
+          errors: error.errors,
+        });
+      }
+
+      res.status(400).json({
+        message: 'Failed to create feature',
+        error: error.message,
+      });
+    }
+  });
+
+  app.patch('/api/features/:id', isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const tenantDb = getTenantDb();
+      const organizationId = req.organizationId;
+
+      const validatedData = updateFeatureSchema.parse(req.body);
+
+      const updatedFeature = await tenantDb
+        .update(features)
+        .set({ ...validatedData, updatedAt: new Date() })
+        .where(
+          and(
+            eq(features.id, req.params.id),
+            eq(features.organizationId, organizationId)
+          )
+        )
+        .returning();
+
+      if (!updatedFeature.length) {
+        return res.status(404).json({ message: 'Feature not found' });
+      }
+
+      res.json(updatedFeature[0]);
+    } catch (error: any) {
+      console.error('Error updating feature:', error);
+
+      // Handle Zod validation errors
+      if (error.name === 'ZodError') {
+        return res.status(400).json({
+          message: 'Validation error',
+          errors: error.errors,
+        });
+      }
+
+      res.status(400).json({
+        message: 'Failed to update feature',
+        error: error.message,
+      });
+    }
+  });
+
+  app.delete('/api/features/:id', isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const tenantDb = getTenantDb();
+      const organizationId = req.organizationId;
+
+      const deletedFeature = await tenantDb
+        .delete(features)
+        .where(
+          and(
+            eq(features.id, req.params.id),
+            eq(features.organizationId, organizationId)
+          )
+        )
+        .returning();
+
+      if (!deletedFeature.length) {
+        return res.status(404).json({ message: 'Feature not found' });
+      }
+
+      res.json({ message: 'Feature deleted successfully' });
+    } catch (error: any) {
+      console.error('Error deleting feature:', error);
+      res.status(500).json({
+        message: 'Failed to delete feature',
+        error: error.message,
+      });
+    }
+  });
+
+  // User Stories - CRUD operations
+  app.get('/api/features/:featureId/stories', isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const tenantDb = getTenantDb();
+      const organizationId = req.organizationId;
+
+      const stories = await tenantDb
+        .select()
+        .from(userStories)
+        .where(
+          and(
+            eq(userStories.featureId, req.params.featureId),
+            eq(userStories.organizationId, organizationId)
+          )
+        )
+        .orderBy(desc(userStories.createdAt));
+
+      res.json(stories);
+    } catch (error: any) {
+      console.error('Error fetching user stories:', error);
+      res.status(500).json({
+        message: 'Failed to fetch user stories',
+        error: error.message,
+      });
+    }
+  });
+
+  app.get('/api/stories/:id', isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const tenantDb = getTenantDb();
+      const organizationId = req.organizationId;
+
+      const story = await tenantDb
+        .select()
+        .from(userStories)
+        .where(
+          and(
+            eq(userStories.id, req.params.id),
+            eq(userStories.organizationId, organizationId)
+          )
+        );
+
+      if (!story.length) {
+        return res.status(404).json({ message: 'User story not found' });
+      }
+
+      res.json(story[0]);
+    } catch (error: any) {
+      console.error('Error fetching user story:', error);
+      res.status(500).json({
+        message: 'Failed to fetch user story',
+        error: error.message,
+      });
+    }
+  });
+
+  app.post('/api/stories', isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const tenantDb = getTenantDb();
+      const organizationId = req.organizationId;
+
+      const validatedData = insertUserStorySchema.parse({
+        ...req.body,
+        organizationId,
+        createdBy: req.user.id,
+      });
+
+      const [newStory] = await tenantDb
+        .insert(userStories)
+        .values(validatedData)
+        .returning();
+
+      res.status(201).json(newStory);
+    } catch (error: any) {
+      console.error('Error creating user story:', error);
+      if (error.name === 'ZodError') {
+        return res.status(400).json({
+          message: 'Validation error',
+          errors: error.errors,
+        });
+      }
+      res.status(500).json({
+        message: 'Failed to create user story',
+        error: error.message,
+      });
+    }
+  });
+
+  app.patch('/api/stories/:id', isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const tenantDb = getTenantDb();
+      const organizationId = req.organizationId;
+
+      const validatedData = updateUserStorySchema.parse(req.body);
+
+      const [updatedStory] = await tenantDb
+        .update(userStories)
+        .set({ ...validatedData, updatedAt: new Date() })
+        .where(
+          and(
+            eq(userStories.id, req.params.id),
+            eq(userStories.organizationId, organizationId)
+          )
+        )
+        .returning();
+
+      if (!updatedStory) {
+        return res.status(404).json({ message: 'User story not found' });
+      }
+
+      res.json(updatedStory);
+    } catch (error: any) {
+      console.error('Error updating user story:', error);
+      if (error.name === 'ZodError') {
+        return res.status(400).json({
+          message: 'Validation error',
+          errors: error.errors,
+        });
+      }
+      res.status(500).json({
+        message: 'Failed to update user story',
+        error: error.message,
+      });
+    }
+  });
+
+  app.delete('/api/stories/:id', isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const tenantDb = getTenantDb();
+      const organizationId = req.organizationId;
+
+      const [deletedStory] = await tenantDb
+        .delete(userStories)
+        .where(
+          and(
+            eq(userStories.id, req.params.id),
+            eq(userStories.organizationId, organizationId)
+          )
+        )
+        .returning();
+
+      if (!deletedStory) {
+        return res.status(404).json({ message: 'User story not found' });
+      }
+
+      res.json({ message: 'User story deleted successfully' });
+    } catch (error: any) {
+      console.error('Error deleting user story:', error);
+      res.status(500).json({
+        message: 'Failed to delete user story',
+        error: error.message,
+      });
+    }
+  });
+
+  // Sprints - CRUD operations
+  app.get('/api/products/:productId/sprints', isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const tenantDb = getTenantDb();
+      const organizationId = req.organizationId;
+
+      const sprintsList = await tenantDb
+        .select()
+        .from(sprints)
+        .where(
+          and(
+            eq(sprints.productId, req.params.productId),
+            eq(sprints.organizationId, organizationId)
+          )
+        )
+        .orderBy(desc(sprints.startDate));
+
+      res.json(sprintsList);
+    } catch (error: any) {
+      console.error('Error fetching sprints:', error);
+      res.status(500).json({
+        message: 'Failed to fetch sprints',
+        error: error.message,
+      });
+    }
+  });
+
+  app.get('/api/sprints/:id', isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const tenantDb = getTenantDb();
+      const organizationId = req.organizationId;
+
+      const sprint = await tenantDb
+        .select()
+        .from(sprints)
+        .where(
+          and(
+            eq(sprints.id, req.params.id),
+            eq(sprints.organizationId, organizationId)
+          )
+        );
+
+      if (!sprint.length) {
+        return res.status(404).json({ message: 'Sprint not found' });
+      }
+
+      res.json(sprint[0]);
+    } catch (error: any) {
+      console.error('Error fetching sprint:', error);
+      res.status(500).json({
+        message: 'Failed to fetch sprint',
+        error: error.message,
+      });
+    }
+  });
+
+  app.post('/api/sprints', isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const tenantDb = getTenantDb();
+      const organizationId = req.organizationId;
+
+      const validatedData = insertSprintSchema.parse({
+        ...req.body,
+        organizationId,
+      });
+
+      const [newSprint] = await tenantDb
+        .insert(sprints)
+        .values(validatedData)
+        .returning();
+
+      res.status(201).json(newSprint);
+    } catch (error: any) {
+      console.error('Error creating sprint:', error);
+      if (error.name === 'ZodError') {
+        return res.status(400).json({
+          message: 'Validation error',
+          errors: error.errors,
+        });
+      }
+      res.status(500).json({
+        message: 'Failed to create sprint',
+        error: error.message,
+      });
+    }
+  });
+
+  app.patch('/api/sprints/:id', isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const tenantDb = getTenantDb();
+      const organizationId = req.organizationId;
+
+      const validatedData = updateSprintSchema.parse(req.body);
+
+      const [updatedSprint] = await tenantDb
+        .update(sprints)
+        .set({ ...validatedData, updatedAt: new Date() })
+        .where(
+          and(
+            eq(sprints.id, req.params.id),
+            eq(sprints.organizationId, organizationId)
+          )
+        )
+        .returning();
+
+      if (!updatedSprint) {
+        return res.status(404).json({ message: 'Sprint not found' });
+      }
+
+      res.json(updatedSprint);
+    } catch (error: any) {
+      console.error('Error updating sprint:', error);
+      if (error.name === 'ZodError') {
+        return res.status(400).json({
+          message: 'Validation error',
+          errors: error.errors,
+        });
+      }
+      res.status(500).json({
+        message: 'Failed to update sprint',
+        error: error.message,
+      });
+    }
+  });
+
+  app.delete('/api/sprints/:id', isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const tenantDb = getTenantDb();
+      const organizationId = req.organizationId;
+
+      const [deletedSprint] = await tenantDb
+        .delete(sprints)
+        .where(
+          and(
+            eq(sprints.id, req.params.id),
+            eq(sprints.organizationId, organizationId)
+          )
+        )
+        .returning();
+
+      if (!deletedSprint) {
+        return res.status(404).json({ message: 'Sprint not found' });
+      }
+
+      res.json({ message: 'Sprint deleted successfully' });
+    } catch (error: any) {
+      console.error('Error deleting sprint:', error);
+      res.status(500).json({
+        message: 'Failed to delete sprint',
+        error: error.message,
+      });
+    }
+  });
+
+  // Get sprint with user stories
+  app.get('/api/sprints/:id/stories', isAuthenticated, requireTenant, async (req: any, res) => {
+    try {
+      const tenantDb = getTenantDb();
+      const organizationId = req.organizationId;
+
+      const stories = await tenantDb
+        .select()
+        .from(userStories)
+        .where(
+          and(
+            eq(userStories.sprintId, req.params.id),
+            eq(userStories.organizationId, organizationId)
+          )
+        )
+        .orderBy(userStories.sprintOrder);
+
+      res.json(stories);
+    } catch (error: any) {
+      console.error('Error fetching sprint stories:', error);
+      res.status(500).json({
+        message: 'Failed to fetch sprint stories',
+        error: error.message,
+      });
     }
   });
 

@@ -175,6 +175,7 @@ export const resolveTenant: RequestHandler = async (req: any, res, next) => {
 
     // Attach to request for convenience
     req.tenant = context;
+    req.organizationId = org.id; // Also set directly for backward compatibility
 
     // CRITICAL FIX: Run the rest of the request handling within tenant context
     // AsyncLocalStorage.run() automatically propagates context through ALL async operations
