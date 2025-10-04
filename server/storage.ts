@@ -110,6 +110,40 @@ import {
   type InsertWorkloadSnapshot,
   type WorkloadSnapshot,
 } from "@shared/schema";
+import {
+  products,
+  epics,
+  features,
+  userStories,
+  sprints,
+  releases,
+  productBacklog,
+  roadmapItems,
+  type Product,
+  type InsertProduct,
+  type UpdateProduct,
+  type Epic,
+  type InsertEpic,
+  type UpdateEpic,
+  type Feature,
+  type InsertFeature,
+  type UpdateFeature,
+  type UserStory,
+  type InsertUserStory,
+  type UpdateUserStory,
+  type Sprint,
+  type InsertSprint,
+  type UpdateSprint,
+  type Release,
+  type InsertRelease,
+  type UpdateRelease,
+  type ProductBacklogItem,
+  type InsertProductBacklogItem,
+  type UpdateProductBacklogItem,
+  type RoadmapItem,
+  type InsertRoadmapItem,
+  type UpdateRoadmapItem,
+} from "@shared/productSchema";
 import { db } from "./db";
 import { getTenantDb, tenantTransaction } from "./tenancy/tenantDb";
 import { eq, desc, and, or, like, sql, count, gte, lte } from "drizzle-orm";
@@ -328,6 +362,68 @@ export interface IStorage {
   // Workload snapshot operations
   getWorkloadSnapshots(filters?: { userId?: string }): Promise<WorkloadSnapshot[]>;
   createWorkloadSnapshot(snapshot: InsertWorkloadSnapshot): Promise<WorkloadSnapshot>;
+
+  // Product Management operations
+  // Products
+  getProducts(): Promise<Product[]>;
+  getProduct(id: string): Promise<Product | undefined>;
+  getProductsByOpportunity(opportunityId: string): Promise<Product[]>;
+  createProduct(product: InsertProduct): Promise<Product>;
+  updateProduct(id: string, product: UpdateProduct): Promise<Product>;
+  deleteProduct(id: string): Promise<void>;
+
+  // Epics
+  getEpics(productId?: string): Promise<Epic[]>;
+  getEpic(id: string): Promise<Epic | undefined>;
+  createEpic(epic: InsertEpic): Promise<Epic>;
+  updateEpic(id: string, epic: UpdateEpic): Promise<Epic>;
+  deleteEpic(id: string): Promise<void>;
+
+  // Features
+  getFeatures(filters?: { productId?: string; epicId?: string; projectId?: string }): Promise<Feature[]>;
+  getFeature(id: string): Promise<Feature | undefined>;
+  createFeature(feature: InsertFeature): Promise<Feature>;
+  updateFeature(id: string, feature: UpdateFeature): Promise<Feature>;
+  deleteFeature(id: string): Promise<void>;
+
+  // User Stories
+  getUserStories(filters?: { featureId?: string; taskId?: string; sprintId?: string }): Promise<UserStory[]>;
+  getUserStory(id: string): Promise<UserStory | undefined>;
+  createUserStory(userStory: InsertUserStory): Promise<UserStory>;
+  updateUserStory(id: string, userStory: UpdateUserStory): Promise<UserStory>;
+  deleteUserStory(id: string): Promise<void>;
+
+  // Sprints
+  getSprints(productId?: string): Promise<Sprint[]>;
+  getSprint(id: string): Promise<Sprint | undefined>;
+  createSprint(sprint: InsertSprint): Promise<Sprint>;
+  updateSprint(id: string, sprint: UpdateSprint): Promise<Sprint>;
+  deleteSprint(id: string): Promise<void>;
+
+  // Releases
+  getReleases(productId?: string): Promise<Release[]>;
+  getRelease(id: string): Promise<Release | undefined>;
+  createRelease(release: InsertRelease): Promise<Release>;
+  updateRelease(id: string, release: UpdateRelease): Promise<Release>;
+  deleteRelease(id: string): Promise<void>;
+
+  // Product Backlog
+  getProductBacklog(productId?: string): Promise<ProductBacklogItem[]>;
+  getProductBacklogItem(id: string): Promise<ProductBacklogItem | undefined>;
+  createProductBacklogItem(item: InsertProductBacklogItem): Promise<ProductBacklogItem>;
+  updateProductBacklogItem(id: string, item: UpdateProductBacklogItem): Promise<ProductBacklogItem>;
+  deleteProductBacklogItem(id: string): Promise<void>;
+
+  // Roadmap Items
+  getRoadmapItems(productId?: string): Promise<RoadmapItem[]>;
+  getRoadmapItem(id: string): Promise<RoadmapItem | undefined>;
+  createRoadmapItem(item: InsertRoadmapItem): Promise<RoadmapItem>;
+  updateRoadmapItem(id: string, item: UpdateRoadmapItem): Promise<RoadmapItem>;
+  deleteRoadmapItem(id: string): Promise<void>;
+
+  // Integration queries
+  getProjectsByProduct(productId: string): Promise<Project[]>;
+  getUserStoriesByTask(taskId: string): Promise<UserStory[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2910,6 +3006,520 @@ export class DatabaseStorage implements IStorage {
     const tenantDb = getTenantDb();
     const [result] = await tenantDb.insert(workloadSnapshots).values(snapshot).returning();
     return result as WorkloadSnapshot;
+  }
+
+  // Product Management operations
+  // Products
+  async getProducts(): Promise<Product[]> {
+    const tenantDb = getTenantDb();
+    return await tenantDb.select().from(products).orderBy(desc(products.createdAt)) as Product[];
+  }
+
+  async getProduct(id: string): Promise<Product | undefined> {
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) => 
+      db.select()
+        .from(products)
+        .where(and(
+          eq(products.id, id),
+          eq(products.organizationId, organizationId)
+        ))
+        .then(rows => rows[0])
+    ) as Product | undefined;
+  }
+
+  async getProductsByOpportunity(opportunityId: string): Promise<Product[]> {
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select()
+        .from(products)
+        .where(and(
+          eq(products.opportunityId, opportunityId),
+          eq(products.organizationId, organizationId)
+        ))
+        .orderBy(desc(products.createdAt))
+    ) as Product[];
+  }
+
+  async createProduct(product: InsertProduct): Promise<Product> {
+    const tenantDb = getTenantDb();
+    const [result] = await tenantDb.insert(products).values(product).returning();
+    return result as Product;
+  }
+
+  async updateProduct(id: string, product: UpdateProduct): Promise<Product> {
+    const tenantDb = getTenantDb();
+    const [result] = await tenantDb.query((db, organizationId) =>
+      db.update(products)
+        .set({ ...product, updatedAt: new Date() })
+        .where(and(
+          eq(products.id, id),
+          eq(products.organizationId, organizationId)
+        ))
+        .returning()
+    ) as Product[];
+    return result;
+  }
+
+  async deleteProduct(id: string): Promise<void> {
+    const tenantDb = getTenantDb();
+    await tenantDb.query((db, organizationId) =>
+      db.delete(products)
+        .where(and(
+          eq(products.id, id),
+          eq(products.organizationId, organizationId)
+        ))
+    );
+  }
+
+  // Epics
+  async getEpics(productId?: string): Promise<Epic[]> {
+    const tenantDb = getTenantDb();
+    if (productId) {
+      return await tenantDb.query((db, organizationId) =>
+        db.select()
+          .from(epics)
+          .where(and(
+            eq(epics.productId, productId),
+            eq(epics.organizationId, organizationId)
+          ))
+          .orderBy(desc(epics.createdAt))
+      ) as Epic[];
+    }
+    return await tenantDb.select().from(epics).orderBy(desc(epics.createdAt)) as Epic[];
+  }
+
+  async getEpic(id: string): Promise<Epic | undefined> {
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) => 
+      db.select()
+        .from(epics)
+        .where(and(
+          eq(epics.id, id),
+          eq(epics.organizationId, organizationId)
+        ))
+        .then(rows => rows[0])
+    ) as Epic | undefined;
+  }
+
+  async createEpic(epic: InsertEpic): Promise<Epic> {
+    const tenantDb = getTenantDb();
+    const [result] = await tenantDb.insert(epics).values(epic).returning();
+    return result as Epic;
+  }
+
+  async updateEpic(id: string, epic: UpdateEpic): Promise<Epic> {
+    const tenantDb = getTenantDb();
+    const [result] = await tenantDb.query((db, organizationId) =>
+      db.update(epics)
+        .set({ ...epic, updatedAt: new Date() })
+        .where(and(
+          eq(epics.id, id),
+          eq(epics.organizationId, organizationId)
+        ))
+        .returning()
+    ) as Epic[];
+    return result;
+  }
+
+  async deleteEpic(id: string): Promise<void> {
+    const tenantDb = getTenantDb();
+    await tenantDb.query((db, organizationId) =>
+      db.delete(epics)
+        .where(and(
+          eq(epics.id, id),
+          eq(epics.organizationId, organizationId)
+        ))
+    );
+  }
+
+  // Features
+  async getFeatures(filters?: { productId?: string; epicId?: string; projectId?: string }): Promise<Feature[]> {
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) => {
+      const conditions = [eq(features.organizationId, organizationId)];
+      if (filters?.productId) conditions.push(eq(features.productId, filters.productId));
+      if (filters?.epicId) conditions.push(eq(features.epicId, filters.epicId));
+      if (filters?.projectId) conditions.push(eq(features.projectId, filters.projectId));
+      return db.select()
+        .from(features)
+        .where(and(...conditions))
+        .orderBy(desc(features.createdAt));
+    }) as Feature[];
+  }
+
+  async getFeature(id: string): Promise<Feature | undefined> {
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) => 
+      db.select()
+        .from(features)
+        .where(and(
+          eq(features.id, id),
+          eq(features.organizationId, organizationId)
+        ))
+        .then(rows => rows[0])
+    ) as Feature | undefined;
+  }
+
+  async createFeature(feature: InsertFeature): Promise<Feature> {
+    const tenantDb = getTenantDb();
+    const [result] = await tenantDb.insert(features).values(feature).returning();
+    return result as Feature;
+  }
+
+  async updateFeature(id: string, feature: UpdateFeature): Promise<Feature> {
+    const tenantDb = getTenantDb();
+    const [result] = await tenantDb.query((db, organizationId) =>
+      db.update(features)
+        .set({ ...feature, updatedAt: new Date() })
+        .where(and(
+          eq(features.id, id),
+          eq(features.organizationId, organizationId)
+        ))
+        .returning()
+    ) as Feature[];
+    return result;
+  }
+
+  async deleteFeature(id: string): Promise<void> {
+    const tenantDb = getTenantDb();
+    await tenantDb.query((db, organizationId) =>
+      db.delete(features)
+        .where(and(
+          eq(features.id, id),
+          eq(features.organizationId, organizationId)
+        ))
+    );
+  }
+
+  // User Stories
+  async getUserStories(filters?: { featureId?: string; taskId?: string; sprintId?: string }): Promise<UserStory[]> {
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) => {
+      const conditions = [eq(userStories.organizationId, organizationId)];
+      if (filters?.featureId) conditions.push(eq(userStories.featureId, filters.featureId));
+      if (filters?.taskId) conditions.push(eq(userStories.taskId, filters.taskId));
+      if (filters?.sprintId) conditions.push(eq(userStories.sprintId, filters.sprintId));
+      return db.select()
+        .from(userStories)
+        .where(and(...conditions))
+        .orderBy(desc(userStories.createdAt));
+    }) as UserStory[];
+  }
+
+  async getUserStory(id: string): Promise<UserStory | undefined> {
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) => 
+      db.select()
+        .from(userStories)
+        .where(and(
+          eq(userStories.id, id),
+          eq(userStories.organizationId, organizationId)
+        ))
+        .then(rows => rows[0])
+    ) as UserStory | undefined;
+  }
+
+  async createUserStory(userStory: InsertUserStory): Promise<UserStory> {
+    const tenantDb = getTenantDb();
+    const [result] = await tenantDb.insert(userStories).values(userStory).returning();
+    return result as UserStory;
+  }
+
+  async updateUserStory(id: string, userStory: UpdateUserStory): Promise<UserStory> {
+    const tenantDb = getTenantDb();
+    const [result] = await tenantDb.query((db, organizationId) =>
+      db.update(userStories)
+        .set({ ...userStory, updatedAt: new Date() })
+        .where(and(
+          eq(userStories.id, id),
+          eq(userStories.organizationId, organizationId)
+        ))
+        .returning()
+    ) as UserStory[];
+    return result;
+  }
+
+  async deleteUserStory(id: string): Promise<void> {
+    const tenantDb = getTenantDb();
+    await tenantDb.query((db, organizationId) =>
+      db.delete(userStories)
+        .where(and(
+          eq(userStories.id, id),
+          eq(userStories.organizationId, organizationId)
+        ))
+    );
+  }
+
+  // Sprints
+  async getSprints(productId?: string): Promise<Sprint[]> {
+    const tenantDb = getTenantDb();
+    if (productId) {
+      return await tenantDb.query((db, organizationId) =>
+        db.select()
+          .from(sprints)
+          .where(and(
+            eq(sprints.productId, productId),
+            eq(sprints.organizationId, organizationId)
+          ))
+          .orderBy(desc(sprints.startDate))
+      ) as Sprint[];
+    }
+    return await tenantDb.select().from(sprints).orderBy(desc(sprints.startDate)) as Sprint[];
+  }
+
+  async getSprint(id: string): Promise<Sprint | undefined> {
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) => 
+      db.select()
+        .from(sprints)
+        .where(and(
+          eq(sprints.id, id),
+          eq(sprints.organizationId, organizationId)
+        ))
+        .then(rows => rows[0])
+    ) as Sprint | undefined;
+  }
+
+  async createSprint(sprint: InsertSprint): Promise<Sprint> {
+    const tenantDb = getTenantDb();
+    const [result] = await tenantDb.insert(sprints).values(sprint).returning();
+    return result as Sprint;
+  }
+
+  async updateSprint(id: string, sprint: UpdateSprint): Promise<Sprint> {
+    const tenantDb = getTenantDb();
+    const [result] = await tenantDb.query((db, organizationId) =>
+      db.update(sprints)
+        .set({ ...sprint, updatedAt: new Date() })
+        .where(and(
+          eq(sprints.id, id),
+          eq(sprints.organizationId, organizationId)
+        ))
+        .returning()
+    ) as Sprint[];
+    return result;
+  }
+
+  async deleteSprint(id: string): Promise<void> {
+    const tenantDb = getTenantDb();
+    await tenantDb.query((db, organizationId) =>
+      db.delete(sprints)
+        .where(and(
+          eq(sprints.id, id),
+          eq(sprints.organizationId, organizationId)
+        ))
+    );
+  }
+
+  // Releases
+  async getReleases(productId?: string): Promise<Release[]> {
+    const tenantDb = getTenantDb();
+    if (productId) {
+      return await tenantDb.query((db, organizationId) =>
+        db.select()
+          .from(releases)
+          .where(and(
+            eq(releases.productId, productId),
+            eq(releases.organizationId, organizationId)
+          ))
+          .orderBy(desc(releases.releaseDate))
+      ) as Release[];
+    }
+    return await tenantDb.select().from(releases).orderBy(desc(releases.releaseDate)) as Release[];
+  }
+
+  async getRelease(id: string): Promise<Release | undefined> {
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) => 
+      db.select()
+        .from(releases)
+        .where(and(
+          eq(releases.id, id),
+          eq(releases.organizationId, organizationId)
+        ))
+        .then(rows => rows[0])
+    ) as Release | undefined;
+  }
+
+  async createRelease(release: InsertRelease): Promise<Release> {
+    const tenantDb = getTenantDb();
+    const [result] = await tenantDb.insert(releases).values(release).returning();
+    return result as Release;
+  }
+
+  async updateRelease(id: string, release: UpdateRelease): Promise<Release> {
+    const tenantDb = getTenantDb();
+    const [result] = await tenantDb.query((db, organizationId) =>
+      db.update(releases)
+        .set({ ...release, updatedAt: new Date() })
+        .where(and(
+          eq(releases.id, id),
+          eq(releases.organizationId, organizationId)
+        ))
+        .returning()
+    ) as Release[];
+    return result;
+  }
+
+  async deleteRelease(id: string): Promise<void> {
+    const tenantDb = getTenantDb();
+    await tenantDb.query((db, organizationId) =>
+      db.delete(releases)
+        .where(and(
+          eq(releases.id, id),
+          eq(releases.organizationId, organizationId)
+        ))
+    );
+  }
+
+  // Product Backlog
+  async getProductBacklog(productId?: string): Promise<ProductBacklogItem[]> {
+    const tenantDb = getTenantDb();
+    if (productId) {
+      return await tenantDb.query((db, organizationId) =>
+        db.select()
+          .from(productBacklog)
+          .where(and(
+            eq(productBacklog.productId, productId),
+            eq(productBacklog.organizationId, organizationId)
+          ))
+          .orderBy(productBacklog.priority)
+      ) as ProductBacklogItem[];
+    }
+    return await tenantDb.select().from(productBacklog).orderBy(productBacklog.priority) as ProductBacklogItem[];
+  }
+
+  async getProductBacklogItem(id: string): Promise<ProductBacklogItem | undefined> {
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) => 
+      db.select()
+        .from(productBacklog)
+        .where(and(
+          eq(productBacklog.id, id),
+          eq(productBacklog.organizationId, organizationId)
+        ))
+        .then(rows => rows[0])
+    ) as ProductBacklogItem | undefined;
+  }
+
+  async createProductBacklogItem(item: InsertProductBacklogItem): Promise<ProductBacklogItem> {
+    const tenantDb = getTenantDb();
+    const [result] = await tenantDb.insert(productBacklog).values(item).returning();
+    return result as ProductBacklogItem;
+  }
+
+  async updateProductBacklogItem(id: string, item: UpdateProductBacklogItem): Promise<ProductBacklogItem> {
+    const tenantDb = getTenantDb();
+    const [result] = await tenantDb.query((db, organizationId) =>
+      db.update(productBacklog)
+        .set({ ...item, updatedAt: new Date() })
+        .where(and(
+          eq(productBacklog.id, id),
+          eq(productBacklog.organizationId, organizationId)
+        ))
+        .returning()
+    ) as ProductBacklogItem[];
+    return result;
+  }
+
+  async deleteProductBacklogItem(id: string): Promise<void> {
+    const tenantDb = getTenantDb();
+    await tenantDb.query((db, organizationId) =>
+      db.delete(productBacklog)
+        .where(and(
+          eq(productBacklog.id, id),
+          eq(productBacklog.organizationId, organizationId)
+        ))
+    );
+  }
+
+  // Roadmap Items
+  async getRoadmapItems(productId?: string): Promise<RoadmapItem[]> {
+    const tenantDb = getTenantDb();
+    if (productId) {
+      return await tenantDb.query((db, organizationId) =>
+        db.select()
+          .from(roadmapItems)
+          .where(and(
+            eq(roadmapItems.productId, productId),
+            eq(roadmapItems.organizationId, organizationId)
+          ))
+          .orderBy(roadmapItems.order)
+      ) as RoadmapItem[];
+    }
+    return await tenantDb.select().from(roadmapItems).orderBy(roadmapItems.order) as RoadmapItem[];
+  }
+
+  async getRoadmapItem(id: string): Promise<RoadmapItem | undefined> {
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) => 
+      db.select()
+        .from(roadmapItems)
+        .where(and(
+          eq(roadmapItems.id, id),
+          eq(roadmapItems.organizationId, organizationId)
+        ))
+        .then(rows => rows[0])
+    ) as RoadmapItem | undefined;
+  }
+
+  async createRoadmapItem(item: InsertRoadmapItem): Promise<RoadmapItem> {
+    const tenantDb = getTenantDb();
+    const [result] = await tenantDb.insert(roadmapItems).values(item).returning();
+    return result as RoadmapItem;
+  }
+
+  async updateRoadmapItem(id: string, item: UpdateRoadmapItem): Promise<RoadmapItem> {
+    const tenantDb = getTenantDb();
+    const [result] = await tenantDb.query((db, organizationId) =>
+      db.update(roadmapItems)
+        .set({ ...item, updatedAt: new Date() })
+        .where(and(
+          eq(roadmapItems.id, id),
+          eq(roadmapItems.organizationId, organizationId)
+        ))
+        .returning()
+    ) as RoadmapItem[];
+    return result;
+  }
+
+  async deleteRoadmapItem(id: string): Promise<void> {
+    const tenantDb = getTenantDb();
+    await tenantDb.query((db, organizationId) =>
+      db.delete(roadmapItems)
+        .where(and(
+          eq(roadmapItems.id, id),
+          eq(roadmapItems.organizationId, organizationId)
+        ))
+    );
+  }
+
+  // Integration queries
+  async getProjectsByProduct(productId: string): Promise<Project[]> {
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select()
+        .from(projects)
+        .where(and(
+          eq(projects.productId, productId),
+          eq(projects.organizationId, organizationId)
+        ))
+        .orderBy(desc(projects.createdAt))
+    ) as Project[];
+  }
+
+  async getUserStoriesByTask(taskId: string): Promise<UserStory[]> {
+    const tenantDb = getTenantDb();
+    return await tenantDb.query((db, organizationId) =>
+      db.select()
+        .from(userStories)
+        .where(and(
+          eq(userStories.taskId, taskId),
+          eq(userStories.organizationId, organizationId)
+        ))
+        .orderBy(desc(userStories.createdAt))
+    ) as UserStory[];
   }
 }
 
