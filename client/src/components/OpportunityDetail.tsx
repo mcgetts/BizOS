@@ -596,7 +596,7 @@ export function OpportunityDetail({ opportunity, isOpen, onClose, onEdit, onDele
               )}
             </TabsTrigger>
             <TabsTrigger value="communications">
-              Communications
+              Comms
               <Badge variant="secondary" className="ml-1">{communications.length}</Badge>
             </TabsTrigger>
             <TabsTrigger value="stakeholders">
