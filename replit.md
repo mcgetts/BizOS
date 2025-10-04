@@ -26,10 +26,11 @@ Preferred communication style: Simple, everyday language.
 - **Port Allocation**: Unified strategy: 5000 for Replit/Production, 3001 for local development.
 
 ### Feature Specifications
-- **Core Modules**: Executive Dashboard, Client Management (CRM), Project Management (with client portals), Team Management, Financial Management, Knowledge Hub, Marketing, Support System, and Admin Portal.
+- **Core Modules**: Executive Dashboard, Client Management (CRM), Project Management (with client portals), Team Management, Financial Management, Knowledge Hub, Marketing, Support System, Product Management, and Admin Portal.
 - **Access Control**: Multi-tier role system (Admin, Manager, Employee, Client).
 - **Data Isolation**: All database operations are tenant-scoped, ensuring zero cross-tenant data leakage.
 - **Organization Management**: Users can belong to multiple organizations with different roles.
+- **Product Management Integration**: Unified workflow connecting Opportunities → Products → Projects → Tasks → User Stories with bidirectional references for complete traceability.
 
 ### System Design Choices
 - **Modular Architecture**: Distinct functional areas for better organization and maintainability.
@@ -60,6 +61,34 @@ Preferred communication style: Simple, everyday language.
 
 ### Monitoring & Development
 - **Replit Dev Tools**: Development banner, cartographer, and error handling.
+
+## Product Management Integration
+
+### Integration Workflow
+- **Opportunity → Product → Project → Task → User Story**: Complete traceability chain linking sales opportunities to development execution.
+- **Bidirectional References**: 
+  - Products have `opportunityId` to link back to sales opportunities
+  - Projects have `productId` to associate with product initiatives
+  - User Stories have `taskId` to link to specific development tasks
+- **Database Schema**: Added foreign key relationships in shared/schema.ts and shared/productSchema.ts for seamless cross-module queries.
+
+### Storage Layer
+- **Integration Methods**: 
+  - `getProductsByOpportunity(opportunityId)`: Retrieve all products linked to an opportunity
+  - `getProjectsByProduct(productId)`: Retrieve all projects for a product
+  - `getUserStoriesByTask(taskId)`: Retrieve all user stories for a task
+- **Tenant Isolation**: All integration queries use `getTenantDb()` with organizationId filtering for complete data isolation.
+
+### API Routes
+- **GET /api/opportunities/:id/products**: Fetch products for an opportunity
+- **GET /api/products/:id/projects**: Fetch projects for a product  
+- **GET /api/tasks/:id/stories**: Fetch user stories for a task
+- **Security**: All integration routes protected with `isAuthenticated` and `requireTenant` middleware.
+
+### Frontend Implementation
+- **OpportunityDetail Component**: Added Products tab displaying linked products with empty state handling
+- **Query Integration**: Uses TanStack Query to fetch and cache product data from integration endpoints
+- **UI Components**: Product cards display name, description, status, version, and owner with proper data-testid attributes
 
 ## Security Architecture
 
